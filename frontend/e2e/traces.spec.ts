@@ -59,9 +59,16 @@ test("UE-27-2 详情时间线：原始请求 → 成员×2 → 裁判 → 最终
 
   await expect(page.getByText("① 原始请求")).toBeVisible();
   await expect(page.getByText("Pipeline：council-detail")).toBeVisible();
-  await expect(page.getByText("成员调用", { exact: true })).toHaveCount(2);
+  await expect(page.getByText(/成员调用 \d/)).toHaveCount(2);
   await expect(page.getByText("裁判调用")).toBeVisible();
-  await expect(page.getByText("最终响应")).toBeVisible();
+  await expect(page.getByText(/Ⓝ 最终响应/)).toBeVisible();
+  // 快速定位：模型多时点锚点直达目标成员卡片，无需长页滚动
+  await page.getByRole("button", { name: /成员2 · / }).click();
+  await expect(page.getByText("成员调用 2")).toBeInViewport();
+  // 成员/裁判的入参与输出均默认折叠，模型多时保持页面紧凑，按需展开
+  const outputDetails = page.locator('details:has(summary:text-is("输出"))');
+  await expect(outputDetails).toHaveCount(3);
+  await expect(outputDetails.first()).not.toHaveAttribute("open");
   // 裁判入参含组装 Prompt（展开后可见成员答案标注）
   const judgeCard = page.locator("section", { hasText: "裁判调用" });
   await judgeCard.getByText("入参（实际发出的完整请求）").click();
