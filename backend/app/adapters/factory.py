@@ -17,7 +17,7 @@ def build_adapter(
     provider: Provider,
     *,
     fernet_key: bytes,
-    timeout_seconds: float = 60.0,
+    timeout_seconds: float = 120.0,
     max_retries: int = 1,
     retry_base_delay: float = 0.5,
 ) -> BaseAdapter:

@@ -71,7 +71,7 @@ class OpenAICompatAdapter(BaseAdapter):
         *,
         base_url: str,
         api_key: str = "",
-        timeout_seconds: float = 60.0,
+        timeout_seconds: float = 120.0,
         max_retries: int = 1,
         retry_base_delay: float = 0.5,
         http_client: httpx.AsyncClient | None = None,

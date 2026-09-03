@@ -447,7 +447,7 @@ async def _passthrough(
     adapter = build_adapter(
         provider,
         fernet_key=app.state.fernet_key,
-        timeout_seconds=float(merged.get("timeout_seconds", 60)),
+        timeout_seconds=float(merged.get("timeout_seconds", 120)),
         max_retries=int(merged.get("max_retries", 1)),
     )
 

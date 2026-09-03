@@ -80,7 +80,7 @@ class Pipeline(Base):
     strategy: Mapped[str] = mapped_column(String(30), default="council")
     judge_model_id: Mapped[int] = mapped_column(ForeignKey("models.id"))
     judge_prompt_template: Mapped[str] = mapped_column(Text, default="")
-    member_timeout_seconds: Mapped[int] = mapped_column(Integer, default=60)
+    member_timeout_seconds: Mapped[int] = mapped_column(Integer, default=120)
     # {member_failure: skip|strict, judge_failure: degrade|strict}
     fault_tolerance: Mapped[dict] = mapped_column(JSON, default=dict)
     max_concurrency: Mapped[int] = mapped_column(Integer, default=10)

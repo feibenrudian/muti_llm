@@ -167,7 +167,7 @@ export default function Models() {
               <Input value={form.max_tokens} onChange={(e) => setForm({ ...form, max_tokens: e.target.value })} placeholder="2048" />
             </Field>
             <Field label="timeout(秒)">
-              <Input value={form.timeout_seconds} onChange={(e) => setForm({ ...form, timeout_seconds: e.target.value })} placeholder="60" />
+              <Input value={form.timeout_seconds} onChange={(e) => setForm({ ...form, timeout_seconds: e.target.value })} placeholder="120" />
             </Field>
           </div>
           <div className="flex justify-end gap-2 pt-2">

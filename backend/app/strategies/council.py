@@ -145,7 +145,7 @@ async def run_members(
     容错：默认(skip)只要 ≥1 成功即继续；fault_tolerance.member_failure=strict 时任一失败即
     抛 AllMembersFailed；全部失败时无论模式都抛 AllMembersFailed。
     """
-    member_timeout = float(ctx.pipeline.member_timeout_seconds or 60)
+    member_timeout = float(ctx.pipeline.member_timeout_seconds or 120)
     if adapter_factory is None:
 
         def adapter_factory(provider: Provider, merged: dict[str, Any]) -> BaseAdapter:
@@ -225,7 +225,7 @@ class CouncilStrategy(Strategy):
         return build_adapter(
             ctx.judge_provider,
             fernet_key=ctx.fernet_key,
-            timeout_seconds=float(merged.get("timeout_seconds", 60)),
+            timeout_seconds=float(merged.get("timeout_seconds", 120)),
             max_retries=int(merged.get("max_retries", 1)),
         )
 

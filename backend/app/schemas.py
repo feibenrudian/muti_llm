@@ -85,7 +85,7 @@ class PipelineCreate(BaseModel):
     strategy: str = "council"
     judge_model_id: int
     judge_prompt_template: str = ""
-    member_timeout_seconds: int = Field(default=60, ge=1, le=600)
+    member_timeout_seconds: int = Field(default=120, ge=1, le=600)
     fault_tolerance: dict[str, Any] = Field(default_factory=dict)
     max_concurrency: int = Field(default=10, ge=1, le=100)
     enabled: bool = True
