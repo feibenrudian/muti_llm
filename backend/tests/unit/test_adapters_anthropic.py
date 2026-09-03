@@ -86,3 +86,14 @@ async def test_reuses_base_retry(anthropic_mock: str) -> None:
     assert (
         len(await recorded_requests(anthropic_mock)) == 3
     )  # 未重试（1 次成功 + 1 次 500 + 1 次 401）
+
+
+async def test_probe(anthropic_mock: str) -> None:
+    """UT-07-4 连通性探测：probe 返回 mock 的模型列表，请求携带 x-api-key。"""
+    adapter = make_adapter(anthropic_mock)
+    model_ids = await adapter.probe()
+    assert model_ids == ["claude-sonnet-4"]
+
+    recordings = await recorded_requests(anthropic_mock)
+    probe = [r for r in recordings if r["body"].get("path") == "/v1/models"][-1]
+    assert probe["headers"].get("x-api-key") == "sk-ant-test"

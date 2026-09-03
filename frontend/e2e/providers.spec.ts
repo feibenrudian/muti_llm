@@ -40,3 +40,21 @@ test("UE-21-3 删除保护：挂载 Model 的 Provider 删除显示 409 提示�
   await expect(page.getByRole("alert")).toContainText("模型");
   await expect(page.getByRole("button", { name: "新建 Provider" })).toBeVisible(); // 页面仍正常
 });
+
+test("UE-21-4 连通性测试：成功显示延迟与模型列表，坏地址显示失败原因", async ({ page, request }) => {
+  await seedProvider(request, "E2E-供应商探测");
+  // 坏地址供应商
+  const resp = await request.post("/api/admin/providers", {
+    data: { name: "E2E-坏地址供应商", protocol: "openai_compatible", base_url: "http://127.0.0.1:9/v1" },
+  });
+  expect(resp.ok()).toBeTruthy();
+
+  await page.goto("/providers");
+  await page.locator("tr", { hasText: "E2E-供应商探测" }).getByRole("button", { name: "测试" }).click();
+  await expect(page.locator("tr", { hasText: "E2E-供应商探测" }).getByText(/成功 \d+ms/)).toBeVisible();
+  await expect(page.locator("tr", { hasText: "E2E-供应商探测" }).getByText("deepseek-v4-flash")).toBeVisible();
+
+  await page.locator("tr", { hasText: "E2E-坏地址供应商" }).getByRole("button", { name: "测试" }).click();
+  await expect(page.locator("tr", { hasText: "E2E-坏地址供应商" }).getByText("失败", { exact: true })).toBeVisible();
+  await expect(page.locator("tr", { hasText: "E2E-坏地址供应商" }).getByText(/上游/, { exact: false })).toBeVisible();
+});

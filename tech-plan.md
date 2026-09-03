@@ -237,6 +237,7 @@ make seed          # 起服务+灌入演示数据(指向快照回放服务器), 
 | UT-06-3 | UT | 重试耗尽 | 连续失败 → 抛出含上游错误摘要的适配器异常，不裸抛 httpx 异常 |
 | UT-06-4 | UT | 超时 | 配置 timeout=0.2s、上游延迟1s → 抛超时错误 |
 | UT-06-5 | UT | 流式迭代 | 迭代产出多个增量片段，拼接等于完整答案 |
+| UT-06-6 | UT | 连通性探测 | `probe()` GET 上游模型列表返回模型 ID；上游 401 → 归一化认证错误 |
 
 #### T07 anthropic 适配器 〔本期仅 UT 打桩〕
 产出：`anthropic.py`：messages API ↔ 归一化参数转换、usage 映射、流式事件→增量片段。
@@ -245,15 +246,19 @@ make seed          # 起服务+灌入演示数据(指向快照回放服务器), 
 | UT-07-1 | UT | 参数/响应映射 | Anthropic 格式请求构造正确；响应 content/usage 正确归一化 |
 | UT-07-2 | UT | 流式事件转换 | content_block_delta 事件序列 → 增量片段序列 |
 | UT-07-3 | UT | 复用基座 | 错误/重试行为与 T06 一致(打桩验证走了 base 重试逻辑) |
+| UT-07-4 | UT | 连通性探测 | `probe()` GET 上游模型列表返回模型 ID，请求携带 x-api-key |
 
 #### T08 Provider 管理 API
-产出：`/api/admin/providers` CRUD + 启用开关 + 协议枚举校验；api_key 落库前 Fernet 加密；响应中 api_key 只回显掩码。
+产出：`/api/admin/providers` CRUD + 启用开关 + 协议枚举校验；api_key 落库前 Fernet 加密；响应中 api_key 只回显掩码。`POST /api/admin/providers/{id}/test` 连通性测试（GET 上游模型列表，验证 URL/Key，不消耗对话 token）。
 | 编号 | 类型 | 用例 | 断言要点 |
 | --- | --- | --- | --- |
 | AE-08-1 | AE | 创建+查询 | 201；响应含掩码 Key；DB 中存的是密文（用例内直接查库断言） |
 | AE-08-2 | AE | 更新 | 改 base_url 后 GET 返回新值 |
 | AE-08-3 | AE | 删除保护 | Provider 下仍有 Model 时删除 → 409 并提示 |
 | AE-08-4 | AE | 校验 | 非法 protocol 枚举 → 422 |
+| AE-08-5 | AE | 连通性成功 | `POST /providers/{id}/test` 指向 SRS → `{"ok":true,"latency_ms":≥0,"models":[…]}`，SRS 录像收到带认证头的探测请求 |
+| AE-08-6 | AE | 连通性失败 | 指向不存在端口 → `{"ok":false,"error":"…"}`，HTTP 仍为 200（业务结果而非异常） |
+| AE-08-7 | AE | 错误 Key | 上游 401 → ok:false 且 error 指向认证失败 |
 
 #### T09 Model 管理 API + 连通性测试
 产出：`/api/admin/models` CRUD；`POST /api/admin/models/{id}/test` 实际调用一次该模型（经适配器，默认固定测试消息），返回 成功/失败/延迟ms。
@@ -368,6 +373,7 @@ make seed          # 起服务+灌入演示数据(指向快照回放服务器), 
 | UE-21-1 | UE | 新建 | 表单填名称/协议/openai兼容/base_url/Key → 列表出现，Key 列显示 `****xxxx` 尾4位掩码，非明文 |
 | UE-21-2 | UE | 编辑+启停 | 编辑 base_url 保存生效；停用后列表状态变化，且 /v1 相关引用行为由后端决定(UI只管展示) |
 | UE-21-3 | UE | 删除保护 | 对有 Model 挂载的 Provider 点删除 → 页面显示后端 409 提示，不白屏 |
+| UE-21-4 | UE | 连通性测试 | 指向 SRS 的 Provider 点"测试" → 显示成功/延迟/可用模型；坏地址 → 显示失败原因 |
 
 #### T22 Model 管理页 + 连通性测试
 | 编号 | 类型 | 用例 | 断言要点 |

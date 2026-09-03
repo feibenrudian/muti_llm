@@ -1,10 +1,13 @@
-"""Provider 管理 API：CRUD + 启停；api_key Fernet 加密入库、响应只回掩码。"""
+"""Provider 管理 API：CRUD + 启停 + 连通性测试；api_key Fernet 加密入库、响应只回掩码。"""
+
+import time
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.adapters.factory import decrypt_provider_key
+from app.adapters.base import AdapterError
+from app.adapters.factory import build_adapter, decrypt_provider_key
 from app.deps import get_session
 from app.orm import LlmModel, Provider
 from app.repos import Repository
@@ -102,3 +105,40 @@ async def delete_provider(provider_id: int, session: AsyncSession = Depends(get_
     if not await Repository(session, Provider).delete(provider_id):
         raise HTTPException(status_code=404, detail="provider not found")
     await session.commit()
+
+
+@router.post("/{provider_id}/test")
+async def test_provider(
+    provider_id: int, request: Request, session: AsyncSession = Depends(get_session)
+) -> dict:
+    """连通性测试（业务结果而非异常，便于 UI 展示）：GET 上游模型列表，验证 URL/Key 可用。"""
+    row = await Repository(session, Provider).get(provider_id)
+    if row is None:
+        raise HTTPException(status_code=404, detail="provider not found")
+
+    adapter = build_adapter(
+        row,
+        fernet_key=request.app.state.fernet_key,
+        timeout_seconds=15,
+        max_retries=0,
+    )
+    start = time.perf_counter()
+    try:
+        model_ids = await adapter.probe()
+        return {
+            "ok": True,
+            "latency_ms": int((time.perf_counter() - start) * 1000),
+            "models": model_ids[:50],
+        }
+    except AdapterError as exc:
+        return {
+            "ok": False,
+            "latency_ms": int((time.perf_counter() - start) * 1000),
+            "error": str(exc),
+        }
+    except Exception as exc:  # 诊断类端点：未知异常也降级为业务结果，避免 500 让 UI 无反馈
+        return {
+            "ok": False,
+            "latency_ms": int((time.perf_counter() - start) * 1000),
+            "error": f"未知错误: {exc}",
+        }

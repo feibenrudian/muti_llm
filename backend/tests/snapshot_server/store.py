@@ -75,5 +75,11 @@ class SnapshotStore:
     def hashes(self) -> list[str]:
         return list(self._index)
 
+    def model_ids(self) -> list[str]:
+        """快照库中出现过的上游模型 ID（供 /v1/models 连通性探测端点返回）。"""
+        return sorted(
+            {str(s.request["model"]) for s in self._index.values() if s.request.get("model")}
+        )
+
     def __len__(self) -> int:
         return len(self._index)

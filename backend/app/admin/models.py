@@ -98,3 +98,9 @@ async def test_model(
             "latency_ms": int((time.perf_counter() - start) * 1000),
             "error": str(exc),
         }
+    except Exception as exc:  # 诊断类端点：未知异常也降级为业务结果，避免 500 让 UI 无反馈
+        return {
+            "ok": False,
+            "latency_ms": int((time.perf_counter() - start) * 1000),
+            "error": f"未知错误: {exc}",
+        }

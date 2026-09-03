@@ -118,6 +118,13 @@ class AnthropicAdapter(BaseAdapter):
             duration_ms=int((time.perf_counter() - start) * 1000),
         )
 
+    async def probe(self) -> list[str]:
+        try:
+            page = await self._client.models.list()
+        except anthropic.APIError as exc:
+            raise map_anthropic_error(exc) from None
+        return [m.id for m in page.data]
+
     def stream(self, request: LlmRequest) -> AsyncIterator[str]:
         return self._stream(request)
 

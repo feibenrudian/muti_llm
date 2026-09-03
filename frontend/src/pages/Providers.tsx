@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { api, ApiError, type Provider } from "../lib/api";
+import { api, ApiError, type Provider, type ProviderTestResult } from "../lib/api";
 import { Badge, Button, Card, EmptyState, ErrorText, Field, Input, Modal, Select, Td, Th } from "../components/ui";
 
 interface FormState {
@@ -20,6 +20,7 @@ export default function Providers() {
   const [creating, setCreating] = useState(false);
   const [form, setForm] = useState<FormState>(EMPTY);
   const [error, setError] = useState("");
+  const [testResult, setTestResult] = useState<Record<number, ProviderTestResult | "loading">>({});
 
   const invalidate = () => queryClient.invalidateQueries({ queryKey: ["providers"] });
   const save = useMutation({
@@ -45,6 +46,16 @@ export default function Providers() {
     mutationFn: (id: number) => api.providers.remove(id),
     onSuccess: invalidate,
     onError: (err) => setError(err instanceof ApiError ? err.message : String(err)),
+  });
+  const test = useMutation({
+    mutationFn: (id: number) => api.providers.test(id),
+    onMutate: (id) => setTestResult((prev) => ({ ...prev, [id]: "loading" })),
+    onSuccess: (result, id) => setTestResult((prev) => ({ ...prev, [id]: result })),
+    onError: (err, id) =>
+      setTestResult((prev) => ({
+        ...prev,
+        [id]: { ok: false, latency_ms: 0, error: err instanceof ApiError ? err.message : String(err) },
+      })),
   });
 
   const openCreate = () => {
@@ -85,37 +96,61 @@ export default function Providers() {
                 <Th>协议</Th>
                 <Th>Base URL</Th>
                 <Th>API Key</Th>
+                <Th>连通性</Th>
                 <Th>状态</Th>
                 <Th>操作</Th>
               </tr>
             </thead>
             <tbody>
-              {providers.map((provider) => (
-                <tr key={provider.id} className="border-b border-slate-50">
-                  <Td>{provider.name}</Td>
-                  <Td>{provider.protocol}</Td>
-                  <Td className="max-w-64 truncate">{provider.base_url}</Td>
-                  <Td>{provider.api_key_masked || "—"}</Td>
-                  <Td>
-                    <Badge tone={provider.enabled ? "success" : "muted"}>
-                      {provider.enabled ? "启用" : "停用"}
-                    </Badge>
-                  </Td>
-                  <Td>
-                    <div className="flex gap-1">
-                      <Button variant="ghost" onClick={() => openEdit(provider)}>
-                        编辑
-                      </Button>
-                      <Button variant="ghost" onClick={() => toggle.mutate(provider)}>
-                        {provider.enabled ? "停用" : "启用"}
-                      </Button>
-                      <Button variant="danger" onClick={() => remove.mutate(provider.id)}>
-                        删除
-                      </Button>
-                    </div>
-                  </Td>
-                </tr>
-              ))}
+              {providers.map((provider) => {
+                const result = testResult[provider.id];
+                return (
+                  <tr key={provider.id} className="border-b border-slate-50">
+                    <Td>{provider.name}</Td>
+                    <Td>{provider.protocol}</Td>
+                    <Td className="max-w-64 truncate">{provider.base_url}</Td>
+                    <Td>{provider.api_key_masked || "—"}</Td>
+                    <Td>
+                      {result === undefined ? null : result === "loading" ? (
+                        <Badge tone="muted">测试中…</Badge>
+                      ) : result.ok ? (
+                        <Badge tone="success">成功 {result.latency_ms}ms</Badge>
+                      ) : (
+                        <Badge tone="danger">失败</Badge>
+                      )}
+                      {result && result !== "loading" && !result.ok ? (
+                        <p className="mt-1 max-w-64 text-xs text-red-600">{result.error}</p>
+                      ) : null}
+                      {result && result !== "loading" && result.ok ? (
+                        <p className="mt-1 max-w-64 truncate text-xs text-slate-400">
+                          可用模型: {(result.models ?? []).join("、") || "（上游未返回模型列表）"}
+                        </p>
+                      ) : null}
+                    </Td>
+                    <Td>
+                      <Badge tone={provider.enabled ? "success" : "muted"}>
+                        {provider.enabled ? "启用" : "停用"}
+                      </Badge>
+                    </Td>
+                    <Td>
+                      <div className="flex gap-1">
+                        <Button variant="ghost" onClick={() => test.mutate(provider.id)}>
+                          测试
+                        </Button>
+                        <Button variant="ghost" onClick={() => openEdit(provider)}>
+                          编辑
+                        </Button>
+                        <Button variant="ghost" onClick={() => toggle.mutate(provider)}>
+                          {provider.enabled ? "停用" : "启用"}
+                        </Button>
+                        <Button variant="danger" onClick={() => remove.mutate(provider.id)}>
+                          删除
+                        </Button>
+                      </div>
+                    </Td>
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
         )}

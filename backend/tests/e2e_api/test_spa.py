@@ -15,7 +15,7 @@ async def test_spa_served(asgi_client: httpx.AsyncClient) -> None:
     resp = await asgi_client.get("/")
     assert resp.status_code == 200
     assert resp.headers["content-type"].startswith("text/html")
-    assert b"<div id=\"root\">" in resp.content
+    assert b'<div id="root">' in resp.content
 
     # 非 SPA 保留路径不受 catch-all 影响
     assert (await asgi_client.get("/health")).json() == {"status": "ok"}

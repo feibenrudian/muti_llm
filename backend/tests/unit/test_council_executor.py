@@ -26,6 +26,9 @@ class StubAdapter(BaseAdapter):
     def stream(self, request: LlmRequest):  # pragma: no cover - 执行器不使用
         raise NotImplementedError
 
+    async def probe(self) -> list[str]:  # pragma: no cover - 执行器不使用
+        raise NotImplementedError
+
 
 def make_provider(pid: int, name: str) -> Provider:
     return Provider(id=pid, name=name, protocol="openai_compatible", base_url="http://x")

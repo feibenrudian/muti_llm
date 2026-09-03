@@ -103,3 +103,15 @@ async def test_stream_iteration(srs_live_seeded: str) -> None:
     ]
     assert len(deltas) >= 2
     assert "".join(deltas) == snapshot_stream_text("passthrough_stream")
+
+
+async def test_probe(srs_live_seeded: str) -> None:
+    """UT-06-6 连通性探测：probe 返回快照库中的模型 ID；上游 401 → 归一化认证错误。"""
+    adapter = make_adapter(srs_live_seeded)
+    model_ids = await adapter.probe()
+    assert "deepseek-v4-flash" in model_ids
+
+    await _inject(srs_live_seeded, {"models_auth_fail": True})
+    with pytest.raises(AdapterError) as excinfo:
+        await adapter.probe()
+    assert excinfo.value.kind == "auth"

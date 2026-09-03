@@ -58,6 +58,11 @@ export default function Models() {
     mutationFn: (id: number) => api.models.test(id),
     onMutate: (id) => setTestResult((prev) => ({ ...prev, [id]: "loading" })),
     onSuccess: (result, id) => setTestResult((prev) => ({ ...prev, [id]: result })),
+    onError: (err, id) =>
+      setTestResult((prev) => ({
+        ...prev,
+        [id]: { ok: false, latency_ms: 0, error: err instanceof ApiError ? err.message : String(err) },
+      })),
   });
 
   return (

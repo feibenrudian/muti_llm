@@ -90,3 +90,71 @@ async def test_protocol_validation(asgi_client: httpx.AsyncClient) -> None:
         json={"name": "Bad", "protocol": "grpc", "base_url": "https://x.example.com"},
     )
     assert resp.status_code == 422
+
+
+async def test_connectivity_ok(asgi_client: httpx.AsyncClient, srs_live_seeded: str) -> None:
+    """AE-08-5 连通性成功：指向 SRS → ok:true + 模型列表；SRS 收到带认证的探测请求。"""
+    resp = await asgi_client.post(
+        "/api/admin/providers",
+        json={
+            "name": "probe-ok",
+            "protocol": "openai_compatible",
+            "base_url": f"{srs_live_seeded}/v1",
+            "api_key": "sk-srs-test",
+        },
+    )
+    pid = resp.json()["id"]
+
+    resp = await asgi_client.post(f"/api/admin/providers/{pid}/test")
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["ok"] is True
+    assert data["latency_ms"] >= 0
+    assert "deepseek-v4-flash" in data["models"]
+
+    recordings = (await httpx.AsyncClient().get(f"{srs_live_seeded}/_test/requests")).json()[
+        "requests"
+    ]
+    probes = [r for r in recordings if r["model"] == "__models_list__"]
+    assert probes and probes[-1]["body"]["has_authorization"] is True  # Key 确实被发送
+
+
+async def test_connectivity_dead_port(asgi_client: httpx.AsyncClient) -> None:
+    """AE-08-6 连通性失败：坏地址 → ok:false + error，HTTP 仍为 200（业务结果而非异常）。"""
+    resp = await asgi_client.post(
+        "/api/admin/providers",
+        json={
+            "name": "probe-dead",
+            "protocol": "openai_compatible",
+            # 127.0.0.1:9 保留端口，连接必失败
+            "base_url": "http://127.0.0.1:9/v1",
+        },
+    )
+    pid = resp.json()["id"]
+
+    resp = await asgi_client.post(f"/api/admin/providers/{pid}/test")
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["ok"] is False
+    assert data["error"]
+
+
+async def test_connectivity_bad_key(asgi_client: httpx.AsyncClient, srs_live: str) -> None:
+    """AE-08-7 错误 Key：上游 401 → ok:false，error 指向认证失败。"""
+    await httpx.AsyncClient().post(f"{srs_live}/_test/config", json={"models_auth_fail": True})
+    resp = await asgi_client.post(
+        "/api/admin/providers",
+        json={
+            "name": "probe-bad-key",
+            "protocol": "openai_compatible",
+            "base_url": f"{srs_live}/v1",
+            "api_key": "sk-wrong-key",
+        },
+    )
+    pid = resp.json()["id"]
+
+    resp = await asgi_client.post(f"/api/admin/providers/{pid}/test")
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["ok"] is False
+    assert "认证" in data["error"]

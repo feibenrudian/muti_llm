@@ -118,6 +118,21 @@ def create_app() -> FastAPI:
             return StreamingResponse(gen(), media_type="text/event-stream")
         return JSONResponse(state.non_stream)
 
+    @app.get("/v1/models")
+    async def models(request: Request) -> Response:
+        # Provider 连通性探测端点（Anthropic Models API 形状），固定返回一个模型
+        state.recordings.append({"body": {"path": "/v1/models"}, "headers": dict(request.headers)})
+        return JSONResponse(
+            {
+                "data": [
+                    {"type": "model", "id": "claude-sonnet-4", "display_name": "Claude Sonnet 4"}
+                ],
+                "first_id": "claude-sonnet-4",
+                "has_more": False,
+                "last_id": "claude-sonnet-4",
+            }
+        )
+
     @app.post("/_test/config")
     async def config(request: Request) -> Response:
         body = await request.json()

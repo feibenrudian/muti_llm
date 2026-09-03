@@ -12,6 +12,13 @@ export interface Provider {
   updated_at: string;
 }
 
+export interface ProviderTestResult {
+  ok: boolean;
+  latency_ms: number;
+  models?: string[];
+  error?: string;
+}
+
 export interface ModelRow {
   id: number;
   provider_id: number;
@@ -186,6 +193,7 @@ export const api = {
       post<Provider>("/api/admin/providers", body),
     update: (id: number, body: Record<string, unknown>) => patch<Provider>(`/api/admin/providers/${id}`, body),
     remove: (id: number) => del<void>(`/api/admin/providers/${id}`),
+    test: (id: number) => post<ProviderTestResult>(`/api/admin/providers/${id}/test`),
   },
   models: {
     list: () => req<ModelRow[]>("/api/admin/models"),

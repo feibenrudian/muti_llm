@@ -72,6 +72,14 @@ class BaseAdapter(ABC):
     def stream(self, request: LlmRequest) -> AsyncIterator[str]:
         """流式调用，逐段 yield 增量文本（不含 usage；建立连接失败会抛 AdapterError）。"""
 
+    @abstractmethod
+    async def probe(self) -> list[str]:
+        """连通性探测：GET 上游模型列表，返回模型 ID 列表。
+
+        不消耗对话 token，用于 Provider 管理界面验证 base_url/api_key；
+        失败抛 AdapterError（连接/认证等错误已归一化）。
+        """
+
     async def _with_retry(self, fn: Callable[[], Awaitable[Any]]) -> Any:
         last_error: AdapterError | None = None
         for attempt in range(self.max_retries + 1):

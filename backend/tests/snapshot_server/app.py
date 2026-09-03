@@ -35,6 +35,7 @@ class SrsState:
     fail_times: dict[str, int] = field(default_factory=dict)
     timeout_ms: dict[str, int] = field(default_factory=dict)
     delay_scale: float = 1.0
+    models_auth_fail: bool = False
     recordings: list[dict[str, Any]] = field(default_factory=list)
 
 
@@ -215,6 +216,36 @@ def create_app(
             },
         )
 
+    @app.get("/v1/models")
+    async def list_models(request: Request) -> Response:
+        # Provider 连通性探测端点：无请求体可 hash，返回确定性的模型 ID 列表（源自快照库）。
+        # 不含认证头原文（AGENTS.md 纪律），只记录是否携带以及探测发生本身。
+        state.recordings.append(
+            {
+                "model": "__models_list__",
+                "body": {
+                    "path": "/v1/models",
+                    "has_authorization": bool(request.headers.get("authorization")),
+                },
+                "ts": time.time(),
+            }
+        )
+        if state.models_auth_fail:
+            return JSONResponse(
+                status_code=401,
+                content={
+                    "error": {
+                        "message": "Incorrect API key provided",
+                        "type": "invalid_request_error",
+                        "code": "invalid_api_key",
+                    }
+                },
+            )
+        data = [
+            {"id": mid, "object": "model", "owned_by": "srs"} for mid in state.store.model_ids()
+        ]
+        return JSONResponse({"object": "list", "data": data})
+
     @app.post("/_test/config")
     async def test_config(request: Request) -> Response:
         body = await request.json()
@@ -222,6 +253,7 @@ def create_app(
             state.fail_times.clear()
             state.timeout_ms.clear()
             state.delay_scale = 1.0
+            state.models_auth_fail = False
             state.recordings.clear()
         if "fail_times" in body:
             state.fail_times.update(body["fail_times"])
@@ -229,12 +261,15 @@ def create_app(
             state.timeout_ms.update(body["timeout_ms"])
         if "delay_scale" in body:
             state.delay_scale = float(body["delay_scale"])
+        if "models_auth_fail" in body:
+            state.models_auth_fail = bool(body["models_auth_fail"])
         return JSONResponse(
             {
                 "mode": state.mode,
                 "fail_times": state.fail_times,
                 "timeout_ms": state.timeout_ms,
                 "delay_scale": state.delay_scale,
+                "models_auth_fail": state.models_auth_fail,
                 "recordings": len(state.recordings),
                 "snapshots": len(state.store),
             }
