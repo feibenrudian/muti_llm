@@ -1,0 +1,48 @@
+{
+  "scenario": "param_merge_09",
+  "request_hash": "sha256:256c329cb2798b4edf4614eb6a09d4cb769d758c1a21126b273ebca0f610df1a",
+  "request": {
+    "model": "deepseek-v4-flash",
+    "messages": [
+      {
+        "role": "user",
+        "content": "用一句话解释量子纠缠"
+      }
+    ],
+    "temperature": 0.9,
+    "stream": false
+  },
+  "non_stream_response": {
+    "id": "02bcc861-fad4-40af-8bd1-e9d16567ec50",
+    "object": "chat.completion",
+    "created": 1788351726,
+    "model": "deepseek-v4-flash",
+    "choices": [
+      {
+        "index": 0,
+        "message": {
+          "role": "assistant",
+          "content": "量子纠缠是指两个或多个粒子形成一种整体关联，无论相距多远，测量其中一个都会瞬间确定另一个的状态，但这种关联不能用来超光速传递信息。",
+          "reasoning_content": "我们 need answer in Chinese. \"用一句话解释量子纠缠\" means explain quantum entanglement in one sentence. Need concise but accurate. Maybe: 量子纠缠是指两个或多个粒子彼此关联，以至于无论相距多远，对其中一个的测量会瞬时影响另一个的状态，但并不能用来超光速传递信息。 Need one sentence. Ensure \"一句话\"."
+        },
+        "logprobs": null,
+        "finish_reason": "stop"
+      }
+    ],
+    "usage": {
+      "prompt_tokens": 88,
+      "completion_tokens": 104,
+      "total_tokens": 192,
+      "prompt_tokens_details": {
+        "cached_tokens": 0
+      },
+      "completion_tokens_details": {
+        "reasoning_tokens": 70
+      },
+      "prompt_cache_hit_tokens": 0,
+      "prompt_cache_miss_tokens": 88
+    },
+    "system_fingerprint": "a26a7955944dc5c60445bff77fac9c8e"
+  },
+  "stream_chunks": []
+}

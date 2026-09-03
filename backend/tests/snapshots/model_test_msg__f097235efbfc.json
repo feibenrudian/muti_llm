@@ -1,0 +1,48 @@
+{
+  "scenario": "model_test_msg",
+  "request_hash": "sha256:f097235efbfcfe288d512908c66349d60ba00e52e3b0d183d6489aaf98c97cd5",
+  "request": {
+    "model": "deepseek-v4-flash",
+    "messages": [
+      {
+        "role": "user",
+        "content": "连通性测试：请只回复 pong"
+      }
+    ],
+    "temperature": 0.0,
+    "stream": false
+  },
+  "non_stream_response": {
+    "id": "128a6fe7-a6f4-49b1-b961-1c78d3e67b37",
+    "object": "chat.completion",
+    "created": 1788345193,
+    "model": "deepseek-v4-flash",
+    "choices": [
+      {
+        "index": 0,
+        "message": {
+          "role": "assistant",
+          "content": "pong",
+          "reasoning_content": "We need answer in Chinese likely. User says \"连通性测试：请只回复 pong\" Means connectivity test: please only reply pong. Need respond exactly pong."
+        },
+        "logprobs": null,
+        "finish_reason": "stop"
+      }
+    ],
+    "usage": {
+      "prompt_tokens": 92,
+      "completion_tokens": 39,
+      "total_tokens": 131,
+      "prompt_tokens_details": {
+        "cached_tokens": 0
+      },
+      "completion_tokens_details": {
+        "reasoning_tokens": 36
+      },
+      "prompt_cache_hit_tokens": 0,
+      "prompt_cache_miss_tokens": 92
+    },
+    "system_fingerprint": "a26a7955944dc5c60445bff77fac9c8e"
+  },
+  "stream_chunks": []
+}

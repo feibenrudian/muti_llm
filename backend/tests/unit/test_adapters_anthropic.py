@@ -1,0 +1,88 @@
+"""UT-07-1..3：Anthropic 适配器（走本地 mock 服务的真实 HTTP，见 tests/mock_anthropic.py）。"""
+
+import httpx
+import pytest
+
+from app.adapters.anthropic_adapter import AnthropicAdapter
+from app.adapters.base import AdapterError, LlmRequest, NormalizedMessage
+from tests.mock_anthropic import build_sse_events
+
+
+def make_adapter(base_url: str, **kwargs: object) -> AnthropicAdapter:
+    return AnthropicAdapter(base_url=base_url, api_key="sk-ant-test", retry_base_delay=0, **kwargs)
+
+
+def make_request() -> LlmRequest:
+    return LlmRequest(
+        model="claude-sonnet-4",
+        messages=[
+            NormalizedMessage(role="system", content="你是严谨的助手"),
+            NormalizedMessage(role="user", content="你好"),
+        ],
+        temperature=0.5,
+        max_tokens=128,
+    )
+
+
+async def recorded_requests(base_url: str) -> list[dict]:
+    resp = await httpx.AsyncClient().get(f"{base_url}/_test/requests")
+    assert resp.status_code == 200
+    return resp.json()["requests"]
+
+
+async def test_request_and_response_mapping(anthropic_mock: str) -> None:
+    """UT-07-1 参数/响应映射：system 提升、max_tokens 必填、usage 归一化。"""
+    adapter = make_adapter(anthropic_mock)
+    result = await adapter.complete(make_request())
+
+    recordings = await recorded_requests(anthropic_mock)
+    assert len(recordings) == 1
+    sent = recordings[0]["body"]
+    headers = recordings[0]["headers"]
+
+    assert sent["model"] == "claude-sonnet-4"
+    assert sent["max_tokens"] == 128
+    assert sent["system"] == "你是严谨的助手"
+    assert sent["messages"] == [{"role": "user", "content": "你好"}]  # system 不在 messages
+    assert headers.get("x-api-key") == "sk-ant-test"
+    assert "temperature" not in sent  # 新版 API 已移除采样参数，适配器静默忽略
+
+    assert result.content == "ANSWER"
+    assert result.usage.prompt_tokens == 7
+    assert result.usage.completion_tokens == 3
+    assert result.usage.total_tokens == 10
+
+
+async def test_stream_event_conversion(anthropic_mock: str) -> None:
+    """UT-07-2 流式事件转换：content_block_delta 事件序列 → 增量片段序列。"""
+    resp = await httpx.AsyncClient().post(
+        f"{anthropic_mock}/_test/config",
+        json={"sse_events": build_sse_events(["你好", "，世界"])},
+    )
+    assert resp.status_code == 200
+
+    adapter = make_adapter(anthropic_mock)
+    deltas = [d async for d in adapter.stream(make_request())]
+    assert deltas == ["你好", "，世界"]
+
+
+async def test_reuses_base_retry(anthropic_mock: str) -> None:
+    """UT-07-3 复用基座：anthropic 5xx 映射为可重试错误，基座重试后成功；auth 不重试。"""
+    # 5xx 一次后成功
+    await httpx.AsyncClient().post(f"{anthropic_mock}/_test/config", json={"fail_times": 1})
+    adapter = make_adapter(anthropic_mock, max_retries=1)
+    result = await adapter.complete(make_request())
+    assert result.content == "ANSWER"
+    assert len(await recorded_requests(anthropic_mock)) == 2  # 基座确实重试了一次
+
+    # auth 错误不可重试，直接抛出
+    await httpx.AsyncClient().post(
+        f"{anthropic_mock}/_test/config", json={"fail_times": 3, "fail_status": 401}
+    )
+    adapter2 = make_adapter(anthropic_mock, max_retries=2)
+    with pytest.raises(AdapterError) as excinfo:
+        await adapter2.complete(make_request())
+    assert excinfo.value.kind == "auth"
+    assert (
+        len(await recorded_requests(anthropic_mock)) == 3
+    )  # 未重试（1 次成功 + 1 次 500 + 1 次 401）

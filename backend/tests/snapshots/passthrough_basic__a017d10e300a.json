@@ -1,0 +1,48 @@
+{
+  "scenario": "passthrough_basic",
+  "request_hash": "sha256:a017d10e300adaadacfd30257ef4dd2dc03783c2a537d75db401a66fe4936cb9",
+  "request": {
+    "model": "deepseek-v4-flash",
+    "messages": [
+      {
+        "role": "user",
+        "content": "用一句话解释量子纠缠"
+      }
+    ],
+    "temperature": 0.7,
+    "stream": false
+  },
+  "non_stream_response": {
+    "id": "a73b67d0-53eb-4792-9d18-3fc21f7aae80",
+    "object": "chat.completion",
+    "created": 1788345190,
+    "model": "deepseek-v4-flash",
+    "choices": [
+      {
+        "index": 0,
+        "message": {
+          "role": "assistant",
+          "content": "量子纠缠是指两个或多个粒子形成不可分割的整体状态，无论相距多远，测量其中一个都会瞬间决定另一个的状态，仿佛它们之间存在超越时空的关联。",
+          "reasoning_content": "We need answer in Chinese. Need一句解释量子纠缠. Concise. Maybe \"量子纠缠是指两个或多个粒子彼此关联，无论相距多远，对其中一个的测量会瞬间影响另一个的状态，仿佛它们之间存在超越时空的联系。\" But ensure one sentence. Need \"用一句话\" maybe no extra."
+        },
+        "logprobs": null,
+        "finish_reason": "stop"
+      }
+    ],
+    "usage": {
+      "prompt_tokens": 88,
+      "completion_tokens": 94,
+      "total_tokens": 182,
+      "prompt_tokens_details": {
+        "cached_tokens": 0
+      },
+      "completion_tokens_details": {
+        "reasoning_tokens": 61
+      },
+      "prompt_cache_hit_tokens": 0,
+      "prompt_cache_miss_tokens": 88
+    },
+    "system_fingerprint": "a26a7955944dc5c60445bff77fac9c8e"
+  },
+  "stream_chunks": []
+}

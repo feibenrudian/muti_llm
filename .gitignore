@@ -1,0 +1,37 @@
+# Python / uv
+__pycache__/
+*.py[cod]
+.venv/
+*.egg-info/
+.pytest_cache/
+.ruff_cache/
+.coverage
+.coverage.*
+coverage.xml
+htmlcov/
+
+# Node / Vite / Playwright
+node_modules/
+dist/
+*.tsbuildinfo
+*.local
+test-results/
+playwright-report/
+blob-report/
+playwright/.cache/
+
+# 本地数据与密钥（.env.example 除外；.env.test 含真实录制凭据，严禁提交）
+.env
+.env.*
+!.env.example
+run/
+
+# 本地数据库（SQLite WAL）
+*.db
+*.db-wal
+*.db-shm
+
+# 编辑器/系统
+.DS_Store
+.idea/
+.vscode/

@@ -1,0 +1,12 @@
+services:
+  muti-llm:
+    build: .
+    container_name: muti-llm
+    ports:
+      - "8000:8000"
+    volumes:
+      - muti_data:/data
+    restart: unless-stopped
+
+volumes:
+  muti_data:
