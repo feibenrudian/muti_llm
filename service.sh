@@ -17,9 +17,34 @@ is_running() {
   [ -f "$PID_FILE" ] && kill -0 "$(cat "$PID_FILE")" 2>/dev/null
 }
 
+# 占用 $PORT 的监听进程 PID 列表（可能为空）
+port_pids() {
+  lsof -nP -tiTCP:"$PORT" -sTCP:LISTEN 2>/dev/null || true
+}
+
+# 该 PID 的工作目录是否是本仓库 backend（即本服务相关进程，含脚本外启动的 dev server）
+is_our_backend() {
+  local pid="$1" cwd
+  cwd="$(lsof -a -p "$pid" -d cwd -Fn 2>/dev/null | sed -n 's/^n//p' | head -n1 || true)"
+  [ -n "$cwd" ] && [ "$cwd" = "$BACKEND_DIR" ]
+}
+
+kill_and_wait() {
+  local pid="$1" i
+  kill "$pid" 2>/dev/null || true
+  for i in $(seq 1 20); do
+    kill -0 "$pid" 2>/dev/null || return 0
+    sleep 0.5
+  done
+  echo "→ pid $pid 未响应，强制结束 (kill -9)"
+  kill -9 "$pid" 2>/dev/null || true
+}
+
+# 进程已死就不再等，避免健康检查被端口上的其他进程“代答”造成假成功
 wait_healthy() {
-  local i
+  local pid="$1" i
   for i in $(seq 1 60); do
+    kill -0 "$pid" 2>/dev/null || return 1
     if curl -sf "http://$HOST:$PORT/health" >/dev/null 2>&1; then
       return 0
     fi
@@ -69,6 +94,15 @@ do_start() {
     exit 1
   fi
   rm -f "$PID_FILE"
+
+  # 端口被占用时直接失败：否则新进程 bind 失败退出，健康检查却被占用者代答，造成“假启动成功”
+  local occupants
+  occupants="$(port_pids)"
+  if [ -n "$occupants" ]; then
+    echo "✗ 端口 $PORT 已被占用 (pid: $(echo $occupants))，请先执行: $0 stop"
+    exit 1
+  fi
+
   mkdir -p "$RUN_DIR"
   ensure_frontend_built
 
@@ -81,11 +115,13 @@ do_start() {
     echo $! >"$PID_FILE"
   )
 
-  if wait_healthy; then
-    echo "✓ 服务已启动 (pid $(cat "$PID_FILE"))"
+  local pid
+  pid="$(cat "$PID_FILE")"
+  if wait_healthy "$pid" && kill -0 "$pid" 2>/dev/null; then
+    echo "✓ 服务已启动 (pid $pid)"
     print_ports
   else
-    echo "✗ 启动超时（30s 内 /health 未就绪），最近日志："
+    echo "✗ 启动失败（进程提前退出或 30s 内 /health 未就绪），最近日志："
     tail -n 20 "$LOG_FILE" || true
     do_stop >/dev/null 2>&1 || true
     exit 1
@@ -93,36 +129,68 @@ do_start() {
 }
 
 do_stop() {
-  if ! is_running; then
-    echo "✓ 服务未在运行"
-    rm -f "$PID_FILE"
-    return 0
-  fi
-  local pid
-  pid="$(cat "$PID_FILE")"
-  echo "→ 停止服务 (pid $pid)…"
-  kill "$pid" 2>/dev/null || true
-  local i
-  for i in $(seq 1 20); do
-    kill -0 "$pid" 2>/dev/null || break
-    sleep 0.5
-  done
-  if kill -0 "$pid" 2>/dev/null; then
-    echo "→ 强制结束"
-    kill -9 "$pid" 2>/dev/null || true
+  local stopped=1
+  if is_running; then
+    local pid
+    pid="$(cat "$PID_FILE")"
+    echo "→ 停止服务 (pid $pid)…"
+    kill_and_wait "$pid"
+    stopped=0
   fi
   rm -f "$PID_FILE"
-  echo "✓ 已停止"
+
+  # 兜底：PID 文件丢失/失效（或进程由 make dev-backend 等脚本外方式启动）时，
+  # 按“占用端口且 cwd 是本仓库 backend”识别并清理残留服务进程
+  local leftovers p i ours=""
+  leftovers="$(port_pids)"
+  for p in $leftovers; do
+    if is_our_backend "$p"; then
+      ours="$ours $p"
+    else
+      echo "⚠ 端口 $PORT 被非本服务进程占用 (pid $p)，未动它"
+    fi
+  done
+  if [ -n "$ours" ]; then
+    echo "→ 清理占用端口 $PORT 的残留服务进程 (pid:$ours )"
+    kill $ours 2>/dev/null || true
+    for i in $(seq 1 20); do
+      local any=0
+      for p in $ours; do kill -0 "$p" 2>/dev/null && any=1; done
+      [ "$any" -eq 0 ] && break
+      sleep 0.5
+    done
+    for p in $ours; do
+      if kill -0 "$p" 2>/dev/null; then
+        echo "→ pid $p 未响应，强制结束 (kill -9)"
+        kill -9 "$p" 2>/dev/null || true
+      fi
+    done
+    stopped=0
+  fi
+
+  if [ "$stopped" -eq 1 ]; then
+    echo "✓ 服务未在运行"
+  else
+    echo "✓ 已停止"
+  fi
 }
 
 do_status() {
   if is_running; then
     echo "✓ 运行中 (pid $(cat "$PID_FILE"))，端口 $PORT"
     curl -sf "http://$HOST:$PORT/health" && echo ""
-  else
-    echo "✗ 未运行"
-    exit 1
+    return 0
   fi
+  local occupants
+  occupants="$(port_pids)"
+  if [ -n "$occupants" ]; then
+    echo "⚠ PID 文件缺失/失效，但端口 $PORT 正被进程占用 (pid: $(echo $occupants))"
+    echo "  多为本脚本外启动的服务（如 make dev-backend）；可执行 $0 restart 接管"
+    curl -sf "http://$HOST:$PORT/health" && echo ""
+    return 0
+  fi
+  echo "✗ 未运行"
+  exit 1
 }
 
 case "${1:-}" in
