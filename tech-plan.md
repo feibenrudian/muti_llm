@@ -449,6 +449,18 @@ make seed          # 起服务+灌入演示数据(指向快照回放服务器), 
 | AE-29-2 | AE | 总回归 | `make test && make e2e` 全绿（CI 语义） |
 | UE-29-1 | UE | Playwright全量 | 全部 UE 用例在"单进程+静态托管"模式下重跑通过（webServer 即生产形态） |
 
+#### T30 Trace 详情：换裁判模型重新聚合（增量需求）
+产出：`POST /api/admin/traces/{id}/rejudge`（同步，body: judge_model_id）与 `POST .../rejudge/stream`（SSE：meta 入参 → delta 增量 → done 终态+token）——`app/rejudge_svc.py` 的 `prepare_rejudge` 统一校验并复用 trace 已存成员答案、按 Pipeline 当前模板重渲染裁判 Prompt（复用 `council.py` 的 `render_judge_prompt`/`build_call_request`/`merge_params`），只重调裁判不重调成员；流式端点结束后经后台任务落库（断开记 client_cancelled）；输出以 `role="judge_rerun"` 追加进 `model_call_logs`（无表结构变更），成败均落行；**不回写 RequestLog**。1.2 未规划 `rejudge_svc.py` 位置：属 Trace 域写路径服务，与 logging_svc 平级，故独立成模块。前端 `toTimeline` 将 judge/judge_rerun 行合成裁判组；裁判卡片以**下拉菜单**切换裁判模型（选项=本次成员+裁判模型）：有结果直接展示，无结果即发起流式重跑（SSE 实时增量、多模型并行、失败可重试）。
+| 编号 | 类型 | 用例 | 断言要点 |
+| --- | --- | --- | --- |
+| AE-30-1 | AE | 重跑成功 | 换模型重跑 → judge_rerun 行追加、载荷与原裁判逐字节一致（快照复用）、可多次重跑全部保留、RequestLog 全字段不变 |
+| AE-30-2 | AE | 重跑失败 | SRS 注入失败 → 200 + status=failed 行保留错误信息，原始记录不动 |
+| AE-30-3 | AE | 拒绝路径 | trace 不存在 404；无成员答案(透传/全成员失败)/pending 409；模型不存在/停用 422 |
+| AE-30-4 | AE | 流式重跑 | SSE meta→delta→done 事件齐全、delta 拼接=done.content=快照内容；两路并行均成功落库 |
+| AE-30-5 | AE | 流式失败 | 无 delta、done.status=failed 带错误信息，失败行照常落库 |
+| UT-30-1 | UT | 前端纯函数 | vitest：toTimeline 裁判版本合组（原始在前、重跑按序、透传无裁判组） |
+| UE-30-1 | UE | 详情页重跑 | 下拉默认当前裁判、选项仅本次成员+裁判；换模型流式输出实时呈现、失败显示错误、同模型可重试成功、版本间切换立即显示各自输出 |
+
 ---
 
 ## 4. 里程碑映射（对应需求文档 M1–M4）

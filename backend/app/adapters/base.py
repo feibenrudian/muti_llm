@@ -131,6 +131,13 @@ class BaseAdapter(ABC):
 
         return gen()
 
+    def stream_events_timed(self, request: LlmRequest) -> AsyncIterator[StreamEvent]:
+        """带 TTFT/空闲超时语义的事件流（文本增量 + 结束时的 usage）。
+
+        供需要"边流式消费、边拿 usage"的调用方使用（如管理端重跑裁判的 SSE）。
+        """
+        return self._timed_events(request)
+
     async def complete(self, request: LlmRequest) -> LlmResult:
         """流式调用聚合为完整结果。usage 取自流内 usage 事件（上游不支持则为 0）。"""
         start = time.perf_counter()

@@ -201,6 +201,60 @@ async function req<T>(path: string, init?: RequestInit): Promise<T> {
   return (await resp.json()) as T;
 }
 
+/** 流式重跑的 SSE 事件序列：meta(入参) → delta*(增量) → done(终态与 token)。 */
+export type RejudgeStreamEvent =
+  | { type: "meta"; payload: TraceCall["request_payload"] }
+  | { type: "delta"; text: string }
+  | {
+      type: "done";
+      status: string;
+      content: string;
+      error: string;
+      duration_ms: number;
+      prompt_tokens: number;
+      completion_tokens: number;
+    };
+
+/**
+ * 换裁判重跑（流式）：逐个回调 SSE 事件，返回是否收到 done 终态
+ * （连接中断收不到 done，调用方按"已中断"处理）。
+ */
+export async function streamRejudge(
+  traceId: number | string,
+  judgeModelId: number,
+  onEvent: (event: RejudgeStreamEvent) => void,
+): Promise<boolean> {
+  const resp = await fetch(`/api/admin/traces/${traceId}/rejudge/stream`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ judge_model_id: judgeModelId }),
+  });
+  if (!resp.ok || !resp.body) {
+    throw new ApiError(resp.status, parseErrorMessage(await resp.json().catch(() => null)));
+  }
+  const reader = resp.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = "";
+  let sawDone = false;
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    buffer += decoder.decode(value, { stream: true });
+    let separator = buffer.indexOf("\n\n");
+    while (separator >= 0) {
+      const block = buffer.slice(0, separator);
+      buffer = buffer.slice(separator + 2);
+      separator = buffer.indexOf("\n\n");
+      const line = block.split("\n").find((l) => l.startsWith("data: "));
+      if (!line) continue;
+      const event = JSON.parse(line.slice("data: ".length)) as RejudgeStreamEvent;
+      if (event.type === "done") sawDone = true;
+      onEvent(event);
+    }
+  }
+  return sawDone;
+}
+
 function post<T>(path: string, body?: unknown): Promise<T> {
   return req<T>(path, { method: "POST", body: body === undefined ? undefined : JSON.stringify(body) });
 }
@@ -251,6 +305,8 @@ export const api = {
       ),
     get: (id: number | string) => req<TraceDetail>(`/api/admin/traces/${id}`),
     clear: () => post<{ cleared: boolean }>("/api/admin/traces/clear"),
+    rejudge: (id: number | string, judgeModelId: number) =>
+      post<{ call: TraceCall }>(`/api/admin/traces/${id}/rejudge`, { judge_model_id: judgeModelId }),
   },
   settings: {
     get: () => req<ServiceSettings>("/api/admin/settings"),

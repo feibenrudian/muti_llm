@@ -59,24 +59,24 @@ async def record_call(
     duration_ms: int = 0,
     prompt_tokens: int = 0,
     completion_tokens: int = 0,
-) -> None:
-    session.add(
-        ModelCallLog(
-            request_id=request_id,
-            role=role,
-            model_id=model_id,
-            upstream_model_id=upstream_model_id,
-            provider_name=provider_name,
-            request_payload=request_payload,
-            response_content=response_content,
-            status=status,
-            error_message=error_message,
-            duration_ms=duration_ms,
-            prompt_tokens=prompt_tokens,
-            completion_tokens=completion_tokens,
-        )
+) -> ModelCallLog:
+    log = ModelCallLog(
+        request_id=request_id,
+        role=role,
+        model_id=model_id,
+        upstream_model_id=upstream_model_id,
+        provider_name=provider_name,
+        request_payload=request_payload,
+        response_content=response_content,
+        status=status,
+        error_message=error_message,
+        duration_ms=duration_ms,
+        prompt_tokens=prompt_tokens,
+        completion_tokens=completion_tokens,
     )
+    session.add(log)
     await session.flush()
+    return log
 
 
 async def finish_request(

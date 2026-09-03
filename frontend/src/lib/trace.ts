@@ -1,21 +1,33 @@
-/** Trace → 时间线的纯转换与格式化（UT-27-1 覆盖）。 */
+/** Trace → 时间线的纯转换与格式化（UT-27-1 / UT-30-1 覆盖）。 */
 
 import type { TraceCall, TraceDetail } from "./api";
 
-export type TimelineEntryKind = "request" | "call" | "final";
+export type TimelineEntryKind = "request" | "call" | "judge" | "final";
 
-export interface TimelineEntry {
-  kind: TimelineEntryKind;
-  call?: TraceCall;
-}
+export type TimelineEntry =
+  | { kind: "request" }
+  | { kind: "call"; call: TraceCall }
+  | { kind: "judge"; calls: TraceCall[] }
+  | { kind: "final" };
 
-/** 时间线：原始请求 → 各上游调用（成员/裁判/透传，按后端给定顺序）→ 最终响应。 */
+/**
+ * 时间线：原始请求 → 各成员/透传调用 → 裁判聚合 → 最终响应。
+ * 原始裁判与各次换裁判重跑（role=judge/judge_rerun）合成一组并列保留，
+ * 组位置取首个裁判行出现处（成员调用始终在前）。
+ */
 export function toTimeline(detail: TraceDetail): TimelineEntry[] {
-  return [
-    { kind: "request" },
-    ...detail.calls.map((call) => ({ kind: "call" as const, call })),
-    { kind: "final" },
-  ];
+  const entries: TimelineEntry[] = [{ kind: "request" }];
+  const judgeCalls: TraceCall[] = [];
+  for (const call of detail.calls) {
+    if (call.role === "judge" || call.role === "judge_rerun") {
+      if (judgeCalls.length === 0) entries.push({ kind: "judge", calls: judgeCalls });
+      judgeCalls.push(call);
+    } else {
+      entries.push({ kind: "call", call });
+    }
+  }
+  entries.push({ kind: "final" });
+  return entries;
 }
 
 export function formatDuration(ms: number): string {

@@ -1,6 +1,20 @@
 import { expect, test } from "vitest";
-import type { TraceDetail } from "./api";
+import type { TraceCall, TraceDetail } from "./api";
 import { formatBytes, formatDuration, statusTone, toTimeline } from "./trace";
+
+const call = (over: Partial<TraceCall> & Pick<TraceCall, "id" | "role" | "upstream_model_id">): TraceCall => ({
+  model_id: 1,
+  provider_name: "P",
+  request_payload: { model: over.upstream_model_id, messages: [] },
+  response_content: "out",
+  status: "success",
+  error_message: "",
+  duration_ms: 300,
+  prompt_tokens: 3,
+  completion_tokens: 2,
+  created_at: "2026-09-02T12:00:01+00:00",
+  ...over,
+});
 
 const detail: TraceDetail = {
   request: {
@@ -17,20 +31,52 @@ const detail: TraceDetail = {
     created_at: "2026-09-02T12:00:00+00:00",
   },
   calls: [
-    { id: 1, role: "member", model_id: 1, upstream_model_id: "m-a", provider_name: "P", request_payload: { model: "m-a", messages: [] }, response_content: "a", status: "success", error_message: "", duration_ms: 300, prompt_tokens: 3, completion_tokens: 2, created_at: "2026-09-02T12:00:01+00:00" },
-    { id: 2, role: "member", model_id: 2, upstream_model_id: "m-b", provider_name: "P", request_payload: { model: "m-b", messages: [] }, response_content: "b", status: "success", error_message: "", duration_ms: 350, prompt_tokens: 3, completion_tokens: 2, created_at: "2026-09-02T12:00:01+00:00" },
-    { id: 3, role: "judge", model_id: 1, upstream_model_id: "m-a", provider_name: "P", request_payload: { model: "m-a", messages: [] }, response_content: "final", status: "success", error_message: "", duration_ms: 500, prompt_tokens: 4, completion_tokens: 1, created_at: "2026-09-02T12:00:02+00:00" },
+    call({ id: 1, role: "member", upstream_model_id: "m-a" }),
+    call({ id: 2, role: "member", upstream_model_id: "m-b" }),
+    call({ id: 3, role: "judge", upstream_model_id: "m-a", response_content: "final" }),
   ],
 };
 
-test("toTimeline：请求 → 调用序列 → 最终响应（UT-27-1）", () => {
+test("toTimeline：请求 → 成员调用 → 裁判 → 最终响应（UT-27-1）", () => {
   const timeline = toTimeline(detail);
   expect(timeline).toHaveLength(5);
   expect(timeline[0].kind).toBe("request");
   expect(timeline[4].kind).toBe("final");
-  const calls = timeline.filter((entry) => entry.kind === "call");
-  expect(calls.map((entry) => entry.call?.role)).toEqual(["member", "member", "judge"]);
-  expect(calls.map((entry) => entry.call?.upstream_model_id)).toEqual(["m-a", "m-b", "m-a"]);
+  const members = timeline.filter((entry) => entry.kind === "call");
+  expect(members.map((entry) => (entry.kind === "call" ? entry.call.upstream_model_id : ""))).toEqual([
+    "m-a",
+    "m-b",
+  ]);
+  const judge = timeline[3];
+  expect(judge.kind === "judge" && judge.calls).toHaveLength(1);
+  expect(judge.kind === "judge" && judge.calls[0].upstream_model_id).toBe("m-a");
+});
+
+test("toTimeline：多次换裁判重跑合成一组并列保留（UT-30-1）", () => {
+  const rerunDetail: TraceDetail = {
+    ...detail,
+    calls: [
+      ...detail.calls,
+      call({ id: 4, role: "judge_rerun", upstream_model_id: "m-c", status: "failed", error_message: "boom" }),
+      call({ id: 5, role: "judge_rerun", upstream_model_id: "m-d" }),
+    ],
+  };
+  const timeline = toTimeline(rerunDetail);
+  // 请求 + 成员×2 + 裁判组 + 最终响应：重跑版本只并组、不新增卡片
+  expect(timeline.map((entry) => entry.kind)).toEqual(["request", "call", "call", "judge", "final"]);
+  const judge = timeline[3];
+  expect(judge.kind === "judge" && judge.calls.map((c) => c.role)).toEqual([
+    "judge",
+    "judge_rerun",
+    "judge_rerun",
+  ]);
+
+  // 透传/无裁判 trace 不产生裁判组
+  const passthrough: TraceDetail = {
+    ...detail,
+    calls: [call({ id: 9, role: "passthrough", upstream_model_id: "m-x" })],
+  };
+  expect(toTimeline(passthrough).map((entry) => entry.kind)).toEqual(["request", "call", "final"]);
 });
 
 test("格式化：耗时与字节数（UT-27-1）", () => {

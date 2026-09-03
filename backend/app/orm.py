@@ -130,7 +130,7 @@ class ModelCallLog(Base):
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     request_id: Mapped[int] = mapped_column(ForeignKey("request_logs.id"))
-    role: Mapped[str] = mapped_column(String(20))  # member | judge | passthrough
+    role: Mapped[str] = mapped_column(String(20))  # member | judge | judge_rerun | passthrough
     model_id: Mapped[int] = mapped_column(Integer, default=0)
     upstream_model_id: Mapped[str] = mapped_column(String(200), default="")
     provider_name: Mapped[str] = mapped_column(String(100), default="")
