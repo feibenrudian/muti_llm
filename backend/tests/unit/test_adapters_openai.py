@@ -5,7 +5,7 @@ import pytest
 
 from app.adapters.base import AdapterError, LlmRequest, NormalizedMessage
 from app.adapters.openai_compat import OpenAICompatAdapter
-from tests.helpers import load_snapshot, snapshot_stream_text
+from tests.helpers import snapshot_content, snapshot_stream_text, snapshot_usage
 
 QUANTUM = "用一句话解释量子纠缠"
 POEM = "写一首关于秋天的四行短诗，每行不超过10个字"
@@ -32,10 +32,11 @@ async def test_basic_call(srs_live_seeded: str) -> None:
             temperature=0.7,
         )
     )
-    snap = load_snapshot("passthrough_basic")["non_stream_response"]
-    assert result.content == snap["choices"][0]["message"]["content"]
-    assert result.usage.prompt_tokens == snap["usage"]["prompt_tokens"]
-    assert result.usage.completion_tokens == snap["usage"]["completion_tokens"]
+    snap_content = snapshot_content("passthrough_basic")
+    snap_usage = snapshot_usage("passthrough_basic")
+    assert result.content == snap_content
+    assert result.usage.prompt_tokens == snap_usage["prompt_tokens"]
+    assert result.usage.completion_tokens == snap_usage["completion_tokens"]
     assert result.duration_ms >= 0
 
 
@@ -50,8 +51,8 @@ async def test_retry_then_success(srs_live_seeded: str) -> None:
             temperature=0.7,
         )
     )
-    snap = load_snapshot("passthrough_basic")["non_stream_response"]
-    assert result.content == snap["choices"][0]["message"]["content"]
+    snap_content = snapshot_content("passthrough_basic")
+    assert result.content == snap_content
 
 
 async def test_retry_exhausted(srs_live_seeded: str) -> None:
@@ -97,7 +98,7 @@ async def test_stream_iteration(srs_live_seeded: str) -> None:
                 model="deepseek-v4-flash",
                 messages=[NormalizedMessage(role="user", content=POEM)],
                 temperature=0.7,
-                max_tokens=200,
+                max_tokens=2000,
             )
         )
     ]

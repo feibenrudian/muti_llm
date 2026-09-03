@@ -3,10 +3,10 @@
 from collections.abc import Sequence
 from typing import Any
 
-from sqlalchemy import select
+from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.orm import AppSetting, LlmModel, ModelCallLog, Pipeline
+from app.orm import AppSetting, LlmModel, ModelCallLog, Pipeline, PipelineMember
 
 
 class Repository[ModelT]:
@@ -83,6 +83,40 @@ async def find_enabled_model_by_upstream_id(
         )
     )
     return result.scalars().first()
+
+
+async def delete_models_cascade(session: AsyncSession, model_ids: Sequence[int]) -> set[int]:
+    """删除模型并级联清理引用，保持"存留的 Pipeline 均可运行"：
+    引用这些模型的成员行直接删；裁判失效或成员因此被清空的 Pipeline 一并删除；
+    上述引用全部清理后才删除模型行（外键强制开启，顺序不可颠倒）。
+    返回被级联删除的 Pipeline id 集合。
+    """
+    if not model_ids:
+        return set()
+    affected = set(
+        (
+            await session.execute(
+                select(PipelineMember.pipeline_id)
+                .where(PipelineMember.model_id.in_(model_ids))
+                .distinct()
+            )
+        ).scalars()
+    )
+    await session.execute(delete(PipelineMember).where(PipelineMember.model_id.in_(model_ids)))
+    judge_dead = set(
+        (
+            await session.execute(select(Pipeline.id).where(Pipeline.judge_model_id.in_(model_ids)))
+        ).scalars()
+    )
+    still_has_members = set(
+        (await session.execute(select(PipelineMember.pipeline_id).distinct())).scalars()
+    )
+    broken = {pid for pid in affected if pid not in still_has_members} | judge_dead
+    if broken:
+        await session.execute(delete(PipelineMember).where(PipelineMember.pipeline_id.in_(broken)))
+        await session.execute(delete(Pipeline).where(Pipeline.id.in_(broken)))
+    await session.execute(delete(LlmModel).where(LlmModel.id.in_(model_ids)))
+    return broken
 
 
 async def list_model_calls(session: AsyncSession, request_id: int) -> list[ModelCallLog]:

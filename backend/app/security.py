@@ -33,6 +33,13 @@ def mask_key(api_key: str) -> str:
     return "****" + api_key[-4:]
 
 
+def mask_service_key(service_key: str) -> str:
+    """设置页展示用：保留 sk-local- 前缀与尾 4 位，中间以 *** 代替（明文可一键复制）。"""
+    if len(service_key) < 16:
+        return "***" + service_key[-4:]
+    return service_key[:10] + "***" + service_key[-4:]
+
+
 def generate_service_key() -> str:
     """生成对外 API Key（客户端 Authorization: Bearer 用）。"""
     return SERVICE_KEY_PREFIX + secrets.token_urlsafe(32)

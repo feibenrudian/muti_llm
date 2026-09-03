@@ -92,3 +92,42 @@ async def test_settings_and_key_reset(asgi_client: httpx.AsyncClient, service_ke
     assert resp.status_code == 401
     resp = await asgi_client.get("/v1/models", headers=auth_headers(new_key))
     assert resp.status_code == 200
+
+
+async def test_service_key_reveal(asgi_client: httpx.AsyncClient, service_key: str) -> None:
+    """AE-28-3 Key 展示：首启即可取（掩码格式+明文可认证）；重置后同步；遗留库 available=false。"""
+    resp = await asgi_client.get("/api/admin/settings/service-key")
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["available"] is True
+    assert data["service_api_key"] == service_key  # 与首启生成的明文一致
+    assert data["masked"].startswith("sk-local-")
+    assert data["masked"].endswith(f"***{service_key[-4:]}")
+    assert "***" in data["masked"]
+    assert service_key not in data["masked"]  # 掩码不含完整明文
+
+    # 副本明文可用于 /v1 认证
+    resp = await asgi_client.get("/v1/models", headers=auth_headers(data["service_api_key"]))
+    assert resp.status_code == 200
+
+    # 重置后副本同步更新
+    new_key = (await asgi_client.post("/api/admin/settings/service-key/reset")).json()[
+        "service_api_key"
+    ]
+    data = (await asgi_client.get("/api/admin/settings/service-key")).json()
+    assert data["available"] is True
+    assert data["service_api_key"] == new_key
+
+    # 遗留库：只存过哈希、无加密副本 → available=false
+    from app.bootstrap import KEY_SERVICE_KEY_ENCRYPTED
+    from app.main import app
+    from app.orm import AppSetting
+
+    async with app.state.session_factory() as session:
+        row = await session.get(AppSetting, KEY_SERVICE_KEY_ENCRYPTED)
+        assert row is not None
+        await session.delete(row)
+        await session.commit()
+    data = (await asgi_client.get("/api/admin/settings/service-key")).json()
+    assert data["available"] is False
+    assert data["service_api_key"] is None

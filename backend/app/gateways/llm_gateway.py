@@ -385,6 +385,8 @@ def _llm_request(
         "messages": openai_messages,
         "stream": stream,
     }
+    if stream:
+        payload["stream_options"] = {"include_usage": True}
     llm_request = LlmRequest(
         model=model_row.upstream_model_id,
         messages=[NormalizedMessage(role=m["role"], content=m["content"]) for m in openai_messages],
@@ -440,7 +442,8 @@ async def _passthrough(
     )
 
     merged = _merged_params(model_row, params)
-    llm_request, payload = _llm_request(model_row, body, merged, stream)
+    # 上游一律流式调用（决策 D8）：stream 只决定客户端拿到 SSE 还是聚合 JSON
+    llm_request, payload = _llm_request(model_row, body, merged, stream=True)
     adapter = build_adapter(
         provider,
         fernet_key=app.state.fernet_key,
@@ -450,7 +453,7 @@ async def _passthrough(
 
     if stream:
         return await _passthrough_stream(
-            app, background, session, trace, model_row, provider, payload, llm_request
+            app, background, session, trace, model_row, provider, payload, llm_request, adapter
         )
 
     start = time.perf_counter()
@@ -528,10 +531,10 @@ async def _passthrough_stream(
     provider: Provider,
     payload: dict[str, Any],
     llm_request: LlmRequest,
+    adapter: Any,
 ) -> tuple[Response, int]:
     await session.commit()  # 先落 pending 状态的 request_logs
 
-    adapter = build_adapter(provider, fernet_key=app.state.fernet_key)
     session_factory = app.state.session_factory
     chunk = make_chunker(f"chatcmpl-{uuid.uuid4().hex[:24]}", int(time.time()), payload["model"])
 

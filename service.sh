@@ -28,10 +28,27 @@ wait_healthy() {
   return 1
 }
 
+# 前端源码/构建配置比上次产物新（或产物缺失）时返回 0
+frontend_outdated() {
+  local marker="$ROOT_DIR/frontend/dist/index.html"
+  [ ! -f "$marker" ] && return 0
+  local changed
+  changed="$(find "$ROOT_DIR/frontend/src" \
+    "$ROOT_DIR/frontend/index.html" \
+    "$ROOT_DIR/frontend/package.json" \
+    "$ROOT_DIR/frontend/package-lock.json" \
+    "$ROOT_DIR/frontend/tsconfig.json" \
+    "$ROOT_DIR/frontend/vite.config.ts" \
+    -type f -newer "$marker" -print -quit 2>/dev/null || true)"
+  [ -n "$changed" ]
+}
+
 ensure_frontend_built() {
-  if [ ! -f "$ROOT_DIR/frontend/dist/index.html" ]; then
-    echo "→ frontend/dist 不存在，先构建 Web UI（npm run build）…"
+  if frontend_outdated; then
+    echo "→ 检测到前端源码/配置更新（dist 过旧或缺失），重新构建 Web UI（npm run build）…"
     (cd "$ROOT_DIR/frontend" && npm run build)
+  else
+    echo "→ 前端 dist 已是最新，跳过构建"
   fi
 }
 
@@ -55,7 +72,7 @@ do_start() {
   mkdir -p "$RUN_DIR"
   ensure_frontend_built
 
-  echo "→ 启动 uvicorn，监听 $HOST:$PORT …"
+  echo "→ 启动 uvicorn（启动即加载最新后端代码，依赖由 uv 自动同步），监听 $HOST:$PORT …"
   (
     cd "$BACKEND_DIR"
     nohup env MUTILLM_HOST="$HOST" MUTILLM_PORT="$PORT" \

@@ -179,3 +179,22 @@ async def test_model_calls_by_request_ordered(session: AsyncSession) -> None:
     assert len(calls) == 3
     assert [c.response_content for c in calls] == ["call-0", "call-1", "call-2"]
     assert all(c.request_id == r1.id for c in calls)
+
+
+async def test_datetime_utc_roundtrip() -> None:
+    """UT-02-4 时区往返：SQLite 读回的时间统一补 UTC（API 序列化带 +00:00，前端不错时区）。"""
+    from datetime import UTC
+
+    engine = create_db_engine(":memory:")
+    await init_db(engine)
+    factory = create_session_factory(engine)
+    async with factory() as s:
+        await Repository(s, Provider).create(
+            name="tz-check", protocol="openai_compatible", base_url="http://x"
+        )
+        await s.commit()
+    async with factory() as s:  # 新会话强制走 DB 读回，触发 UTCDatetime 结果处理
+        row = await Repository(s, Provider).get(1)
+        assert row is not None
+        assert row.created_at.tzinfo is UTC  # 无时区会另加 8 小时偏移
+    await engine.dispose()

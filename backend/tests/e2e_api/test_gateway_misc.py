@@ -150,9 +150,10 @@ async def test_anthropic_passthrough(
     )
     assert resp.status_code == 200, resp.text
     data = resp.json()
-    assert data["choices"][0]["message"]["content"] == "ANSWER"
-    assert data["usage"]["prompt_tokens"] == 7  # anthropic input_tokens 归一化
-    assert data["usage"]["completion_tokens"] == 3
+    # 上游一律流式（决策 D8）：聚合自 mock 的 SSE 事件流
+    assert data["choices"][0]["message"]["content"] == "你好，世界"
+    assert data["usage"]["prompt_tokens"] == 5  # anthropic input_tokens 归一化
+    assert data["usage"]["completion_tokens"] == 2
 
     recordings = (await httpx.AsyncClient().get(f"{anthropic_mock}/_test/requests")).json()[
         "requests"

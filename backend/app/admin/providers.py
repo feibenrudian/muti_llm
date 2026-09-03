@@ -1,16 +1,16 @@
-"""Provider 管理 API：CRUD + 启停 + 连通性测试；api_key Fernet 加密入库、响应只回掩码。"""
+"""Provider 管理 API：CRUD + 连通性测试 + 模型自动同步 + 级联删除；api_key 加密、响应只回掩码。"""
 
 import time
 
 from fastapi import APIRouter, Depends, HTTPException, Request
-from sqlalchemy import func, select
+from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.adapters.base import AdapterError
 from app.adapters.factory import build_adapter, decrypt_provider_key
 from app.deps import get_session
 from app.orm import LlmModel, Provider
-from app.repos import Repository
+from app.repos import Repository, delete_models_cascade
 from app.schemas import ProviderCreate, ProviderOut, ProviderUpdate
 from app.security import encrypt_secret, mask_key
 
@@ -37,6 +37,30 @@ def to_out(row: Provider, fernet_key: bytes) -> ProviderOut:
     )
 
 
+async def _create_missing_models(
+    session: AsyncSession, provider_row: Provider, upstream_ids: list[str]
+) -> list[str]:
+    """按上游模型列表补建该 Provider 缺失的 LlmModel（display_name=模型 ID），返回新建列表。"""
+    existing = set(
+        (
+            await session.execute(
+                select(LlmModel.upstream_model_id).where(LlmModel.provider_id == provider_row.id)
+            )
+        ).scalars()
+    )
+    created: list[str] = []
+    for upstream_id in upstream_ids:
+        if upstream_id in existing:
+            continue
+        await Repository(session, LlmModel).create(
+            provider_id=provider_row.id,
+            display_name=upstream_id,
+            upstream_model_id=upstream_id,
+        )
+        created.append(upstream_id)
+    return created
+
+
 @router.post("", status_code=201, response_model=ProviderOut)
 async def create_provider(
     body: ProviderCreate, request: Request, session: AsyncSession = Depends(get_session)
@@ -51,6 +75,13 @@ async def create_provider(
         enabled=body.enabled,
     )
     await session.commit()
+    # 建好即按上游模型列表自动补建（best-effort）：上游不可达不阻塞创建，之后点"测试"会再同步
+    try:
+        adapter = build_adapter(row, fernet_key=fernet_key, timeout_seconds=15, max_retries=0)
+        await _create_missing_models(session, row, await adapter.probe())
+        await session.commit()
+    except Exception:
+        await session.rollback()
     return to_out(row, fernet_key)
 
 
@@ -95,15 +126,18 @@ async def update_provider(
 
 @router.delete("/{provider_id}", status_code=204)
 async def delete_provider(provider_id: int, session: AsyncSession = Depends(get_session)) -> None:
-    count = (
-        await session.execute(
-            select(func.count()).select_from(LlmModel).where(LlmModel.provider_id == provider_id)
-        )
-    ).scalar_one()
-    if count > 0:
-        raise HTTPException(status_code=409, detail=f"Provider 下仍有 {count} 个模型，先删除模型")
-    if not await Repository(session, Provider).delete(provider_id):
+    """级联删除：Provider 连同其全部模型；引用这些模型的 Pipeline 成员、
+    以及裁判失效/成员被清空的 Pipeline 一并删除（保持存留 Pipeline 均可运行）。"""
+    row = await Repository(session, Provider).get(provider_id)
+    if row is None:
         raise HTTPException(status_code=404, detail="provider not found")
+    model_ids = list(
+        (
+            await session.execute(select(LlmModel.id).where(LlmModel.provider_id == provider_id))
+        ).scalars()
+    )
+    await delete_models_cascade(session, model_ids)
+    await session.execute(delete(Provider).where(Provider.id == provider_id))
     await session.commit()
 
 
@@ -111,7 +145,8 @@ async def delete_provider(provider_id: int, session: AsyncSession = Depends(get_
 async def test_provider(
     provider_id: int, request: Request, session: AsyncSession = Depends(get_session)
 ) -> dict:
-    """连通性测试（业务结果而非异常，便于 UI 展示）：GET 上游模型列表，验证 URL/Key 可用。"""
+    """连通性测试（业务结果而非异常，便于 UI 展示）：GET 上游模型列表，验证 URL/Key 可用；
+    成功时顺带把上游新出现的模型同步进来。"""
     row = await Repository(session, Provider).get(provider_id)
     if row is None:
         raise HTTPException(status_code=404, detail="provider not found")
@@ -125,10 +160,13 @@ async def test_provider(
     start = time.perf_counter()
     try:
         model_ids = await adapter.probe()
+        synced = await _create_missing_models(session, row, model_ids)
+        await session.commit()
         return {
             "ok": True,
             "latency_ms": int((time.perf_counter() - start) * 1000),
             "models": model_ids[:50],
+            "synced": synced,
         }
     except AdapterError as exc:
         return {

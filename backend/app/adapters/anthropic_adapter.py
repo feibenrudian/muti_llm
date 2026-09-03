@@ -1,14 +1,13 @@
 """Anthropic 协议适配器：messages API ↔ 归一化契约转换。
 
 差异处理：system 消息提升为顶层 system 参数；max_tokens 必填（默认 4096）；
-usage 的 input/output_tokens 映射为 prompt/completion；流式 content_block_delta 事件转增量文本。
+usage 的 input/output_tokens 映射为 prompt/completion（流内经 message 事件采集）。
 注意：Anthropic Messages API（SDK 1.x）已移除 temperature/top_p 采样参数，本适配器静默忽略。
-SDK 自带重试关闭，重试统一由基座实现。
+一律流式调用（决策 D8，超时=TTFT/块间空闲，由基座统一实现）；SDK 自带重试关闭，重试统一由基座实现。
 """
 
 from __future__ import annotations
 
-import time
 from collections.abc import AsyncIterator
 from typing import Any
 
@@ -19,9 +18,9 @@ from app.adapters.base import (
     AdapterError,
     BaseAdapter,
     LlmRequest,
-    LlmResult,
     LlmUsage,
     NormalizedMessage,
+    StreamEvent,
 )
 
 DEFAULT_MAX_TOKENS = 4096
@@ -97,42 +96,27 @@ class AnthropicAdapter(BaseAdapter):
             http_client=http_client,
         )
 
-    async def complete(self, request: LlmRequest) -> LlmResult:
-        start = time.perf_counter()
-        kwargs = _build_kwargs(request)
+    def stream_events(self, request: LlmRequest) -> AsyncIterator[StreamEvent]:
+        return self._stream_events(request)
 
-        async def _call() -> Any:
-            try:
-                return await self._client.messages.create(**kwargs)
-            except anthropic.APIError as exc:
-                raise map_anthropic_error(exc) from None
-
-        resp = await self._with_retry(_call)
-        content = "".join(block.text for block in resp.content if block.type == "text")
-        return LlmResult(
-            content=content,
-            usage=LlmUsage(
-                prompt_tokens=resp.usage.input_tokens,
-                completion_tokens=resp.usage.output_tokens,
-            ),
-            duration_ms=int((time.perf_counter() - start) * 1000),
-        )
-
-    async def probe(self) -> list[str]:
-        try:
-            page = await self._client.models.list()
-        except anthropic.APIError as exc:
-            raise map_anthropic_error(exc) from None
-        return [m.id for m in page.data]
-
-    def stream(self, request: LlmRequest) -> AsyncIterator[str]:
-        return self._stream(request)
-
-    async def _stream(self, request: LlmRequest) -> AsyncIterator[str]:
+    async def _stream_events(self, request: LlmRequest) -> AsyncIterator[StreamEvent]:
         kwargs = _build_kwargs(request)
         try:
             async with self._client.messages.stream(**kwargs) as stream:
                 async for text in stream.text_stream:
-                    yield text
+                    if text:
+                        yield StreamEvent(text=text)
+                final = await stream.get_final_message()
         except anthropic.APIError as exc:
             raise map_anthropic_error(exc) from None
+        usage = final.usage
+        yield StreamEvent(
+            usage=LlmUsage(prompt_tokens=usage.input_tokens, completion_tokens=usage.output_tokens)
+        )
+
+    async def probe(self) -> list[str]:
+        try:
+            page = await self._with_retry(self._client.models.list)
+        except anthropic.APIError as exc:
+            raise map_anthropic_error(exc) from None
+        return [m.id for m in page.data]

@@ -9,7 +9,7 @@ from app.adapters.base import AdapterError, LlmRequest, NormalizedMessage
 from app.adapters.factory import build_adapter
 from app.deps import get_session
 from app.orm import LlmModel, Provider
-from app.repos import Repository
+from app.repos import Repository, delete_models_cascade
 from app.schemas import ModelCreate, ModelOut, ModelUpdate
 
 router = APIRouter(prefix="/models", tags=["admin-models"])
@@ -60,8 +60,10 @@ async def update_model(
 
 @router.delete("/{model_id}", status_code=204)
 async def delete_model(model_id: int, session: AsyncSession = Depends(get_session)) -> None:
-    if not await Repository(session, LlmModel).delete(model_id):
+    """删除模型并级联清理引用（成员行、裁判失效/成员清空的 Pipeline），避免外键悬空。"""
+    if await Repository(session, LlmModel).get(model_id) is None:
         raise HTTPException(status_code=404, detail="model not found")
+    await delete_models_cascade(session, [model_id])
     await session.commit()
 
 

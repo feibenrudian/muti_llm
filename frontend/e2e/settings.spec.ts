@@ -1,5 +1,8 @@
 import { expect, test } from "@playwright/test";
 
+// 剪贴板读取用于 UE-28-3 的复制断言（仅本文件内的用例生效）
+test.use({ permissions: ["clipboard-read", "clipboard-write"] });
+
 test("UE-28-1 重置 Key：弹窗展示一次性明文；旧 Key 401、新 Key 200", async ({ page, request }) => {
   // 第一次重置拿 key1（作为"旧 Key"），第二次重置拿 key2（新 Key）
   const first = await request.post("/api/admin/settings/service-key/reset");
@@ -37,4 +40,23 @@ test("UE-28-2 保留天数：改为 7 后重新查询返回 7", async ({ page, r
 
   // 还原默认，避免影响其他用例
   await request.patch("/api/admin/settings", { data: { log_retention_days: 30 } });
+});
+
+test("UE-28-3 接入信息：显示 /v1 地址与掩码 Key，复制得到完整明文", async ({ page, request }) => {
+  await page.goto("/settings");
+
+  // 虚拟模型接入地址
+  const info = await (await request.get("/api/admin/settings/service-key")).json();
+  expect(info.available).toBe(true);
+  await expect(page.getByText("http://localhost:5173/v1")).toBeVisible();
+
+  // 掩码展示：sk-local-***尾4，不含完整明文
+  await expect(page.getByText(new RegExp(`^${info.masked.slice(0, 10)}\\*\\*\\*`))).toBeVisible();
+  expect(await page.content()).not.toContain(info.service_api_key);
+
+  // 复制 → 剪贴板为完整明文
+  await page.getByRole("button", { name: "复制 Key" }).click();
+  await expect(page.getByText("已复制 ✓")).toBeVisible();
+  const clipped = await page.evaluate("navigator.clipboard.readText()");
+  expect(clipped).toBe(info.service_api_key);
 });

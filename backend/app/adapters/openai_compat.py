@@ -1,11 +1,12 @@
 """OpenAI 兼容适配器：AsyncOpenAI 指向任意 base_url（OpenAI/DeepSeek/智谱/Ollama，决策 D1）。
 
+一律流式调用（决策 D8，超时=TTFT/块间空闲，由基座统一实现）；
+stream_options.include_usage 采集 token 用量，个别兼容服务不支持时降级省略。
 SDK 自带重试关闭（max_retries=0），重试统一由基座实现。
 """
 
 from __future__ import annotations
 
-import time
 from collections.abc import AsyncIterator
 from typing import Any
 
@@ -16,9 +17,9 @@ from app.adapters.base import (
     AdapterError,
     BaseAdapter,
     LlmRequest,
-    LlmResult,
     LlmUsage,
     NormalizedMessage,
+    StreamEvent,
 )
 
 
@@ -86,57 +87,52 @@ class OpenAICompatAdapter(BaseAdapter):
             http_client=http_client,
         )
 
-    async def complete(self, request: LlmRequest) -> LlmResult:
-        start = time.perf_counter()
+    def stream_events(self, request: LlmRequest) -> AsyncIterator[StreamEvent]:
+        return self._stream_events(request)
 
-        async def _call() -> Any:
-            try:
-                return await self._client.chat.completions.create(
-                    model=request.model,
-                    messages=_to_openai_messages(request.messages),
-                    stream=False,
+    async def _create_stream(self, kwargs: dict[str, Any]) -> Any:
+        """优先带 include_usage 采集 usage；个别兼容服务不认该参数时降级重试一次。"""
+        try:
+            return await self._client.chat.completions.create(
+                stream_options={"include_usage": True}, **kwargs
+            )
+        except openai.BadRequestError:
+            return await self._client.chat.completions.create(**kwargs)
+
+    async def _stream_events(self, request: LlmRequest) -> AsyncIterator[StreamEvent]:
+        response = None
+        try:
+            response = await self._create_stream(
+                {
+                    "model": request.model,
+                    "messages": _to_openai_messages(request.messages),
+                    "stream": True,
                     **_optional_params(request),
-                )
-            except openai.APIError as exc:
-                # 在基座重试之前归一化：基座只识别 AdapterError
-                raise map_openai_error(exc) from None
-
-        resp = await self._with_retry(_call)
-
-        choice = resp.choices[0]
-        usage = resp.usage
-        return LlmResult(
-            content=choice.message.content or "",
-            usage=LlmUsage(
-                prompt_tokens=usage.prompt_tokens if usage else 0,
-                completion_tokens=usage.completion_tokens if usage else 0,
-            ),
-            duration_ms=int((time.perf_counter() - start) * 1000),
-        )
-
-    async def probe(self) -> list[str]:
-        try:
-            page = await self._client.models.list()
-        except openai.APIError as exc:
-            raise map_openai_error(exc) from None
-        return [m.id for m in page.data]
-
-    def stream(self, request: LlmRequest) -> AsyncIterator[str]:
-        return self._stream(request)
-
-    async def _stream(self, request: LlmRequest) -> AsyncIterator[str]:
-        try:
-            response = await self._client.chat.completions.create(
-                model=request.model,
-                messages=_to_openai_messages(request.messages),
-                stream=True,
-                **_optional_params(request),
+                }
             )
             async for chunk in response:
+                usage = getattr(chunk, "usage", None)
+                if usage is not None:
+                    yield StreamEvent(
+                        usage=LlmUsage(
+                            prompt_tokens=usage.prompt_tokens or 0,
+                            completion_tokens=usage.completion_tokens or 0,
+                        )
+                    )
                 if not chunk.choices:
                     continue
                 delta = chunk.choices[0].delta.content
                 if delta:
-                    yield delta
+                    yield StreamEvent(text=delta)
         except openai.APIError as exc:
             raise map_openai_error(exc) from None
+        finally:
+            if response is not None:
+                await response.close()
+
+    async def probe(self) -> list[str]:
+        try:
+            page = await self._with_retry(self._client.models.list)
+        except openai.APIError as exc:
+            raise map_openai_error(exc) from None
+        return [m.id for m in page.data]

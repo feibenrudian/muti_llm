@@ -9,7 +9,7 @@ import httpx
 from app.orm import RequestLog
 from app.repos import Repository, list_model_calls
 from tests.conftest import auth_headers
-from tests.helpers import load_snapshot, snapshot_content, snapshot_stream_text
+from tests.helpers import snapshot_content, snapshot_stream_text, snapshot_usage
 
 QUANTUM = "用一句话解释量子纠缠"
 COUNCIL_BODY = {"model": "council-v1", "messages": [{"role": "user", "content": QUANTUM}]}
@@ -79,8 +79,9 @@ async def latest_trace_and_calls() -> tuple[RequestLog, list]:
 
 
 async def srs_recordings(srs_base: str) -> list[dict]:
+    """SRS 聊天录像（排除 /v1/models 连通性探测记录，后者无 messages 结构）。"""
     resp = await httpx.AsyncClient().get(f"{srs_base}/_test/requests")
-    return resp.json()["requests"]
+    return [r for r in resp.json()["requests"] if r["model"] != "__models_list__"]
 
 
 # ---- AE-16 非流式 ------------------------------------------------------------------
@@ -111,10 +112,11 @@ async def test_council_usage_sum(
     )
     assert resp.status_code == 200
 
-    def usage_of(scenario: str) -> dict:
-        return load_snapshot(scenario)["non_stream_response"]["usage"]
-
-    usages = [usage_of("passthrough_basic"), usage_of("param_merge_09"), usage_of("council_judge")]
+    usages = [
+        snapshot_usage("passthrough_basic"),
+        snapshot_usage("param_merge_09"),
+        snapshot_usage("council_judge"),
+    ]
     expected_prompt = sum(u["prompt_tokens"] for u in usages)
     expected_completion = sum(u["completion_tokens"] for u in usages)
 
@@ -247,7 +249,7 @@ async def test_council_stream_sse(
     chunks = [json.loads(p) for p, _ in payloads[:-1]]
     assert all(c["model"] == "council-v1" for c in chunks)
     text = "".join(c["choices"][0]["delta"].get("content") or "" for c in chunks)
-    assert text == snapshot_stream_text("council_judge_stream")
+    assert text == snapshot_stream_text("council_judge")
 
 
 async def test_council_stream_timing(backend_live: tuple[str, str], srs_live_seeded: str) -> None:
@@ -298,6 +300,6 @@ async def test_council_stream_logging(
         json.loads(p)["choices"][0]["delta"].get("content") or "" for p, _ in payloads[:-1]
     )
     assert trace.response_content == text
-    assert trace.response_content == snapshot_stream_text("council_judge_stream")
+    assert trace.response_content == snapshot_stream_text("council_judge")
     assert [c.role for c in calls] == ["member", "member", "judge"]
     assert calls[-1].status == "success"

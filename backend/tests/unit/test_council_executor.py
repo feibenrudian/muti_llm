@@ -1,12 +1,19 @@
-"""UT-14-1..7：成员并发执行器（打桩适配器，不起网络）。"""
+"""UT-14-1..8：成员并发执行器（打桩适配器，不起网络）。"""
 
 import asyncio
 import time
+from collections.abc import AsyncIterator
 from typing import Any
 
 import pytest
 
-from app.adapters.base import AdapterError, BaseAdapter, LlmRequest, LlmResult, LlmUsage
+from app.adapters.base import (
+    AdapterError,
+    BaseAdapter,
+    LlmRequest,
+    LlmUsage,
+    StreamEvent,
+)
 from app.orm import LlmModel, Pipeline, PipelineMember, Provider
 from app.strategies.base import AllMembersFailed, MemberSpec, StrategyContext
 from app.strategies.council import run_members
@@ -15,16 +22,16 @@ MESSAGES = [{"role": "user", "content": "hi"}]
 
 
 class StubAdapter(BaseAdapter):
-    def __init__(self, behavior) -> None:
+    """behavior 是 async generator：产出 StreamEvent（超时/重试由基座统一实现）。"""
+
+    def __init__(self, behavior, *, timeout_seconds: float = 60.0) -> None:
         self.behavior = behavior
         self.requests: list[LlmRequest] = []
+        self.timeout_seconds = timeout_seconds
 
-    async def complete(self, request: LlmRequest) -> LlmResult:
+    def stream_events(self, request: LlmRequest) -> AsyncIterator[StreamEvent]:
         self.requests.append(request)
-        return await self.behavior(request)
-
-    def stream(self, request: LlmRequest):  # pragma: no cover - 执行器不使用
-        raise NotImplementedError
+        return self.behavior(request)
 
     async def probe(self) -> list[str]:  # pragma: no cover - 执行器不使用
         raise NotImplementedError
@@ -90,21 +97,21 @@ def make_ctx(
 
 
 def ok_result(content: str = "ans", delay: float = 0.0) -> Any:
-    async def behavior(request: LlmRequest) -> LlmResult:
+    async def behavior(request: LlmRequest) -> AsyncIterator[StreamEvent]:
         if delay:
             await asyncio.sleep(delay)
-        return LlmResult(
-            content=content, usage=LlmUsage(prompt_tokens=1, completion_tokens=1), duration_ms=5
-        )
+        yield StreamEvent(text=content)
+        yield StreamEvent(usage=LlmUsage(prompt_tokens=1, completion_tokens=1))
 
     return behavior
 
 
 def fail_result(kind: str = "upstream_error", delay: float = 0.0) -> Any:
-    async def behavior(request: LlmRequest) -> LlmResult:
+    async def behavior(request: LlmRequest) -> AsyncIterator[StreamEvent]:
         if delay:
             await asyncio.sleep(delay)
         raise AdapterError(f"stub failure ({kind})", kind=kind, retryable=False)
+        yield StreamEvent(text="")  # pragma: no cover - 使其成为 async generator
 
     return behavior
 
@@ -169,12 +176,14 @@ async def test_strict_mode_fails_on_any_member() -> None:
 
 
 async def test_member_timeout_marks_timeout() -> None:
-    """UT-14-5 单成员超时：该成员标记 timeout，其余正常。"""
+    """UT-14-5 单成员超时（TTFT 语义，决策 D8）：首响应超预算 → 标记 timeout，其余正常。"""
     ctx = make_ctx([(None, None), (None, None)], member_timeout=1)
 
     def factory(provider, merged):
         pid = int(provider.name[1:])
-        return StubAdapter(ok_result(delay=5.0) if pid == 1 else ok_result("fast"))
+        if pid == 1:
+            return StubAdapter(ok_result(delay=5.0), timeout_seconds=1.0)
+        return StubAdapter(ok_result("fast"))
 
     outcomes = await run_members(ctx, adapter_factory=factory)
     assert outcomes[0].status == "timeout"
@@ -187,12 +196,12 @@ async def test_concurrency_cap_enforced() -> None:
     ctx = make_ctx([(None, None)] * 4, max_concurrency=2)
     inflight = {"now": 0, "max": 0}
 
-    async def behavior(request: LlmRequest) -> LlmResult:
+    async def behavior(request: LlmRequest) -> AsyncIterator[StreamEvent]:
         inflight["now"] += 1
         inflight["max"] = max(inflight["max"], inflight["now"])
         await asyncio.sleep(0.1)
         inflight["now"] -= 1
-        return LlmResult(content="x", usage=LlmUsage(), duration_ms=1)
+        yield StreamEvent(text="x")
 
     def factory(provider, merged):
         return StubAdapter(behavior)
@@ -218,9 +227,9 @@ async def test_param_merge_priority() -> None:
     captured: dict[str, LlmRequest] = {}
 
     class Capturing(StubAdapter):
-        async def complete(self, request: LlmRequest) -> LlmResult:
+        def stream_events(self, request: LlmRequest) -> AsyncIterator[StreamEvent]:
             captured[self._owner] = request  # type: ignore[attr-defined]
-            return await super().complete(request)
+            return super().stream_events(request)
 
     def factory(provider, merged):
         adapter = Capturing(ok_result())
@@ -238,3 +247,16 @@ async def test_param_merge_priority() -> None:
     outcomes = await run_members(ctx, adapter_factory=factory)
     assert outcomes[0].request_payload["temperature"] == 0.9
     assert outcomes[0].request_payload["max_tokens"] == 100
+
+
+async def test_member_payload_is_streaming() -> None:
+    """UT-14-8 上游流式调用（决策 D8）：成员 payload stream=true 且带 usage 采集参数。"""
+    ctx = make_ctx([(None, None)])
+
+    def factory(provider, merged):
+        return StubAdapter(ok_result("x"))
+
+    outcomes = await run_members(ctx, adapter_factory=factory)
+    payload = outcomes[0].request_payload
+    assert payload["stream"] is True
+    assert payload["stream_options"] == {"include_usage": True}

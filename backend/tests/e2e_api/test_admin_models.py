@@ -9,7 +9,7 @@ async def test_model_crud(asgi_client: httpx.AsyncClient) -> None:
     """AE-09-1 CRUD：创建绑定 provider_id 的模型，列表/更新/删除正常。"""
     resp = await asgi_client.post(
         "/api/admin/providers",
-        json={"name": "P", "protocol": "openai_compatible", "base_url": "https://p.example.com"},
+        json={"name": "P", "protocol": "openai_compatible", "base_url": "http://127.0.0.1:9/v1"},
     )
     pid = resp.json()["id"]
 

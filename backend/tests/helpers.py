@@ -18,7 +18,11 @@ def load_snapshot(scenario: str) -> dict[str, Any]:
 
 
 def snapshot_content(scenario: str) -> str:
-    return load_snapshot(scenario)["non_stream_response"]["choices"][0]["message"]["content"]
+    """快照答案全文：兼容流式（stream_chunks 拼 delta）与非流式两种录制形态。"""
+    data = load_snapshot(scenario)
+    if data.get("stream_chunks"):
+        return snapshot_stream_text(scenario)
+    return data["non_stream_response"]["choices"][0]["message"]["content"]
 
 
 def snapshot_stream_text(scenario: str) -> str:
@@ -26,6 +30,23 @@ def snapshot_stream_text(scenario: str) -> str:
     return "".join(
         (c["chunk"].get("choices") or [{}])[0].get("delta", {}).get("content") or "" for c in chunks
     )
+
+
+def snapshot_usage(scenario: str) -> dict[str, int]:
+    """快照 usage：流式取最后一个携带 usage 的 chunk，非流式取响应体。"""
+    data = load_snapshot(scenario)
+    if data.get("stream_chunks"):
+        usage = next(
+            (
+                c["chunk"]["usage"]
+                for c in reversed(data["stream_chunks"])
+                if c["chunk"].get("usage")
+            ),
+            None,
+        )
+        assert usage is not None, f"scenario {scenario!r} stream snapshot has no usage chunk"
+        return usage
+    return data["non_stream_response"]["usage"]
 
 
 async def seed_provider_and_model(
@@ -48,6 +69,24 @@ async def seed_provider_and_model(
     )
     assert resp.status_code == 201, resp.text
     provider_id = resp.json()["id"]
+
+    # 创建 Provider 时会按上游 /models 自动同步：同名模型已存在则复用（按需覆盖参数），避免重复行
+    models = (await client.get("/api/admin/models")).json()
+    existing = next(
+        (
+            m
+            for m in models
+            if m["provider_id"] == provider_id and m["upstream_model_id"] == upstream_model_id
+        ),
+        None,
+    )
+    if existing is not None:
+        if default_params:
+            resp = await client.patch(
+                f"/api/admin/models/{existing['id']}", json={"default_params": default_params}
+            )
+            assert resp.status_code == 200, resp.text
+        return provider_id, existing["id"]
 
     resp = await client.post(
         "/api/admin/models",

@@ -18,7 +18,7 @@ def stream_body() -> dict:
         "model": "deepseek-v4-flash",
         "messages": [{"role": "user", "content": POEM}],
         "temperature": 0.7,
-        "max_tokens": 200,
+        "max_tokens": 2000,
         "stream": True,
     }
 

@@ -108,6 +108,8 @@ def build_call_request(
         if merged.get(key) is not None:
             payload[key] = merged[key]
             setattr(request, key, merged[key])
+    if stream:
+        payload["stream_options"] = {"include_usage": True}
     return request, payload
 
 
@@ -136,22 +138,24 @@ async def run_members(
     ctx: StrategyContext,
     adapter_factory: AdapterFactory | None = None,
 ) -> list[CallOutcome]:
-    """并发执行全部成员：受 max_concurrency 限流、单成员超时不阻塞他人、部分失败容错。
+    """并发执行全部成员：受 max_concurrency 限流、部分失败容错。
 
+    上游一律流式调用（决策 D8）：member_timeout_seconds 是成员适配器的
+    TTFT/块间空闲超时预算——复杂问题生成再久也不算超时，只有等不到上游数据才超时。
     容错：默认(skip)只要 ≥1 成功即继续；fault_tolerance.member_failure=strict 时任一失败即
     抛 AllMembersFailed；全部失败时无论模式都抛 AllMembersFailed。
     """
+    member_timeout = float(ctx.pipeline.member_timeout_seconds or 60)
     if adapter_factory is None:
 
         def adapter_factory(provider: Provider, merged: dict[str, Any]) -> BaseAdapter:
             return build_adapter(
                 provider,
                 fernet_key=ctx.fernet_key,
-                timeout_seconds=float(merged.get("timeout_seconds", 60)),
+                timeout_seconds=member_timeout,
                 max_retries=int(merged.get("max_retries", 1)),
             )
 
-    member_timeout = float(ctx.pipeline.member_timeout_seconds or 60)
     strict = (ctx.pipeline.fault_tolerance or {}).get("member_failure") == "strict"
     semaphore = asyncio.Semaphore(max(1, int(ctx.pipeline.max_concurrency or 10)))
 
@@ -160,7 +164,7 @@ async def run_members(
             spec.model.default_params, spec.member.param_overrides, ctx.user_params
         )
         request, payload = build_call_request(
-            spec.model.upstream_model_id, ctx.body["messages"], merged, stream=False
+            spec.model.upstream_model_id, ctx.body["messages"], merged, stream=True
         )
         outcome = CallOutcome(
             role="member",
@@ -173,12 +177,9 @@ async def run_members(
         start = time.perf_counter()
         async with semaphore:
             try:
-                result = await asyncio.wait_for(adapter.complete(request), timeout=member_timeout)
-            except TimeoutError:
-                outcome.status = "timeout"
-                outcome.error_message = f"成员超时（>{member_timeout}s）"
+                result = await adapter.complete(request)
             except AdapterError as exc:
-                outcome.status = "failed"
+                outcome.status = "timeout" if exc.kind == "timeout" else "failed"
                 outcome.error_message = str(exc)
         outcome.duration_ms = int((time.perf_counter() - start) * 1000)
         if outcome.status == "success":
@@ -232,7 +233,7 @@ class CouncilStrategy(Strategy):
         member_outcomes = await run_members(ctx)
         ok = [o for o in member_outcomes if o.status == "success"]
 
-        request, payload = self.assemble_judge(ctx, ok, stream=False)
+        request, payload = self.assemble_judge(ctx, ok, stream=True)
         start = time.perf_counter()
         judge = CallOutcome(
             role="judge",

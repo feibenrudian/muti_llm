@@ -52,6 +52,7 @@
 | D5 | 管理 API `/api/admin/*` 不做认证，**整服务默认仅监听 127.0.0.1** | 本地工具，简化；对外 API 仍需 Bearer Key |
 | D6 | 日志全文存储默认开启；"关闭全文"为 P1 项，随 T26 可选实现 | 控制本期范围 |
 | D7 | 上游调用的**重试/超时/错误映射放在适配器基座**统一实现 | 策略层只管编排，不重复造轮子 |
+| D8 | 上游调用**一律流式**，超时=**TTFT/块间空闲**（等不到上游数据才超时，不限制总生成时长；D4 的成员阶段同步改为流式聚合） | 复杂问题长生成不再被总时长超时杀死；首个字符前才允许整体重试，已产出内容后不重放 |
 
 ### 1.2 项目结构
 
@@ -199,6 +200,7 @@ make seed          # 起服务+灌入演示数据(指向快照回放服务器), 
 | UT-02-1 | UT | 各表 CRUD 往返 | create 后字段可完整读回；update 生效；delete 后 get 为空 |
 | UT-02-2 | UT | pipeline 名唯一约束 | 重名插入抛 IntegrityError |
 | UT-02-3 | UT | model_call_logs 按 request_id 查询 | 父子关联正确，返回按时间排序 |
+| UT-02-4 | UT | 时区往返 | SQLite 读回的时间统一补 UTC（API 序列化带 Z/+00:00，前端不再差时区） |
 
 #### T03 快照回放服务器 + 首次录制 〔基础设施例外：仅自身用例，但它是后续一切的地基〕
 产出：`tests/snapshot_server/`（见 2.1：replay/record 双模式、失败注入、请求录像）；`make record` 目标；`backend/.env.test`（2.4 凭据）；执行首次录制生成 `tests/snapshots/` 基线，覆盖场景：透传非流式/流式、council 非流式/流式、连通性测试消息。
@@ -238,6 +240,9 @@ make seed          # 起服务+灌入演示数据(指向快照回放服务器), 
 | UT-06-4 | UT | 超时 | 配置 timeout=0.2s、上游延迟1s → 抛超时错误 |
 | UT-06-5 | UT | 流式迭代 | 迭代产出多个增量片段，拼接等于完整答案 |
 | UT-06-6 | UT | 连通性探测 | `probe()` GET 上游模型列表返回模型 ID；上游 401 → 归一化认证错误 |
+| UT-06-7 | UT | TTFT 超时 | 首事件超预算 → kind=timeout 且 retryable（仅首事件前可整体重试） |
+| UT-06-8 | UT | 长生成不限总时长 | 总时长超 timeout 但事件间隔均在预算内 → 聚合成功，usage 取流内事件 |
+| UT-06-9 | UT | 中途空闲超时 | 已产出内容后等不到后续数据 → timeout 且不可重试（不重复生成） |
 
 #### T07 anthropic 适配器 〔本期仅 UT 打桩〕
 产出：`anthropic.py`：messages API ↔ 归一化参数转换、usage 映射、流式事件→增量片段。
@@ -249,16 +254,17 @@ make seed          # 起服务+灌入演示数据(指向快照回放服务器), 
 | UT-07-4 | UT | 连通性探测 | `probe()` GET 上游模型列表返回模型 ID，请求携带 x-api-key |
 
 #### T08 Provider 管理 API
-产出：`/api/admin/providers` CRUD + 启用开关 + 协议枚举校验；api_key 落库前 Fernet 加密；响应中 api_key 只回显掩码。`POST /api/admin/providers/{id}/test` 连通性测试（GET 上游模型列表，验证 URL/Key，不消耗对话 token）。
+产出：`/api/admin/providers` CRUD + 启用开关 + 协议枚举校验；api_key 落库前 Fernet 加密；响应中 api_key 只回显掩码。`POST /api/admin/providers/{id}/test` 连通性测试（GET 上游模型列表，验证 URL/Key，不消耗对话 token）。创建与测试成功时按上游模型列表自动补建 Model（best-effort，上游不可达不阻塞创建）；删除 Provider 级联删除其 Model 及失效 Pipeline（原 409 删除保护取消）。
 | 编号 | 类型 | 用例 | 断言要点 |
 | --- | --- | --- | --- |
 | AE-08-1 | AE | 创建+查询 | 201；响应含掩码 Key；DB 中存的是密文（用例内直接查库断言） |
 | AE-08-2 | AE | 更新 | 改 base_url 后 GET 返回新值 |
-| AE-08-3 | AE | 删除保护 | Provider 下仍有 Model 时删除 → 409 并提示 |
+| AE-08-3 | AE | 级联删除 | 删 Provider → 204，其 Model 一并删除；裁判失效/成员清空的 Pipeline 删除，仍有成员与有效裁判的 Pipeline 保留 |
 | AE-08-4 | AE | 校验 | 非法 protocol 枚举 → 422 |
 | AE-08-5 | AE | 连通性成功 | `POST /providers/{id}/test` 指向 SRS → `{"ok":true,"latency_ms":≥0,"models":[…]}`，SRS 录像收到带认证头的探测请求 |
 | AE-08-6 | AE | 连通性失败 | 指向不存在端口 → `{"ok":false,"error":"…"}`，HTTP 仍为 200（业务结果而非异常） |
 | AE-08-7 | AE | 错误 Key | 上游 401 → ok:false 且 error 指向认证失败 |
+| AE-08-8 | AE | 自动同步 | 创建指向 SRS 的 Provider → 自动建出上游模型；重复"测试"不重复建；死地址创建不阻塞、模型留空 |
 
 #### T09 Model 管理 API + 连通性测试
 产出：`/api/admin/models` CRUD；`POST /api/admin/models/{id}/test` 实际调用一次该模型（经适配器，默认固定测试消息），返回 成功/失败/延迟ms。
@@ -313,6 +319,7 @@ make seed          # 起服务+灌入演示数据(指向快照回放服务器), 
 | UT-14-5 | UT | 单成员超时 | 成员超时0.3s、打桩延迟1s → 该成员标记 timeout，其余正常 |
 | UT-14-6 | UT | 并发上限 | max_concurrency=2、4成员各延迟100ms → 用打桩计数器断言同时在飞≤2 |
 | UT-14-7 | UT | 参数合并 | 默认<覆盖<请求 三层合并结果正确（打桩捕获实际入参） |
+| UT-14-8 | UT | 上游流式调用（D8） | 成员 payload stream=true 且带 stream_options.include_usage；member_timeout 为成员 TTFT 预算 |
 
 #### T15 裁判 Prompt 组装
 产出：默认模板(需求文档7.2)渲染：`{{original_messages}}`/`{{candidate_answers}}` 占位符；自定义模板支持；成员答案带来源模型名标注。
@@ -366,14 +373,17 @@ make seed          # 起服务+灌入演示数据(指向快照回放服务器), 
 | --- | --- | --- | --- |
 | UE-20-1 | UE | 冒烟 | 打开 / 可见导航6项，无控制台报错(page.error 断言) |
 | UT-20-1 | UT | api client | vitest：分页参数序列化/错误响应解析纯函数正确 |
+| UT-20-2 | UT | 协议自动识别 | vitest：base_url 主机名含 anthropic → anthropic；其余/空值/非法输入 → openai_compatible 兜底 |
 
 #### T21 Provider 管理页
 | 编号 | 类型 | 用例 | 断言要点 |
 | --- | --- | --- | --- |
-| UE-21-1 | UE | 新建 | 表单填名称/协议/openai兼容/base_url/Key → 列表出现，Key 列显示 `****xxxx` 尾4位掩码，非明文 |
+| UE-21-1 | UE | 新建 | 表单填名称/base_url/Key（协议按 URL 自动识别并显示提示）→ 列表出现，Key 列显示 `****xxxx` 尾4位掩码，非明文 |
 | UE-21-2 | UE | 编辑+启停 | 编辑 base_url 保存生效；停用后列表状态变化，且 /v1 相关引用行为由后端决定(UI只管展示) |
-| UE-21-3 | UE | 删除保护 | 对有 Model 挂载的 Provider 点删除 → 页面显示后端 409 提示，不白屏 |
+| UE-21-3 | UE | 级联删除 | 删 Provider 后其模型从模型页一并消失，页面不白屏 |
 | UE-21-4 | UE | 连通性测试 | 指向 SRS 的 Provider 点"测试" → 显示成功/延迟/可用模型；坏地址 → 显示失败原因 |
+| UE-21-5 | UE | 协议自动识别 | 无协议下拉；输入 api.anthropic.com → 表单显示"已识别协议：anthropic"，保存后列表协议列为 anthropic |
+| UE-21-6 | UE | 自动建模型 | 创建指向 SRS 的供应商 → 模型页自动出现上游模型行 |
 
 #### T22 Model 管理页 + 连通性测试
 | 编号 | 类型 | 用例 | 断言要点 |
@@ -423,10 +433,12 @@ make seed          # 起服务+灌入演示数据(指向快照回放服务器), 
 | UT-27-1 | UT | 前端纯函数 | vitest：Trace→时间线数据结构的转换函数(排序/分组/耗时格式化)正确 |
 
 #### T28 服务设置页
-产出：查看服务地址/版本/启动时间/存储占用；重置服务Key(弹窗一次性展示新Key)；修改日志保留天数。
+产出：查看服务地址/版本/启动时间/存储占用；重置服务Key(弹窗一次性展示新Key)；修改日志保留天数。新增：接入信息卡（origin+/v1 地址，可复制）；服务 Key 掩码展示（sk-local-***尾4）+ 一键复制完整明文（Fernet 加密副本，/v1 认证仍走哈希比对不变；遗留库无副本需重置一次）。
 | 编号 | 类型 | 用例 | 断言要点 |
 | --- | --- | --- | --- |
 | UE-28-1 | UE | 重置Key流程 | 重置 → 弹窗展示新Key(仅一次) → 旧Key调 /v1 返回401、新Key成功(用例内直接curl断言) |
+| AE-28-3 | AE | Key 展示接口 | GET service-key：首启即可取（掩码格式+明文可过 /v1 认证）；重置后同步；遗留库 available=false |
+| UE-28-3 | UE | 接入信息与复制 | 设置页显示 /v1 接入地址；Key 显示 `sk-local-***尾4` 掩码，点"复制 Key"剪贴板得到完整明文 |
 | UE-28-2 | UE | 保留天数 | 改为7天 → 重新查询设置接口返回7 |
 
 #### T29 静态托管 + 单进程部署 + docker-compose + README 〔收尾〕

@@ -1,17 +1,16 @@
 import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { api, ApiError, type Provider, type ProviderTestResult } from "../lib/api";
-import { Badge, Button, Card, EmptyState, ErrorText, Field, Input, Modal, Select, Td, Th } from "../components/ui";
+import { api, ApiError, detectProtocol, type Provider, type ProviderTestResult } from "../lib/api";
+import { Badge, Button, Card, EmptyState, ErrorText, Field, Input, Modal, Td, Th } from "../components/ui";
 
 interface FormState {
   name: string;
-  protocol: string;
   base_url: string;
   api_key: string;
   remark: string;
 }
 
-const EMPTY: FormState = { name: "", protocol: "openai_compatible", base_url: "", api_key: "", remark: "" };
+const EMPTY: FormState = { name: "", base_url: "", api_key: "", remark: "" };
 
 export default function Providers() {
   const queryClient = useQueryClient();
@@ -22,10 +21,14 @@ export default function Providers() {
   const [error, setError] = useState("");
   const [testResult, setTestResult] = useState<Record<number, ProviderTestResult | "loading">>({});
 
-  const invalidate = () => queryClient.invalidateQueries({ queryKey: ["providers"] });
+  // 创建/测试会自动同步模型、删除会级联清理 → providers 与 models 两个列表一并失效
+  const invalidate = () => {
+    void queryClient.invalidateQueries({ queryKey: ["providers"] });
+    void queryClient.invalidateQueries({ queryKey: ["models"] });
+  };
   const save = useMutation({
     mutationFn: async () => {
-      const body = { ...form };
+      const body = { ...form, protocol: detectProtocol(form.base_url) };
       if (editing && !body.api_key) delete (body as Record<string, unknown>).api_key;
       return editing ? api.providers.update(editing.id, body) : api.providers.create(body);
     },
@@ -50,7 +53,10 @@ export default function Providers() {
   const test = useMutation({
     mutationFn: (id: number) => api.providers.test(id),
     onMutate: (id) => setTestResult((prev) => ({ ...prev, [id]: "loading" })),
-    onSuccess: (result, id) => setTestResult((prev) => ({ ...prev, [id]: result })),
+    onSuccess: (result, id) => {
+      setTestResult((prev) => ({ ...prev, [id]: result }));
+      if (result.synced && result.synced.length > 0) invalidate();
+    },
     onError: (err, id) =>
       setTestResult((prev) => ({
         ...prev,
@@ -69,7 +75,6 @@ export default function Providers() {
     setEditing(provider);
     setForm({
       name: provider.name,
-      protocol: provider.protocol,
       base_url: provider.base_url,
       api_key: "",
       remark: provider.remark,
@@ -122,9 +127,16 @@ export default function Providers() {
                         <p className="mt-1 max-w-64 text-xs text-red-600">{result.error}</p>
                       ) : null}
                       {result && result !== "loading" && result.ok ? (
-                        <p className="mt-1 max-w-64 truncate text-xs text-slate-400">
-                          可用模型: {(result.models ?? []).join("、") || "（上游未返回模型列表）"}
-                        </p>
+                        <>
+                          <p className="mt-1 max-w-64 truncate text-xs text-slate-400">
+                            可用模型: {(result.models ?? []).join("、") || "（上游未返回模型列表）"}
+                          </p>
+                          {result.synced && result.synced.length > 0 ? (
+                            <p className="text-xs text-emerald-600">
+                              同步新增 {result.synced.length} 个模型
+                            </p>
+                          ) : null}
+                        </>
                       ) : null}
                     </Td>
                     <Td>
@@ -177,13 +189,14 @@ export default function Providers() {
           <Field label="名称">
             <Input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} required />
           </Field>
-          <Field label="协议">
-            <Select value={form.protocol} onChange={(e) => setForm({ ...form, protocol: e.target.value })}>
-              <option value="openai_compatible">openai_compatible（OpenAI/DeepSeek/Ollama 等）</option>
-              <option value="anthropic">anthropic</option>
-            </Select>
-          </Field>
-          <Field label="Base URL" hint="OpenAI 兼容服务填到 /v1，如 https://api.deepseek.com">
+          <Field
+            label="Base URL"
+            hint={
+              form.base_url
+                ? `已识别协议：${detectProtocol(form.base_url) === "anthropic" ? "anthropic" : "openai_compatible（OpenAI 兼容）"}`
+                : "OpenAI 兼容服务填到 /v1（如 https://api.deepseek.com）；Anthropic 官方填 https://api.anthropic.com。协议按 URL 自动识别，无需手选"
+            }
+          >
             <Input
               value={form.base_url}
               onChange={(e) => setForm({ ...form, base_url: e.target.value })}

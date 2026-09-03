@@ -31,7 +31,7 @@ async def recorded_requests(base_url: str) -> list[dict]:
 
 
 async def test_request_and_response_mapping(anthropic_mock: str) -> None:
-    """UT-07-1 参数/响应映射：system 提升、max_tokens 必填、usage 归一化。"""
+    """UT-07-1 参数/响应映射：system 提升、max_tokens 必填、流式 usage 归一化。"""
     adapter = make_adapter(anthropic_mock)
     result = await adapter.complete(make_request())
 
@@ -44,13 +44,15 @@ async def test_request_and_response_mapping(anthropic_mock: str) -> None:
     assert sent["max_tokens"] == 128
     assert sent["system"] == "你是严谨的助手"
     assert sent["messages"] == [{"role": "user", "content": "你好"}]  # system 不在 messages
+    assert sent["stream"] is True  # 上游一律流式调用（决策 D8）
     assert headers.get("x-api-key") == "sk-ant-test"
     assert "temperature" not in sent  # 新版 API 已移除采样参数，适配器静默忽略
 
-    assert result.content == "ANSWER"
-    assert result.usage.prompt_tokens == 7
-    assert result.usage.completion_tokens == 3
-    assert result.usage.total_tokens == 10
+    # 流式聚合：默认 SSE 事件文本 + message_start/message_delta 的 usage 累加
+    assert result.content == "你好，世界"
+    assert result.usage.prompt_tokens == 5
+    assert result.usage.completion_tokens == 2
+    assert result.usage.total_tokens == 7
 
 
 async def test_stream_event_conversion(anthropic_mock: str) -> None:
@@ -72,7 +74,7 @@ async def test_reuses_base_retry(anthropic_mock: str) -> None:
     await httpx.AsyncClient().post(f"{anthropic_mock}/_test/config", json={"fail_times": 1})
     adapter = make_adapter(anthropic_mock, max_retries=1)
     result = await adapter.complete(make_request())
-    assert result.content == "ANSWER"
+    assert result.content == "你好，世界"
     assert len(await recorded_requests(anthropic_mock)) == 2  # 基座确实重试了一次
 
     # auth 错误不可重试，直接抛出

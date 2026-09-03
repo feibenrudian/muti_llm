@@ -5,17 +5,32 @@ test("UE-23-1 新建 Pipeline 全流程：2 成员排序 + 裁判 + 默认模板
   const providerId = await seedProvider(request, "E2E-管道");
   const m1 = await seedModel(request, providerId, "m-one");
   const m2 = await seedModel(request, providerId, "m-two");
+  // 回归：超长模型名曾把成员 Select 撑出弹窗（flex 子项默认 min-width:auto 不收缩）
+  await seedModel(request, providerId, "deepseek-v4-flash-vision-exp-very-long-name");
 
   await page.goto("/pipelines");
   await page.getByRole("button", { name: "新建 Pipeline" }).click();
+  const dialog = page.locator('[data-testid="modal"] > div');
+  const dialogBox = await dialog.boundingBox();
+  if (!dialogBox) throw new Error("弹窗未渲染");
+  for (const sel of await page.locator(".space-y-2 select").all()) {
+    const box = await sel.boundingBox();
+    if (!box) throw new Error("成员 Select 未渲染");
+    expect(box.x).toBeGreaterThanOrEqual(dialogBox.x);
+    expect(box.x + box.width).toBeLessThanOrEqual(dialogBox.x + dialogBox.width + 1);
+  }
   await page.getByLabel("名称（对外虚拟模型名）").fill("council-e2e");
+  // 两级联动：先选供应商，再在该供应商下选模型
+  await page.getByLabel("裁判供应商").selectOption(String(providerId));
   await page.getByLabel("裁判模型").selectOption(String(m1));
 
   // 成员区：初始 1 行选 m-two，添加第 2 行选 m-one（保存后回显顺序 m-two、m-one）
-  const memberSelects = page.locator(".space-y-2 select");
-  await memberSelects.nth(0).selectOption(String(m2));
+  const memberRow = (nth: number) => page.locator(".space-y-2 > div").nth(nth);
+  await memberRow(0).getByLabel("成员1供应商").selectOption(String(providerId));
+  await memberRow(0).getByLabel("成员1模型").selectOption(String(m2));
   await page.getByRole("button", { name: "+ 添加成员" }).click();
-  await memberSelects.nth(1).selectOption(String(m1));
+  await memberRow(1).getByLabel("成员2供应商").selectOption(String(providerId));
+  await memberRow(1).getByLabel("成员2模型").selectOption(String(m1));
 
   await page.getByRole("button", { name: "保存" }).click();
   await expect(page.locator("tr", { hasText: "council-e2e" })).toBeVisible();
@@ -38,8 +53,11 @@ test("UE-23-3 模板编辑：修改可保存、恢复默认按钮生效", async 
   await page.goto("/pipelines");
   await page.getByRole("button", { name: "新建 Pipeline" }).click();
   await page.getByLabel("名称（对外虚拟模型名）").fill("tpl-pipeline");
+  await page.getByLabel("裁判供应商").selectOption(String(providerId));
   await page.getByLabel("裁判模型").selectOption(String(m1));
-  await page.locator(".space-y-2 select").nth(0).selectOption(String(m1));
+  const row0 = page.locator(".space-y-2 > div").nth(0);
+  await row0.getByLabel("成员1供应商").selectOption(String(providerId));
+  await row0.getByLabel("成员1模型").selectOption(String(m1));
 
   const textarea = page.getByLabel("裁判 Prompt 模板");
   // 默认模板已加载（异步），等待出现占位符

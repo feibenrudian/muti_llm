@@ -5,7 +5,7 @@ import httpx
 from app.orm import ModelCallLog, RequestLog
 from app.repos import Repository
 from tests.conftest import auth_headers
-from tests.helpers import load_snapshot, seed_provider_and_model
+from tests.helpers import seed_provider_and_model, snapshot_content, snapshot_usage
 
 QUANTUM = "用一句话解释量子纠缠"
 
@@ -38,18 +38,18 @@ async def test_passthrough_end_to_end(
     )
     assert resp.status_code == 200, resp.text
     data = resp.json()
-    snap = load_snapshot("passthrough_basic")["non_stream_response"]
 
     assert data["object"] == "chat.completion"
     assert data["model"] == "deepseek-v4-flash"
     choice = data["choices"][0]
     assert choice["index"] == 0
     assert choice["message"]["role"] == "assistant"
-    assert choice["message"]["content"] == snap["choices"][0]["message"]["content"]
+    assert choice["message"]["content"] == snapshot_content("passthrough_basic")
     assert choice["finish_reason"] == "stop"
-    assert data["usage"]["prompt_tokens"] == snap["usage"]["prompt_tokens"]
-    assert data["usage"]["completion_tokens"] == snap["usage"]["completion_tokens"]
-    assert data["usage"]["total_tokens"] == snap["usage"]["total_tokens"]
+    usage = snapshot_usage("passthrough_basic")
+    assert data["usage"]["prompt_tokens"] == usage["prompt_tokens"]
+    assert data["usage"]["completion_tokens"] == usage["completion_tokens"]
+    assert data["usage"]["total_tokens"] == usage["total_tokens"]
 
 
 async def test_param_merge_priority(

@@ -107,16 +107,19 @@ export function Modal({
   title,
   onClose,
   children,
+  size = "md",
 }: {
   open: boolean;
   title: string;
   onClose?: () => void;
   children: ReactNode;
+  size?: "md" | "lg";
 }) {
   if (!open) return null;
+  const width = size === "lg" ? "w-[640px]" : "w-[520px]";
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40" data-testid="modal">
-      <div className="w-[520px] max-w-[92vw] rounded-lg bg-white p-5 shadow-xl">
+      <div className={`max-h-[90vh] ${width} max-w-[92vw] overflow-y-auto rounded-lg bg-white p-5 shadow-xl`}>
         <div className="mb-3 flex items-center justify-between">
           <h3 className="text-base font-semibold text-slate-800">{title}</h3>
           {onClose ? (

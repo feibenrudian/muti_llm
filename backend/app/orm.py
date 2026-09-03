@@ -13,14 +13,31 @@ from sqlalchemy import (
     Text,
 )
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
+from sqlalchemy.types import TypeDecorator
 
 
 def utcnow() -> datetime:
     return datetime.now(UTC)
 
 
+class UTCDatetime(TypeDecorator):
+    """SQLite 的 DATETIME 往返会丢时区后缀（存的是无 offset 字符串）。
+
+    读回统一补 UTC：全部列本就以 UTC 写入，补齐后 API 序列化带 +00:00，
+    前端 new Date() 才能正确换算本地时区（否则日志时间会差一个时区）。
+    """
+
+    impl = DateTime(timezone=True)
+    cache_ok = True
+
+    def process_result_value(self, value: datetime | None, dialect: object) -> datetime | None:
+        if value is not None and value.tzinfo is None:
+            return value.replace(tzinfo=UTC)
+        return value
+
+
 def _updated_at() -> Mapped[datetime]:
-    return mapped_column(DateTime(timezone=True), default=utcnow, onupdate=utcnow)
+    return mapped_column(UTCDatetime, default=utcnow, onupdate=utcnow)
 
 
 class Base(DeclarativeBase):
@@ -37,7 +54,7 @@ class Provider(Base):
     api_key_encrypted: Mapped[str] = mapped_column(Text, default="")
     remark: Mapped[str] = mapped_column(String(500), default="")
     enabled: Mapped[bool] = mapped_column(Boolean, default=True)
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+    created_at: Mapped[datetime] = mapped_column(UTCDatetime, default=utcnow)
     updated_at: Mapped[datetime] = _updated_at()
 
 
@@ -51,7 +68,7 @@ class LlmModel(Base):
     # {temperature, max_tokens, top_p, timeout_seconds, max_retries}
     default_params: Mapped[dict] = mapped_column(JSON, default=dict)
     enabled: Mapped[bool] = mapped_column(Boolean, default=True)
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+    created_at: Mapped[datetime] = mapped_column(UTCDatetime, default=utcnow)
     updated_at: Mapped[datetime] = _updated_at()
 
 
@@ -68,7 +85,7 @@ class Pipeline(Base):
     fault_tolerance: Mapped[dict] = mapped_column(JSON, default=dict)
     max_concurrency: Mapped[int] = mapped_column(Integer, default=10)
     enabled: Mapped[bool] = mapped_column(Boolean, default=True)
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+    created_at: Mapped[datetime] = mapped_column(UTCDatetime, default=utcnow)
     updated_at: Mapped[datetime] = _updated_at()
 
 
@@ -101,7 +118,7 @@ class RequestLog(Base):
     total_prompt_tokens: Mapped[int] = mapped_column(Integer, default=0)
     total_completion_tokens: Mapped[int] = mapped_column(Integer, default=0)
     client_ip: Mapped[str] = mapped_column(String(64), default="")
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+    created_at: Mapped[datetime] = mapped_column(UTCDatetime, default=utcnow)
 
 
 class ModelCallLog(Base):
@@ -124,7 +141,7 @@ class ModelCallLog(Base):
     duration_ms: Mapped[int] = mapped_column(Integer, default=0)
     prompt_tokens: Mapped[int] = mapped_column(Integer, default=0)
     completion_tokens: Mapped[int] = mapped_column(Integer, default=0)
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+    created_at: Mapped[datetime] = mapped_column(UTCDatetime, default=utcnow)
 
 
 class AppSetting(Base):
@@ -134,6 +151,4 @@ class AppSetting(Base):
 
     key: Mapped[str] = mapped_column(String(100), primary_key=True)
     value: Mapped[str] = mapped_column(Text)
-    updated_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), default=utcnow, onupdate=utcnow
-    )
+    updated_at: Mapped[datetime] = mapped_column(UTCDatetime, default=utcnow, onupdate=utcnow)

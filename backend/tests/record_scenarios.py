@@ -24,6 +24,16 @@ SNAPSHOTS_DIR = BACKEND_DIR / "tests" / "snapshots"
 ENV_FILE = BACKEND_DIR / ".env.test"
 
 
+# 上游一律流式调用（决策 D8）：录制体 = 实际发出的请求形态（与 hash 一致）
+def STREAM_BODY(model: str, messages: list[dict]) -> dict:
+    return {
+        "model": model,
+        "messages": messages,
+        "stream": True,
+        "stream_options": {"include_usage": True},
+    }
+
+
 def council_scenarios(model: str) -> list[tuple[str, dict]]:
     """council 裁判形态：成员请求复用 passthrough_basic(0.7)/param_merge_09(0.9) 快照。
 
@@ -42,22 +52,17 @@ def council_scenarios(model: str) -> list[tuple[str, dict]]:
 
     two_answers = [(model, ans_a), (model, ans_b)]
     one_answer = [(model, ans_a)]
+    # 上游一律流式后，客户端流式/非流式共用同一裁判请求体（一个快照服务两种客户端形态）
     return [
         (
             "council_judge",
-            {"model": model, "messages": judge_messages(two_answers), "stream": False},
-        ),
-        (
-            "council_judge_stream",
-            {"model": model, "messages": judge_messages(two_answers), "stream": True},
+            STREAM_BODY(model=model, messages=judge_messages(two_answers)),
         ),
         (
             "council_judge_single_07",
             {
-                "model": model,
-                "messages": judge_messages(one_answer),
+                **STREAM_BODY(model=model, messages=judge_messages(one_answer)),
                 "temperature": 0.7,
-                "stream": False,
             },
         ),
     ]
@@ -69,53 +74,62 @@ def snapshot_content(scenario: str) -> str:
     matches = sorted(SNAPSHOTS_DIR.glob(f"{scenario}__*.json"))
     assert matches, f"scenario {scenario} must be recorded before council scenarios"
     data = json.loads(matches[0].read_text(encoding="utf-8"))
+    if data.get("stream_chunks"):
+        return "".join(
+            (c["chunk"].get("choices") or [{}])[0].get("delta", {}).get("content") or ""
+            for c in data["stream_chunks"]
+        )
     return data["non_stream_response"]["choices"][0]["message"]["content"]
 
 
-def build_scenarios(model: str) -> list[tuple[str, dict]]:
+def base_scenarios(model: str) -> list[tuple[str, dict]]:
     """基线场景：确定性请求文本，严禁含时间戳/随机数（否则 hash 失配）。"""
     base = [
         (
             "passthrough_basic",
             {
-                "model": model,
-                "messages": [{"role": "user", "content": "用一句话解释量子纠缠"}],
+                **STREAM_BODY(
+                    model=model,
+                    messages=[{"role": "user", "content": "用一句话解释量子纠缠"}],
+                ),
                 "temperature": 0.7,
-                "stream": False,
             },
         ),
         (
             "passthrough_stream",
             {
-                "model": model,
-                "messages": [
-                    {"role": "user", "content": "写一首关于秋天的四行短诗，每行不超过10个字"}
-                ],
+                **STREAM_BODY(
+                    model=model,
+                    messages=[
+                        {"role": "user", "content": "写一首关于秋天的四行短诗，每行不超过10个字"}
+                    ],
+                ),
                 "temperature": 0.7,
-                "max_tokens": 200,
-                "stream": True,
+                "max_tokens": 2000,
             },
         ),
         (
             "model_test_msg",
             {
-                "model": model,
-                "messages": [{"role": "user", "content": "连通性测试：请只回复 pong"}],
+                **STREAM_BODY(
+                    model=model,
+                    messages=[{"role": "user", "content": "连通性测试：请只回复 pong"}],
+                ),
                 "temperature": 0.0,
-                "stream": False,
             },
         ),
         (
             "param_merge_09",
             {
-                "model": model,
-                "messages": [{"role": "user", "content": "用一句话解释量子纠缠"}],
+                **STREAM_BODY(
+                    model=model,
+                    messages=[{"role": "user", "content": "用一句话解释量子纠缠"}],
+                ),
                 "temperature": 0.9,
-                "stream": False,
             },
         ),
     ]
-    return base + council_scenarios(model)
+    return base
 
 
 def main() -> None:
@@ -151,32 +165,41 @@ def main() -> None:
     recorded = replayed = 0
     try:
         with httpx.Client(timeout=180.0) as client:
-            for name, body in build_scenarios(model):
-                existed = store.get(request_hash(body)) is not None
-                headers = {"X-Srs-Scenario": name}
-                if body.get("stream"):
-                    chunks: list[str] = []
-                    with client.stream(
-                        "POST",
-                        f"http://127.0.0.1:{port}/v1/chat/completions",
-                        json=body,
-                        headers=headers,
-                    ) as resp:
-                        for line in resp.iter_lines():
-                            if line.startswith("data: "):
-                                chunks.append(line[len("data: ") :])
-                    tail = " | ".join(chunks[:-1])[:120]
-                    print(f"[{name}] stream ok, chunks={len(chunks) - 1}: {tail}...")
-                else:
-                    resp = client.post(
-                        f"http://127.0.0.1:{port}/v1/chat/completions", json=body, headers=headers
-                    )
-                    content = resp.json()["choices"][0]["message"]["content"]
-                    print(f"[{name}] {resp.status_code}: {content[:120]}")
-                if existed:
-                    replayed += 1
-                else:
-                    recorded += 1
+
+            def run_scenarios(items: list[tuple[str, dict]]) -> None:
+                nonlocal recorded, replayed
+                for name, body in items:
+                    existed = store.get(request_hash(body)) is not None
+                    headers = {"X-Srs-Scenario": name}
+                    if body.get("stream"):
+                        chunks: list[str] = []
+                        with client.stream(
+                            "POST",
+                            f"http://127.0.0.1:{port}/v1/chat/completions",
+                            json=body,
+                            headers=headers,
+                        ) as resp:
+                            for line in resp.iter_lines():
+                                if line.startswith("data: "):
+                                    chunks.append(line[len("data: ") :])
+                        tail = " | ".join(chunks[:-1])[:120]
+                        print(f"[{name}] stream ok, chunks={len(chunks) - 1}: {tail}...")
+                    else:
+                        resp = client.post(
+                            f"http://127.0.0.1:{port}/v1/chat/completions",
+                            json=body,
+                            headers=headers,
+                        )
+                        content = resp.json()["choices"][0]["message"]["content"]
+                        print(f"[{name}] {resp.status_code}: {content[:120]}")
+                    if existed:
+                        replayed += 1
+                    else:
+                        recorded += 1
+
+            # 两阶段：先录基础场景；council 场景的裁判 Prompt 需要读取已录的成员答案全文
+            run_scenarios(base_scenarios(model))
+            run_scenarios(council_scenarios(model))
     finally:
         server.should_exit = True
         thread.join(timeout=5)
