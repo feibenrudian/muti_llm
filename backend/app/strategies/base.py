@@ -22,10 +22,12 @@ class StrategyExecutionError(Exception):
         message: str,
         *,
         members: list[CallOutcome] | None = None,
+        critique: CallOutcome | None = None,
         judge: CallOutcome | None = None,
     ) -> None:
         super().__init__(message)
         self.members = members or []
+        self.critique = critique
         self.judge = judge
 
 
@@ -94,6 +96,7 @@ class StrategyResult:
     usage: LlmUsage  # 全部调用 token 汇总
     degraded: bool = False
     members: list[CallOutcome] = field(default_factory=list)
+    critique: CallOutcome | None = None  # 两段式裁判第一段（评论）
     judge: CallOutcome | None = None
     final_finish_reason: str = "stop"
 

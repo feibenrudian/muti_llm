@@ -167,13 +167,18 @@ def _rejudge_sse(obj: dict[str, Any]) -> str:
 
 @dataclass
 class _RerunOutcome:
-    """流式重跑的内存载体：SSE generator 只更新内存，落库由后台任务完成（断开安全）。"""
+    """两段式流式重跑的内存载体：SSE generator 只更新内存，落库由后台任务完成（断开安全）。"""
 
-    parts: list[str] = field(default_factory=list)
-    status: str = "client_cancelled"  # 未到终态即断开 → 取消
+    critique_parts: list[str] = field(default_factory=list)
+    final_parts: list[str] = field(default_factory=list)
+    final_payload: dict | None = None  # 评论完成后才能构建第二段入参
+    critique_usage: LlmUsage | None = None
+    final_usage: LlmUsage | None = None
+    critique_status: str = "client_cancelled"  # 评论段终态
+    status: str = "client_cancelled"  # 最终段终态（未到终态即断开 → 取消）
+    critique_duration_ms: int = 0
     error: str = ""
     duration_ms: int = 0
-    usage: LlmUsage | None = None
 
 
 @router.post("/{trace_id}/rejudge/stream")
@@ -183,7 +188,7 @@ async def rejudge_stream(
     request: Request,
     session: AsyncSession = Depends(get_session),
 ) -> StreamingResponse:
-    """换裁判重跑（流式）：SSE 依次发 meta(入参) → delta(增量) → done(终态)，结束后落 judge_rerun 行。"""
+    """换裁判两段式重跑（流式）：SSE 依次发 meta/delta(phase=critique) → meta/delta(phase=final) → done。"""
     trace = await session.get(RequestLog, trace_id)
     if trace is None:
         raise HTTPException(status_code=404, detail="trace not found")
@@ -202,51 +207,95 @@ async def rejudge_stream(
     start = time.perf_counter()
 
     async def gen() -> AsyncIterator[str]:
+        phase = "critique"
         try:
-            yield _rejudge_sse({"type": "meta", "payload": prepared.payload})
-            async for event in prepared.adapter.stream_events_timed(prepared.request):
+            yield _rejudge_sse(
+                {"type": "meta", "phase": "critique", "payload": prepared.critique_payload}
+            )
+            async for event in prepared.adapter.stream_events_timed(prepared.critique_request):
                 if event.usage is not None:
-                    outcome.usage = event.usage
+                    outcome.critique_usage = event.usage
                 if event.text:
-                    outcome.parts.append(event.text)
-                    yield _rejudge_sse({"type": "delta", "text": event.text})
+                    outcome.critique_parts.append(event.text)
+                    yield _rejudge_sse({"type": "delta", "phase": "critique", "text": event.text})
+            outcome.critique_status = "success"
+            outcome.critique_duration_ms = int((time.perf_counter() - start) * 1000)
+
+            final_request, final_payload = prepared.final_request("".join(outcome.critique_parts))
+            outcome.final_payload = final_payload
+            yield _rejudge_sse({"type": "meta", "phase": "final", "payload": final_payload})
+            phase = "final"
+            async for event in prepared.adapter.stream_events_timed(final_request):
+                if event.usage is not None:
+                    outcome.final_usage = event.usage
+                if event.text:
+                    outcome.final_parts.append(event.text)
+                    yield _rejudge_sse({"type": "delta", "phase": "final", "text": event.text})
             outcome.status = "success"
         except AdapterError as exc:
             outcome.status, outcome.error = "failed", str(exc)
+            if phase == "critique":
+                outcome.critique_status = "failed"
+                outcome.critique_duration_ms = int((time.perf_counter() - start) * 1000)
         finally:
             outcome.duration_ms = int((time.perf_counter() - start) * 1000)
         # 客户端断开时生成器被取消，不会走到这里；正常结束/失败都发终态事件
-        usage = outcome.usage or LlmUsage()
+        critique_usage = outcome.critique_usage or LlmUsage()
+        final_usage = outcome.final_usage or LlmUsage()
         yield _rejudge_sse(
             {
                 "type": "done",
                 "status": outcome.status,
-                "content": "".join(outcome.parts) if outcome.status != "failed" else "",
+                "critique": "".join(outcome.critique_parts)
+                if outcome.critique_status == "success"
+                else "",
+                "content": "".join(outcome.final_parts) if outcome.status != "failed" else "",
                 "error": outcome.error,
                 "duration_ms": outcome.duration_ms,
-                "prompt_tokens": usage.prompt_tokens,
-                "completion_tokens": usage.completion_tokens,
+                "prompt_tokens": critique_usage.prompt_tokens + final_usage.prompt_tokens,
+                "completion_tokens": critique_usage.completion_tokens + final_usage.completion_tokens,
             }
         )
 
     async def persist() -> None:
-        usage = outcome.usage or LlmUsage()
+        critique_usage = outcome.critique_usage or LlmUsage()
+        final_usage = outcome.final_usage or LlmUsage()
+        common = dict(
+            request_id=trace.id,
+            model_id=prepared.judge_model.id,
+            upstream_model_id=prepared.judge_model.upstream_model_id,
+            provider_name=prepared.judge_provider.name,
+        )
         async with session_factory() as s:
             await record_call(
                 s,
-                request_id=trace.id,
-                role="judge_rerun",
-                model_id=prepared.judge_model.id,
-                upstream_model_id=prepared.judge_model.upstream_model_id,
-                provider_name=prepared.judge_provider.name,
-                request_payload=prepared.payload,
-                response_content="".join(outcome.parts) if outcome.status != "failed" else "",
-                status=outcome.status,
-                error_message=outcome.error,
-                duration_ms=outcome.duration_ms,
-                prompt_tokens=usage.prompt_tokens,
-                completion_tokens=usage.completion_tokens,
+                **common,
+                role="judge_critique",
+                request_payload=prepared.critique_payload,
+                response_content="".join(outcome.critique_parts)
+                if outcome.critique_status != "failed"
+                else "",
+                status=outcome.critique_status,
+                error_message=outcome.error if outcome.critique_status == "failed" else "",
+                duration_ms=outcome.critique_duration_ms or outcome.duration_ms,
+                prompt_tokens=critique_usage.prompt_tokens,
+                completion_tokens=critique_usage.completion_tokens,
             )
+            if outcome.final_payload is not None:
+                await record_call(
+                    s,
+                    **common,
+                    role="judge_rerun",
+                    request_payload=outcome.final_payload,
+                    response_content="".join(outcome.final_parts)
+                    if outcome.status != "failed"
+                    else "",
+                    status=outcome.status,
+                    error_message=outcome.error if outcome.status == "failed" else "",
+                    duration_ms=outcome.duration_ms,
+                    prompt_tokens=final_usage.prompt_tokens,
+                    completion_tokens=final_usage.completion_tokens,
+                )
             await s.commit()
 
     return StreamingResponse(

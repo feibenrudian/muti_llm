@@ -35,6 +35,8 @@ class SrsState:
     fail_times: dict[str, int] = field(default_factory=dict)
     timeout_ms: dict[str, int] = field(default_factory=dict)
     delay_scale: float = 1.0
+    # reset 的恢复基准：保持构造时（如 runner 提速）的缩放，而非硬编码 1.0
+    initial_delay_scale: float = 1.0
     models_auth_fail: bool = False
     recordings: list[dict[str, Any]] = field(default_factory=list)
 
@@ -136,6 +138,7 @@ def create_app(
     record_base_url: str | None = None,
     record_api_key: str | None = None,
     record_client: httpx.AsyncClient | None = None,
+    delay_scale: float = 1.0,
 ) -> FastAPI:
     if mode not in ("replay", "record"):
         raise ValueError(f"mode must be replay|record, got {mode!r}")
@@ -149,6 +152,8 @@ def create_app(
         record_base_url=record_base_url,
         record_api_key=record_api_key,
         record_client=record_client,
+        delay_scale=delay_scale,
+        initial_delay_scale=delay_scale,
     )
     app.state.srs = state
 
@@ -252,7 +257,7 @@ def create_app(
         if body.get("reset"):
             state.fail_times.clear()
             state.timeout_ms.clear()
-            state.delay_scale = 1.0
+            state.delay_scale = state.initial_delay_scale
             state.models_auth_fail = False
             state.recordings.clear()
         if "fail_times" in body:

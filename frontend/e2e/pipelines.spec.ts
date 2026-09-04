@@ -60,8 +60,8 @@ test("UE-23-3 模板编辑：修改可保存、恢复默认按钮生效", async 
   await row0.getByLabel("成员1模型").selectOption(String(m1));
 
   const textarea = page.getByLabel("裁判 Prompt 模板");
-  // 默认模板已加载（异步），等待出现占位符
-  await expect(textarea).toContainText("{{original_messages}}", { timeout: 10_000 });
+  // 默认指令模板已加载（异步）——新默认为最终指令轮（简短指令，无占位符）
+  await expect(textarea).toContainText("最终回答", { timeout: 10_000 });
   await textarea.fill("自定义模板 {{candidate_answers}}");
   await page.getByRole("button", { name: "保存" }).click();
   await expect(page.locator("tr", { hasText: "tpl-pipeline" })).toBeVisible();
@@ -73,5 +73,5 @@ test("UE-23-3 模板编辑：修改可保存、恢复默认按钮生效", async 
 
   // 恢复默认
   await page.getByRole("button", { name: "恢复默认模板" }).click();
-  await expect(page.getByLabel("裁判 Prompt 模板")).toContainText("{{original_messages}}");
+  await expect(page.getByLabel("裁判 Prompt 模板")).toContainText("最终回答");
 });

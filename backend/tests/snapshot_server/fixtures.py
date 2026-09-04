@@ -32,9 +32,9 @@ async def srs_client(srs_app) -> AsyncIterator[httpx.AsyncClient]:
         yield client
 
 
-def _run_srs(snapshots_dir: Path) -> Generator[str, None, None]:
+def _run_srs(snapshots_dir: Path, *, delay_scale: float = 1.0) -> Generator[str, None, None]:
     """线程起真实端口的 replay 模式 SRS，返回 base_url（后端/适配器经真实 HTTP 访问）。"""
-    app = create_app(snapshots_dir, mode="replay")
+    app = create_app(snapshots_dir, mode="replay", delay_scale=delay_scale)
     config = uvicorn.Config(app, host="127.0.0.1", port=0, log_level="warning")
     server = uvicorn.Server(config)
     thread = threading.Thread(target=server.run, daemon=True)
@@ -57,5 +57,5 @@ def srs_live(snapshots_dir: Path) -> Generator[str, None, None]:
 
 @pytest.fixture
 def srs_live_seeded() -> Generator[str, None, None]:
-    """挂载 tests/snapshots 真实录制库的 SRS（UT-06/AE-09/AE-11/AE-12 等）。"""
-    yield from _run_srs(REPO_SNAPSHOTS_DIR)
+    """挂载 tests/snapshots 真实录制库的 SRS（回放即时化提速；时序类用例自行注入 delay_scale）。"""
+    yield from _run_srs(REPO_SNAPSHOTS_DIR, delay_scale=0.0)

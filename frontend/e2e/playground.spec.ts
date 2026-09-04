@@ -23,9 +23,11 @@ test("UE-24-1 完整试运行：成员卡片 + 裁判 Prompt + 最终答案（�
 
   // 裁判 Prompt 含两成员答案（入参区）
   await expect(page.getByText("裁判", { exact: true })).toBeVisible();
-  // 最终答案
-  await expect(page.getByText("最终答案")).toBeVisible();
-  await expect(page.getByText("最终答案").locator("..").getByText("量子纠缠", { exact: false })).toBeVisible();
+  // 两段式裁判：第一次调用为评论（裁判·评论卡片），第二次产出最终答案
+  await expect(page.getByText("裁判·评论")).toBeVisible();
+  // 最终答案（评论模板含"最终答案"字样，用带括号前缀消歧）
+  await expect(page.getByText("最终答案（")).toBeVisible();
+  await expect(page.getByText("最终答案（").locator("..").getByText("量子纠缠", { exact: false })).toBeVisible();
   await expect(memberCards.first()).toBeVisible();
 });
 

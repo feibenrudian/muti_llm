@@ -70,8 +70,14 @@ export default function Playground() {
             {trace.calls.map((call) => (
               <div key={call.id} className="rounded-md border border-slate-200 p-3">
                 <div className="mb-2 flex items-center gap-2 text-sm">
-                  <Badge tone={call.role === "judge" ? "warn" : "muted"}>
-                    {call.role === "judge" ? "裁判" : call.role === "passthrough" ? "透传" : "成员"}
+                  <Badge tone={call.role.startsWith("judge") ? "warn" : "muted"}>
+                    {call.role === "judge"
+                      ? "裁判"
+                      : call.role === "judge_critique"
+                        ? "裁判·评论"
+                        : call.role === "passthrough"
+                          ? "透传"
+                          : "成员"}
                   </Badge>
                   <span className="font-mono text-xs">{call.upstream_model_id}</span>
                   <Badge tone={statusTone(call.status)}>{call.status}</Badge>

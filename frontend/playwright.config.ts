@@ -22,7 +22,7 @@ export default defineConfig({
     ? [{ command: backendCmd, port: 9800, timeout: 60_000, reuseExistingServer: false }]
     : [
         {
-          command: "cd ../backend && uv run python -m tests.srs_runner",
+          command: "cd ../backend && SRS_DELAY_SCALE=0 uv run python -m tests.srs_runner",
           port: 9801,
           timeout: 60_000,
           reuseExistingServer: false,

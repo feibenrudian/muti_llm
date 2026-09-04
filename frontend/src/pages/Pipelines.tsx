@@ -295,7 +295,10 @@ export default function Pipelines() {
             </Button>
           </div>
 
-          <Field label="裁判 Prompt 模板" hint="占位符：{{original_messages}} / {{candidate_answers}}，留空使用默认模板">
+          <Field
+            label="裁判 Prompt 模板（最终指令轮）"
+            hint="两段式裁判（同一会话）：先由裁判评论各答案（内置模板），再以第二次调用延续会话产出最终答案，本模板即最后的指令轮；评论已作为会话上下文自动带入，占位符 {{original_messages}} / {{candidate_answers}} / {{critique}} 仅在指令中重述时使用，留空使用默认指令"
+          >
             <Textarea
               rows={6}
               value={form.judge_prompt_template}

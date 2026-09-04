@@ -201,13 +201,16 @@ async function req<T>(path: string, init?: RequestInit): Promise<T> {
   return (await resp.json()) as T;
 }
 
-/** 流式重跑的 SSE 事件序列：meta(入参) → delta*(增量) → done(终态与 token)。 */
+/** 流式重跑的 SSE 事件：两段各一组 meta(入参)→delta*(增量)（phase=critique → final）→ done(终态与 token)。 */
+export type RejudgePhase = "critique" | "final";
+
 export type RejudgeStreamEvent =
-  | { type: "meta"; payload: TraceCall["request_payload"] }
-  | { type: "delta"; text: string }
+  | { type: "meta"; phase: RejudgePhase; payload: TraceCall["request_payload"] }
+  | { type: "delta"; phase: RejudgePhase; text: string }
   | {
       type: "done";
       status: string;
+      critique: string;
       content: string;
       error: string;
       duration_ms: number;
@@ -216,7 +219,7 @@ export type RejudgeStreamEvent =
     };
 
 /**
- * 换裁判重跑（流式）：逐个回调 SSE 事件，返回是否收到 done 终态
+ * 换裁判重跑（流式，两段式）：逐个回调 SSE 事件，返回是否收到 done 终态
  * （连接中断收不到 done，调用方按"已中断"处理）。
  */
 export async function streamRejudge(

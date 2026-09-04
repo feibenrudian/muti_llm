@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useParams } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { api, streamRejudge, type ModelRow, type TraceCall } from "../lib/api";
-import { formatDateTime, formatDuration, statusTone, toTimeline } from "../lib/trace";
+import { formatDateTime, formatDuration, judgeVersionCount, statusTone, toTimeline } from "../lib/trace";
 import { Badge, Button, Card, EmptyState, Select } from "../components/ui";
 
 // 上游 ID 与展示名相同时不重复拼接（与 Pipelines 页同一规则）
@@ -35,41 +35,87 @@ function CallDetails({ call }: { call: TraceCall }) {
   );
 }
 
-/** 一个裁判版本的展示状态：已落库的行、或进行中/刚结束的流式重跑。 */
+/** 两段式裁判第一次调用（评论）的展示状态。 */
+interface JudgeCritique {
+  status: "streaming" | "success" | "failed" | "cancelled";
+  content: string;
+  error: string;
+  payload: TraceCall["request_payload"] | null;
+}
+
+/** 一个裁判版本的展示状态：已落库的行、或进行中/刚结束的流式重跑（content=第二次调用的最终答案）。 */
 interface JudgeVersion {
   status: "streaming" | "success" | "failed" | "cancelled";
   content: string;
   error: string;
   payload: TraceCall["request_payload"] | null;
+  critique: JudgeCritique | null;
   durationMs: number;
   promptTokens: number;
   completionTokens: number;
 }
 
-const versionFromCall = (call: TraceCall): JudgeVersion => ({
-  status: call.status === "success" ? "success" : call.status === "client_cancelled" ? "cancelled" : "failed",
+const critiqueFromCall = (call: TraceCall): JudgeCritique => ({
+  status:
+    call.status === "success"
+      ? "success"
+      : call.status === "client_cancelled"
+        ? "cancelled"
+        : "failed",
   content: call.response_content,
   error: call.error_message,
   payload: call.request_payload,
+});
+
+const versionFromCall = (call: TraceCall): JudgeVersion => ({
+  status:
+    call.status === "success"
+      ? "success"
+      : call.status === "client_cancelled"
+        ? "cancelled"
+        : "failed",
+  content: call.response_content,
+  error: call.error_message,
+  payload: call.request_payload,
+  critique: null,
   durationMs: call.duration_ms,
   promptTokens: call.prompt_tokens,
   completionTokens: call.completion_tokens,
 });
 
-/** 从已落库的裁判行建索引：原始裁判总是入表；重跑仅成功版本入表（失败的视为未生成，可重新发起）。 */
+/**
+ * 从已落库的裁判行建索引：原始裁判总是入表；重跑仅成功版本入表（失败的视为未生成，可重新发起）。
+ * 评论行按"同模型第 k 个评论 ↔ 第 k 个最终行"配对——并行重跑落库交错也能正确对应。
+ */
 function seedVersions(judges: TraceCall[]): Map<number, JudgeVersion> {
-  const versions = new Map<number, JudgeVersion>();
+  const critiqueQueues = new Map<number, TraceCall[]>();
   for (const call of judges) {
-    if (call.role === "judge" || call.status === "success") {
-      versions.set(call.model_id, versionFromCall(call));
-    }
+    if (call.role !== "judge_critique") continue;
+    const queue = critiqueQueues.get(call.model_id) ?? [];
+    queue.push(call);
+    critiqueQueues.set(call.model_id, queue);
+  }
+
+  const versions = new Map<number, JudgeVersion>();
+  const paired = new Map<number, number>();
+  for (const call of judges) {
+    if (call.role !== "judge" && call.role !== "judge_rerun") continue;
+    const index = paired.get(call.model_id) ?? 0;
+    paired.set(call.model_id, index + 1);
+    if (call.role === "judge_rerun" && call.status !== "success") continue;
+    const version = versionFromCall(call);
+    version.critique = critiqueQueues.get(call.model_id)?.[index]
+      ? critiqueFromCall(critiqueQueues.get(call.model_id)![index])
+      : null;
+    versions.set(call.model_id, version);
   }
   return versions;
 }
 
 /**
  * 裁判聚合卡：下拉选择裁判模型（原始裁判 + 本次请求的成员模型）。
- * 选中无结果的模型立即发起流式重跑（多模型可并行，互不干扰）；选中已有结果的模型直接展示。
+ * 选中无结果的模型立即发起两段式流式重跑（评论 → 最终答案，多模型可并行互不干扰）；
+ * 选中已有结果的模型直接展示。
  */
 function JudgeCard({
   traceId,
@@ -83,7 +129,7 @@ function JudgeCard({
   const [versions, setVersions] = useState<Map<number, JudgeVersion>>(() => seedVersions(judges));
   // ref 与 state 同步维护：流式回调闭包里需读"最新"表，避免 stale closure 丢增量
   const versionsRef = useRef(versions);
-  const originalModelId = judges[0].model_id;
+  const originalModelId = judges.find((call) => call.role === "judge")?.model_id ?? judges[0].model_id;
   const [selectedModelId, setSelectedModelId] = useState(originalModelId);
   const { data: models = [] } = useQuery({ queryKey: ["models"], queryFn: api.models.list });
 
@@ -120,6 +166,7 @@ function JudgeCard({
       content: "",
       error: "",
       payload: null,
+      critique: null,
       durationMs: 0,
       promptTokens: 0,
       completionTokens: 0,
@@ -129,9 +176,25 @@ function JudgeCard({
 
     streamRejudge(traceId, modelId, (event) => {
       if (event.type === "meta") {
-        setVersion(modelId, (v) => ({ ...v, payload: event.payload }));
+        if (event.phase === "critique") {
+          setVersion(modelId, (v) => ({
+            ...v,
+            critique: { status: "streaming", content: "", error: "", payload: event.payload },
+          }));
+        } else {
+          setVersion(modelId, (v) => ({ ...v, payload: event.payload }));
+        }
       } else if (event.type === "delta") {
-        setVersion(modelId, (v) => ({ ...v, content: v.content + event.text }));
+        if (event.phase === "critique") {
+          setVersion(modelId, (v) => ({
+            ...v,
+            critique: v.critique
+              ? { ...v.critique, content: v.critique.content + event.text }
+              : { status: "streaming", content: event.text, error: "", payload: null },
+          }));
+        } else {
+          setVersion(modelId, (v) => ({ ...v, content: v.content + event.text }));
+        }
       } else {
         setVersion(modelId, (v) => ({
           ...v,
@@ -141,6 +204,14 @@ function JudgeCard({
           durationMs: event.duration_ms,
           promptTokens: event.prompt_tokens,
           completionTokens: event.completion_tokens,
+          critique: v.critique
+            ? {
+                ...v.critique,
+                status: event.critique ? "success" : "failed",
+                content: event.critique || v.critique.content,
+                error: event.critique ? "" : event.error,
+              }
+            : null,
         }));
       }
     })
@@ -188,6 +259,8 @@ function JudgeCard({
   const answerCount = Array.from(versions.values()).filter((v) => v.status === "success").length;
   const badgeText = selected.status === "streaming" ? "生成中" : selected.status;
   const badgeTone = selected.status === "streaming" ? "warn" : statusTone(selected.status);
+  const critique = selected.critique;
+  const streamingCritique = selected.status === "streaming" && critique?.status === "streaming";
 
   return (
     <Card
@@ -195,7 +268,11 @@ function JudgeCard({
       actions={
         <>
           <div className="w-64">
-            <Select aria-label="裁判模型" value={String(selectedModelId)} onChange={(e) => selectModel(Number(e.target.value))}>
+            <Select
+              aria-label="裁判模型"
+              value={String(selectedModelId)}
+              onChange={(e) => selectModel(Number(e.target.value))}
+            >
               {optionIds.map((id) => (
                 <option key={id} value={id}>
                   {modelLabel(id)}
@@ -212,19 +289,47 @@ function JudgeCard({
         </>
       }
     >
-      <details>
-        <summary className="cursor-pointer text-xs text-slate-500">入参（实际发出的完整请求）</summary>
-        <pre className="mt-1 max-h-72 overflow-auto rounded bg-slate-50 p-2 text-xs">
-          {selected.payload ? JSON.stringify(selected.payload, null, 2) : "等待生成…"}
-        </pre>
-      </details>
-      {selected.status === "failed" ? (
-        <p className="mt-2 rounded bg-red-50 p-2 text-sm text-red-600">{selected.error || "调用失败"}</p>
-      ) : (
-        <p className="mt-2 whitespace-pre-wrap rounded bg-slate-50 p-2 text-sm">
-          {selected.content || (selected.status === "streaming" ? "等待输出…" : "（空）")}
-        </p>
-      )}
+      <div className="space-y-2">
+        {critique ? (
+          <details open={critique.status === "streaming"}>
+            <summary className="cursor-pointer text-xs text-slate-500">
+              第一次调用 · 评论{critique.status === "streaming" ? "（生成中…）" : ""}
+            </summary>
+            <div className="mt-1 space-y-1">
+              <details>
+                <summary className="cursor-pointer text-xs text-slate-500">入参（实际发出的完整请求）</summary>
+                <pre className="mt-1 max-h-72 overflow-auto rounded bg-slate-50 p-2 text-xs">
+                  {critique.payload ? JSON.stringify(critique.payload, null, 2) : "等待生成…"}
+                </pre>
+              </details>
+              {/* 评论失败时错误统一在主输出区展示，这里不重复渲染 */}
+              {critique.status === "failed" ? null : (
+                <p className="whitespace-pre-wrap rounded bg-slate-50 p-2 text-xs text-slate-600">
+                  {critique.content || "等待评论…"}
+                </p>
+              )}
+            </div>
+          </details>
+        ) : null}
+        <details>
+          <summary className="cursor-pointer text-xs text-slate-500">入参（第二次调用 · 实际发出的完整请求）</summary>
+          <pre className="mt-1 max-h-72 overflow-auto rounded bg-slate-50 p-2 text-xs">
+            {selected.payload ? JSON.stringify(selected.payload, null, 2) : "等待生成…"}
+          </pre>
+        </details>
+        {selected.status === "failed" ? (
+          <p className="rounded bg-red-50 p-2 text-sm text-red-600">{selected.error || "调用失败"}</p>
+        ) : (
+          <p className="whitespace-pre-wrap rounded bg-slate-50 p-2 text-sm">
+            {selected.content ||
+              (selected.status === "streaming"
+                ? streamingCritique
+                  ? "正在生成评论（第一次调用）…"
+                  : "等待输出…"
+                : "（空）")}
+          </p>
+        )}
+      </div>
     </Card>
   );
 }
@@ -259,12 +364,11 @@ export default function TraceDetail() {
     if (entry.kind === "request") return { anchor: anchorOf(index), label: "原始请求" };
     if (entry.kind === "final") return { anchor: anchorOf(index), label: "最终响应" };
     if (entry.kind === "judge") {
+      const count = judgeVersionCount(entry.calls);
+      const first = entry.calls.find((call) => call.role !== "judge_critique");
       return {
         anchor: anchorOf(index),
-        label:
-          entry.calls.length > 1
-            ? `裁判 · ${entry.calls.length} 版`
-            : `裁判 · ${entry.calls[0].upstream_model_id}`,
+        label: count > 1 ? `裁判 · ${count} 版` : `裁判 · ${first?.upstream_model_id ?? ""}`,
       };
     }
     const model = entry.call.upstream_model_id;

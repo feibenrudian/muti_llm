@@ -252,14 +252,22 @@ async def _run_pipeline(
             return await _pipeline_stream(app, background, session, trace, ctx, strategy)
         result = await strategy.run(ctx)
     except StrategyExecutionError as exc:
-        failed_calls = list(exc.members) + ([exc.judge] if exc.judge else [])
+        failed_calls = list(exc.members)
+        if exc.critique is not None:
+            failed_calls.append(exc.critique)
+        if exc.judge is not None:
+            failed_calls.append(exc.judge)
         await _record_outcomes(session, trace.id, failed_calls)
         await finish_request(session, trace.id, status="failed")
         await session.commit()
         return openai_error(502, f"策略执行失败: {exc}", err_type="upstream_error"), trace.id
 
     start = time.perf_counter()
-    all_calls = list(result.members) + ([result.judge] if result.judge else [])
+    all_calls = list(result.members)
+    if result.critique is not None:
+        all_calls.append(result.critique)
+    if result.judge is not None:
+        all_calls.append(result.judge)
     await _record_outcomes(session, trace.id, all_calls)
     status = "degraded" if result.degraded else "success"
     await finish_request(

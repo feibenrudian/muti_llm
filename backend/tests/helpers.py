@@ -7,6 +7,19 @@ import httpx
 
 SNAPSHOTS_DIR = Path(__file__).resolve().parents[0] / "snapshots"
 
+# 旧版默认裁判模板（T31 两段式之前的形态）：存量 Pipeline 的真实配置，
+# 用于验证"模板无 {{critique}} 占位符时自动追加评论段"的兜底（录制与 AE 共用，保证逐字节一致）
+LEGACY_JUDGE_TEMPLATE = """你将看到用户的问题，以及多个 AI 模型分别给出的回答。
+请综合比较这些回答：找出相互印证的关键信息，识别其中的错误或矛盾，然后基于最可靠的信息，给出一个比任何单个回答都更准确、完整的最终回答。
+
+【用户对话】
+{{original_messages}}
+
+【各模型回答】
+{{candidate_answers}}
+
+请直接输出最终回答，不要复述过程。"""
+
 
 def load_snapshot(scenario: str) -> dict[str, Any]:
     """按场景名读取已录制的快照（期望值的唯一来源，AGENTS.md：严禁手改内容）。"""

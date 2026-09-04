@@ -108,7 +108,8 @@ async def test_judge_failure_degrades(
     trace, calls = await latest_trace_and_calls()
     assert trace.status == "degraded"
     assert trace.response_content == snapshot_content("passthrough_basic")
-    assert [c.role for c in calls] == ["member", "member", "judge"]
+    # 评论是裁判第一段：失败即降级，无最终裁判行
+    assert [c.role for c in calls] == ["member", "member", "judge_critique"]
     assert calls[-1].status == "failed"
     assert calls[-1].error_message
 
@@ -131,17 +132,21 @@ async def test_judge_failure_strict(
 
     trace, calls = await latest_trace_and_calls()
     assert trace.status == "failed"
-    assert [c.role for c in calls] == ["member", "member", "judge"]
+    # strict 下评论失败（裁判第一段）即整体失败
+    assert [c.role for c in calls] == ["member", "member", "judge_critique"]
     assert calls[-1].status == "failed"
 
 
 async def test_stream_client_cancel_propagates(
     backend_live: tuple[str, str], srs_live_seeded: str
 ) -> None:
-    """UT-18-1 取消传播：流式断开后成员 success、judge call 与请求终态 client_cancelled。"""
+    """UT-18-1 取消传播：流式断开后成员/评论 success、judge call 与请求终态 client_cancelled。"""
     base_url, service_key = backend_live
     async with httpx.AsyncClient(timeout=60, base_url=base_url) as client:
         await _seed_council(client, srs_live_seeded)
+        # fixture 默认即时回放，恢复自然 chunk 间隔，确保断开能在流中段被服务端感知
+        resp = await client.post(f"{srs_live_seeded}/_test/config", json={"delay_scale": 1})
+        assert resp.status_code == 200
 
         async with client.stream(
             "POST",
@@ -162,6 +167,6 @@ async def test_stream_client_cancel_propagates(
         calls = await list_model_calls(session, trace.id)
 
     assert trace.status == "client_cancelled"
-    assert [c.role for c in calls] == ["member", "member", "judge"]
-    assert all(c.status == "success" for c in calls[:2])  # 成员阶段已完成
-    assert calls[-1].status == "client_cancelled"  # 裁判流被取消
+    assert [c.role for c in calls] == ["member", "member", "judge_critique", "judge"]
+    assert all(c.status == "success" for c in calls[:3])  # 成员与评论阶段已完成
+    assert calls[-1].status == "client_cancelled"  # 最终裁判流被取消

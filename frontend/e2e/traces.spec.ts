@@ -77,10 +77,11 @@ test("UE-27-2 详情时间线：原始请求 → 裁判 → 成员×2 → 最终
   const outputDetails = page.locator('details:has(summary:text-is("输出"))');
   await expect(outputDetails).toHaveCount(2); // 裁判输出改为直出展示，折叠块仅成员
   await expect(outputDetails.first()).not.toHaveAttribute("open");
-  // 裁判入参含组装 Prompt（展开后可见成员答案标注）；输出直接可见且即最终答案
+  // 裁判入参（第二次调用）含组装 Prompt（展开后可见成员答案标注）；输出直接可见且即最终答案
   const judgeCard = page.locator("section", { hasText: "裁判调用" });
-  await judgeCard.getByText("入参（实际发出的完整请求）").click();
-  await expect(page.getByText("【回答 1 · deepseek-v4-flash】").first()).toBeVisible();
+  const finalInput = judgeCard.locator("details").filter({ hasText: "入参（第二次调用" });
+  await finalInput.locator("summary").click();
+  await expect(finalInput.locator("pre")).toContainText("【回答 1】");
   const finalText = await page
     .locator("section", { hasText: "最终响应" })
     .locator("p")
@@ -117,7 +118,8 @@ test("UE-30-1 换裁判重跑：下拉选模型即时流式输出，可在版本
   await page.goto(`/traces/${result.trace_id}`);
   const judgeCard = page.locator("section").filter({ has: page.getByLabel("裁判模型") });
   const modelSelect = judgeCard.getByLabel("裁判模型");
-  const output = judgeCard.locator("p.whitespace-pre-wrap");
+  // 输出区 = 第二次调用最终答案（p.text-sm）；评论块为 p.text-xs
+  const output = judgeCard.locator("p.text-sm");
   const originalText = (await output.innerText()).replace(/\s+/g, " ").trim();
 
   // 下拉默认当前裁判模型；选项仅限本次请求的成员 + 裁判模型
@@ -127,7 +129,8 @@ test("UE-30-1 换裁判重跑：下拉选模型即时流式输出，可在版本
   // 首次换模型（m2 是成员但从未当过裁判）：注入失败 → 流式重跑失败，输出区显示错误
   await injectSrs(request, { fail_times: { "deepseek-v4-flash": 20 } });
   await modelSelect.selectOption(String(m2));
-  await expect(judgeCard.getByText(/injected failure|上游|超时/)).toBeVisible();
+  // 评论失败：评论块与主输出区都展示错误
+  await expect(judgeCard.getByText(/injected failure|上游|超时/).first()).toBeVisible();
 
   // 切回原始裁判：立即显示原始答案（不重新调用）
   await injectSrs(request, { reset: true });
@@ -145,4 +148,32 @@ test("UE-30-1 换裁判重跑：下拉选模型即时流式输出，可在版本
   await expect(output).toContainText(originalText.slice(0, 30));
   await modelSelect.selectOption(String(m2));
   await expect(output).toContainText(originalText.slice(0, 30));
+});
+
+test("UE-31-1 两段式裁判：裁判卡展示评论（第一次调用），换裁判重跑的版本同样带评论", async ({ page, request }) => {
+  const providerId = await seedProvider(request, "E2E-两段");
+  const m1 = await seedModel(request, providerId, "tp-m1");
+  const m2 = await seedModel(request, providerId, "tp-m2");
+  await seedCouncilPipeline(request, m1, m2, "council-two-phase");
+
+  const result = await makeTrace(request, "council-two-phase");
+  expect(result.status_code).toBe(200);
+
+  await page.goto(`/traces/${result.trace_id}`);
+  const judgeCard = page.locator("section").filter({ has: page.getByLabel("裁判模型") });
+
+  // 原始版本：评论块（第一次调用）内含入参与评论输出；主输出 = 第二次调用的最终答案
+  const critiqueBlock = judgeCard.locator("details").filter({ hasText: "第一次调用 · 评论" });
+  await critiqueBlock.locator("summary").first().click();
+  await critiqueBlock.getByText("入参（实际发出的完整请求）").click();
+  await expect(critiqueBlock.locator("pre")).toContainText("你将看到用户的问题");
+  await expect(critiqueBlock.locator("p")).toContainText("【回答 1】");
+  await expect(critiqueBlock.locator("p")).toContainText("可信度");
+  await expect(judgeCard.locator("p.text-sm")).toContainText("量子纠缠");
+
+  // 换裁判重跑：新裁判的两段式输出（评论 + 最终答案）同样完整呈现
+  await judgeCard.getByLabel("裁判模型").selectOption(String(m2));
+  await expect(page.getByText("裁判聚合（2 个版本）")).toBeVisible({ timeout: 30_000 });
+  await expect(critiqueBlock.locator("p")).toContainText("【回答 1】");
+  await expect(judgeCard.locator("p.text-sm")).toContainText("量子纠缠");
 });

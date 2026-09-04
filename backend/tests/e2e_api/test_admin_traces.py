@@ -89,7 +89,7 @@ async def test_trace_detail(
     assert request["request_messages"] == [{"role": "user", "content": QUANTUM}]
 
     calls = detail["calls"]
-    assert [c["role"] for c in calls] == ["member", "member", "judge"]
+    assert [c["role"] for c in calls] == ["member", "member", "judge_critique", "judge"]
     judge = calls[-1]
     assert judge["request_payload"]["messages"][0]["content"].startswith("你将看到用户的问题")
     assert judge["duration_ms"] > 0

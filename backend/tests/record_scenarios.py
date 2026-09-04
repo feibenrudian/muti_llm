@@ -34,36 +34,83 @@ def STREAM_BODY(model: str, messages: list[dict]) -> dict:
     }
 
 
-def council_scenarios(model: str) -> list[tuple[str, dict]]:
-    """council 裁判形态：成员请求复用 passthrough_basic(0.7)/param_merge_09(0.9) 快照。
-
-    裁判 Prompt 用生产代码的渲染函数构造，保证与运行时逐字节一致（快照命中前提）。
-    """
-
-    from app.strategies.council import DEFAULT_JUDGE_TEMPLATE, render_judge_prompt
+def council_critique_scenarios(model: str) -> list[tuple[str, dict]]:
+    """两段式裁判第一段（评论）：内置模板，请求体确定性（原问题 + 成员答案快照全文）。"""
+    from app.strategies.council import DEFAULT_CRITIQUE_TEMPLATE, render_judge_prompt
 
     question = [{"role": "user", "content": "用一句话解释量子纠缠"}]
     ans_a = snapshot_content("passthrough_basic")
     ans_b = snapshot_content("param_merge_09")
 
-    def judge_messages(answers: list[tuple[str, str]]) -> list[dict]:
-        prompt = render_judge_prompt(DEFAULT_JUDGE_TEMPLATE, question, answers)
+    def critique_messages(answers: list[tuple[str, str]]) -> list[dict]:
+        prompt = render_judge_prompt(DEFAULT_CRITIQUE_TEMPLATE, question, answers)
         return [{"role": "user", "content": prompt}]
 
-    two_answers = [(model, ans_a), (model, ans_b)]
-    one_answer = [(model, ans_a)]
+    return [
+        (
+            "council_critique",
+            STREAM_BODY(model=model, messages=critique_messages([(model, ans_a), (model, ans_b)])),
+        ),
+        (
+            "council_critique_single_07",
+            {
+                **STREAM_BODY(model=model, messages=critique_messages([(model, ans_a)])),
+                "temperature": 0.7,
+            },
+        ),
+    ]
+
+
+def council_final_scenarios(model: str) -> list[tuple[str, dict]]:
+    """两段式裁判第二段（最终答案）：与第一次同会话（输入 → 评论 → 最终指令），须在评论场景录制后运行。"""
+    from app.strategies.council import (
+        DEFAULT_CRITIQUE_TEMPLATE,
+        DEFAULT_JUDGE_TEMPLATE,
+        build_final_messages,
+        render_final_instruction,
+        render_judge_prompt,
+    )
+    from tests.helpers import LEGACY_JUDGE_TEMPLATE
+
+    question = [{"role": "user", "content": "用一句话解释量子纠缠"}]
+    ans_a = snapshot_content("passthrough_basic")
+    ans_b = snapshot_content("param_merge_09")
+    crit_two = snapshot_content("council_critique")
+    crit_single = snapshot_content("council_critique_single_07")
+
+    def final_messages(answers: list[tuple[str, str]], critique: str, template: str) -> list[dict]:
+        critique_prompt = render_judge_prompt(DEFAULT_CRITIQUE_TEMPLATE, question, answers)
+        instruction = render_final_instruction(template, question, answers, critique)
+        return build_final_messages([{"role": "user", "content": critique_prompt}], critique, instruction)
+
     # 上游一律流式后，客户端流式/非流式共用同一裁判请求体（一个快照服务两种客户端形态）
     return [
         (
             "council_judge",
-            STREAM_BODY(model=model, messages=judge_messages(two_answers)),
+            STREAM_BODY(
+                model=model,
+                messages=final_messages([(model, ans_a), (model, ans_b)], crit_two, DEFAULT_JUDGE_TEMPLATE),
+            ),
         ),
         (
             "council_judge_single_07",
             {
-                **STREAM_BODY(model=model, messages=judge_messages(one_answer)),
+                **STREAM_BODY(
+                    model=model,
+                    messages=final_messages([(model, ans_a)], crit_single, DEFAULT_JUDGE_TEMPLATE),
+                ),
                 "temperature": 0.7,
             },
+        ),
+        # 存量自定义模板（旧版默认文本）：作为最终指令轮渲染（原始对话/答案会在此轮重述）
+        (
+            "council_judge_custom",
+            STREAM_BODY(
+                model=model,
+                messages=final_messages(
+                    [(model, ans_a), (model, ans_b)], crit_two, LEGACY_JUDGE_TEMPLATE
+                ),
+            ),
         ),
     ]
 
@@ -197,9 +244,11 @@ def main() -> None:
                     else:
                         recorded += 1
 
-            # 两阶段：先录基础场景；council 场景的裁判 Prompt 需要读取已录的成员答案全文
+            # 三阶段：先录基础场景；评论场景的 Prompt 需要读取已录的成员答案全文；
+            # 最终场景的 Prompt 需要读取已录的评论全文（两段式依赖链）
             run_scenarios(base_scenarios(model))
-            run_scenarios(council_scenarios(model))
+            run_scenarios(council_critique_scenarios(model))
+            run_scenarios(council_final_scenarios(model))
     finally:
         server.should_exit = True
         thread.join(timeout=5)

@@ -9,7 +9,7 @@ import httpx
 from app.orm import RequestLog
 from app.repos import Repository, list_model_calls
 from tests.conftest import auth_headers
-from tests.helpers import snapshot_content, snapshot_stream_text, snapshot_usage
+from tests.helpers import LEGACY_JUDGE_TEMPLATE, snapshot_content, snapshot_stream_text, snapshot_usage
 
 QUANTUM = "用一句话解释量子纠缠"
 COUNCIL_BODY = {"model": "council-v1", "messages": [{"role": "user", "content": QUANTUM}]}
@@ -105,7 +105,7 @@ async def test_council_end_to_end(
 async def test_council_usage_sum(
     asgi_client: httpx.AsyncClient, service_key: str, srs_live_seeded: str
 ) -> None:
-    """AE-16-2 usage 汇总：= 2成员+裁判 三次快照 usage 之和（期望值从快照文件精确求和）。"""
+    """AE-16-2 usage 汇总：= 2成员+评论+最终裁判 四次快照 usage 之和（期望值从快照文件精确求和）。"""
     await seed_council(asgi_client, srs_live_seeded)
     resp = await asgi_client.post(
         "/v1/chat/completions", json=COUNCIL_BODY, headers=auth_headers(service_key)
@@ -115,6 +115,7 @@ async def test_council_usage_sum(
     usages = [
         snapshot_usage("passthrough_basic"),
         snapshot_usage("param_merge_09"),
+        snapshot_usage("council_critique"),
         snapshot_usage("council_judge"),
     ]
     expected_prompt = sum(u["prompt_tokens"] for u in usages)
@@ -129,7 +130,7 @@ async def test_council_usage_sum(
 async def test_judge_receives_member_answers(
     asgi_client: httpx.AsyncClient, service_key: str, srs_live_seeded: str
 ) -> None:
-    """AE-16-3 裁判收到正确 Prompt：SRS 录像中 judge 请求含两个成员快照答案全文与模型名标注。"""
+    """AE-16-3 两段裁判同会话：评论段含成员答案全文；最终段=同一输入+评论(assistant)+最终指令。"""
     await seed_council(asgi_client, srs_live_seeded)
     resp = await asgi_client.post(
         "/v1/chat/completions", json=COUNCIL_BODY, headers=auth_headers(service_key)
@@ -143,18 +144,30 @@ async def test_judge_receives_member_answers(
         for r in await srs_recordings(srs_live_seeded)
         if r["body"]["messages"][0]["content"].startswith("你将看到用户的问题")
     ]
-    assert len(judge_requests) == 1
-    prompt = judge_requests[0]["messages"][0]["content"]
-    assert ans_a in prompt and ans_b in prompt
-    assert "【回答 1 · deepseek-v4-flash】" in prompt
-    assert "【回答 2 · deepseek-v4-flash】" in prompt
-    assert QUANTUM in prompt  # 原始问题在 prompt 中
+    assert len(judge_requests) == 2  # 评论 + 最终，串行
+    critique_messages = judge_requests[0]["messages"]
+    final_messages = judge_requests[1]["messages"]
+
+    assert len(critique_messages) == 1
+    critique_prompt = critique_messages[0]["content"]
+    assert ans_a in critique_prompt and ans_b in critique_prompt
+    assert "【回答 1】" in critique_prompt
+    assert "【回答 2】" in critique_prompt
+    assert QUANTUM in critique_prompt
+    assert "【回答评论】" not in critique_prompt
+
+    # 第二次调用与第一次同会话：首条消息逐字节相同，评论作为 assistant 轮，末轮为最终指令
+    assert len(final_messages) == 3
+    assert final_messages[0]["content"] == critique_prompt
+    assert final_messages[1] == {"role": "assistant", "content": snapshot_content("council_critique")}
+    assert final_messages[2]["role"] == "user"
+    assert "最终回答" in final_messages[2]["content"]
 
 
 async def test_council_trace_logging(
     asgi_client: httpx.AsyncClient, service_key: str, srs_live_seeded: str
 ) -> None:
-    """AE-16-4 Trace 完整：1 request + 3 calls(2 member + 1 judge)，judge 入参含组装 Prompt。"""
+    """AE-16-4 Trace 完整：1 request + 4 calls(2 member + 评论 + 裁判)，裁判入参含组装 Prompt。"""
     await seed_council(asgi_client, srs_live_seeded)
     resp = await asgi_client.post(
         "/v1/chat/completions", json=COUNCIL_BODY, headers=auth_headers(service_key)
@@ -167,15 +180,79 @@ async def test_council_trace_logging(
     assert trace.response_content == snapshot_content("council_judge")
     assert trace.total_prompt_tokens > 0
 
-    assert [c.role for c in calls] == ["member", "member", "judge"]
+    assert [c.role for c in calls] == ["member", "member", "judge_critique", "judge"]
     members = [c for c in calls if c.role == "member"]
     assert {c.response_content for c in members} == {
         snapshot_content("passthrough_basic"),
         snapshot_content("param_merge_09"),
     }
+    assert calls[2].response_content == snapshot_content("council_critique")
     judge = calls[-1]
+    assert len(judge.request_payload["messages"]) == 3
     assert judge.request_payload["messages"][0]["content"].startswith("你将看到用户的问题")
     assert snapshot_content("passthrough_basic") in judge.request_payload["messages"][0]["content"]
+
+
+async def test_two_phase_judge_chain(
+    asgi_client: httpx.AsyncClient, service_key: str, srs_live_seeded: str
+) -> None:
+    """AE-31-1 两段式链路：先评论后终答，评论载荷不含评论段、最终载荷含评论全文，token 四调用求和。"""
+    await seed_council(asgi_client, srs_live_seeded)
+    resp = await asgi_client.post(
+        "/v1/chat/completions", json=COUNCIL_BODY, headers=auth_headers(service_key)
+    )
+    assert resp.status_code == 200
+
+    trace, calls = await latest_trace_and_calls()
+    assert [c.role for c in calls] == ["member", "member", "judge_critique", "judge"]
+    critique_messages = calls[2].request_payload["messages"]
+    final_messages = calls[3].request_payload["messages"]
+    assert len(critique_messages) == 1
+    assert "【回答评论】" not in critique_messages[0]["content"]
+    # 同会话：最终段首条与第一次输入逐字节相同，评论为 assistant 轮，末轮为最终指令
+    assert len(final_messages) == 3
+    assert final_messages[0]["content"] == critique_messages[0]["content"]
+    assert final_messages[1] == {"role": "assistant", "content": snapshot_content("council_critique")}
+    assert "最终回答" in final_messages[2]["content"]
+    assert calls[2].response_content == snapshot_content("council_critique")
+    assert trace.response_content == snapshot_content("council_judge")
+
+    scenarios = ("passthrough_basic", "param_merge_09", "council_critique", "council_judge")
+    assert trace.total_prompt_tokens == sum(snapshot_usage(s)["prompt_tokens"] for s in scenarios)
+    assert trace.total_completion_tokens == sum(
+        snapshot_usage(s)["completion_tokens"] for s in scenarios
+    )
+
+
+async def test_custom_template_shapes_final_instruction(
+    asgi_client: httpx.AsyncClient, service_key: str, srs_live_seeded: str
+) -> None:
+    """AE-31-2 自定义模板：作为最终指令轮渲染；评论始终以 assistant 轮在会话中，不依赖 {{critique}} 占位符。"""
+    await seed_council(asgi_client, srs_live_seeded)
+    pipeline_id = (await asgi_client.get("/api/admin/pipelines")).json()[0]["id"]
+    resp = await asgi_client.patch(
+        f"/api/admin/pipelines/{pipeline_id}",
+        json={"judge_prompt_template": LEGACY_JUDGE_TEMPLATE},
+    )
+    assert resp.status_code == 200
+
+    resp = await asgi_client.post(
+        "/v1/chat/completions", json=COUNCIL_BODY, headers=auth_headers(service_key)
+    )
+    assert resp.status_code == 200
+    assert resp.json()["choices"][0]["message"]["content"] == snapshot_content("council_judge_custom")
+
+    trace, calls = await latest_trace_and_calls()
+    assert [c.role for c in calls] == ["member", "member", "judge_critique", "judge"]
+    final_messages = calls[3].request_payload["messages"]
+    assert len(final_messages) == 3
+    # 第一次输入逐字节相同 + 评论在 assistant 轮（模板没有 {{critique}} 也必然带上）
+    assert final_messages[0]["content"] == calls[2].request_payload["messages"][0]["content"]
+    assert final_messages[1] == {"role": "assistant", "content": snapshot_content("council_critique")}
+    # 旧版模板作为指令轮：重述原对话与答案（其自身渲染结果），无追加段
+    assert "{{critique}}" not in LEGACY_JUDGE_TEMPLATE
+    assert final_messages[2]["content"].startswith("你将看到用户的问题")
+    assert not final_messages[2]["content"].endswith(snapshot_content("council_critique"))
 
 
 async def test_request_params_override_member_overrides(
@@ -256,13 +333,14 @@ async def test_council_stream_timing(backend_live: tuple[str, str], srs_live_see
     """AE-17-2 时序：delay_scale 放大 chunk 间隔 → 分多批收到（真流式非缓冲）。
 
     走真实 TCP（ASGITransport 会一次性收集响应体，无法测时序）。
+    两段式裁判 chunk 总量更大，scale 取 5 并放宽客户端超时。
     """
     base_url, service_key = backend_live
     from tests.e2e_api.test_council import seed_council as _seed
 
-    async with httpx.AsyncClient(timeout=60, base_url=base_url) as client:
+    async with httpx.AsyncClient(timeout=180, base_url=base_url) as client:
         await _seed(client, srs_live_seeded)
-        resp = await client.post(f"{srs_live_seeded}/_test/config", json={"delay_scale": 10})
+        resp = await client.post(f"{srs_live_seeded}/_test/config", json={"delay_scale": 5})
         assert resp.status_code == 200
 
         async with client.stream(
@@ -301,5 +379,5 @@ async def test_council_stream_logging(
     )
     assert trace.response_content == text
     assert trace.response_content == snapshot_stream_text("council_judge")
-    assert [c.role for c in calls] == ["member", "member", "judge"]
+    assert [c.role for c in calls] == ["member", "member", "judge_critique", "judge"]
     assert calls[-1].status == "success"

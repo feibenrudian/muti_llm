@@ -12,14 +12,14 @@ export type TimelineEntry =
 
 /**
  * 时间线：原始请求 → 裁判聚合 → 各成员/透传调用 → 最终响应。
- * 原始裁判与各次换裁判重跑（role=judge/judge_rerun）合成一组并列保留，
+ * 两段式裁判的全部行（评论 judge_critique / 最终 judge / 重跑 judge_rerun）合成一组并列保留，
  * 卡片固定置于原始请求之后（对比裁判版本时无需滚过全部成员卡片）。
  */
 export function toTimeline(detail: TraceDetail): TimelineEntry[] {
   const entries: TimelineEntry[] = [{ kind: "request" }];
   const judgeCalls: TraceCall[] = [];
   for (const call of detail.calls) {
-    if (call.role === "judge" || call.role === "judge_rerun") {
+    if (call.role === "judge" || call.role === "judge_rerun" || call.role === "judge_critique") {
       judgeCalls.push(call);
     } else {
       entries.push({ kind: "call", call });
@@ -30,6 +30,11 @@ export function toTimeline(detail: TraceDetail): TimelineEntry[] {
   }
   entries.push({ kind: "final" });
   return entries;
+}
+
+/** 裁判版本数：仅最终段行（judge/judge_rerun），评论行不计数。 */
+export function judgeVersionCount(judgeCalls: TraceCall[]): number {
+  return judgeCalls.filter((call) => call.role === "judge" || call.role === "judge_rerun").length;
 }
 
 export function formatDuration(ms: number): string {

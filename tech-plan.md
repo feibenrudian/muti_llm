@@ -461,6 +461,16 @@ make seed          # 起服务+灌入演示数据(指向快照回放服务器), 
 | UT-30-1 | UT | 前端纯函数 | vitest：toTimeline 裁判版本合组（原始在前、重跑按序、透传无裁判组） |
 | UE-30-1 | UE | 详情页重跑 | 下拉默认当前裁判、选项仅本次成员+裁判；换模型流式输出实时呈现、失败显示错误、同模型可重试成功、版本间切换立即显示各自输出 |
 
+#### T31 两段式裁判（评论 → 最终答案）（增量需求）
+产出：council 裁判阶段改为同一裁判模型串行两次调用且**同一会话**——第一次**评论**（内置 `DEFAULT_CRITIQUE_TEMPLATE`，role=`judge_critique`，单轮：原对话+各答案）；第二次**最终答案**（role=`judge`，多轮：`第一次输入(逐字节相同) → 评论(assistant) → 最终指令`，`judge_prompt_template` 仅作用于指令轮，评论不依赖占位符即随会话带入）。评论失败按 judge_failure 容错（流式下评论失败发生在开流前，统一 502）；usage = 成员+评论+最终求和。重跑（同步/SSE）同步两段化：SSE 事件带 `phase`（critique/final），每次重跑成对落 `judge_critique`+`judge_rerun` 行，前端按"同模型第 k 次评论 ↔ 第 k 个最终行"配对（并行重跑落库交错也正确），裁判卡「第一次调用 · 评论」折叠块含入参与输出。快照新增 `council_critique`/`council_critique_single_07`/`council_judge_custom` 并按同会话形态重录 `council_judge*`（旧文件删除）；SRS `create_app`/runner 支持 `delay_scale`（pytest fixture 与 Playwright 默认 0 即时回放提速，时序用例自行覆盖，reset 恢复初始值）。
+| 编号 | 类型 | 用例 | 断言要点 |
+| --- | --- | --- | --- |
+| AE-31-1 | AE | 两段链路 | roles=[member×2, judge_critique, judge]；评论载荷含答案且无评论段、最终载荷含评论全文；token=四快照之和 |
+| UT-31-1 | UT | 渲染 | {{critique}} 注入评论全文；模板无该占位符时不注入（另：toTimeline/judgeVersionCount 评论行合组不计版本） |
+| UE-31-1 | UE | 详情评论块 | 裁判卡「第一次调用 · 评论」展开含评论内容（如【回答 1】/可信度）；换裁判重跑的新版本同样带评论 |
+
+（T15/T16/T17/T18/T25/T30 的既有用例随两段式行为更新：roles 4 行、usage 四快照之和、评论失败降级、重跑成对落行、评论行不占版本号等。）
+
 ---
 
 ## 4. 里程碑映射（对应需求文档 M1–M4）

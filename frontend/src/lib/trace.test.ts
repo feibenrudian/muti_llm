@@ -1,6 +1,6 @@
 import { expect, test } from "vitest";
 import type { TraceCall, TraceDetail } from "./api";
-import { formatBytes, formatDuration, statusTone, toTimeline } from "./trace";
+import { formatBytes, formatDuration, judgeVersionCount, statusTone, toTimeline } from "./trace";
 
 const call = (over: Partial<TraceCall> & Pick<TraceCall, "id" | "role" | "upstream_model_id">): TraceCall => ({
   model_id: 1,
@@ -33,7 +33,8 @@ const detail: TraceDetail = {
   calls: [
     call({ id: 1, role: "member", upstream_model_id: "m-a" }),
     call({ id: 2, role: "member", upstream_model_id: "m-b" }),
-    call({ id: 3, role: "judge", upstream_model_id: "m-a", response_content: "final" }),
+    call({ id: 3, role: "judge_critique", upstream_model_id: "m-a", response_content: "critique" }),
+    call({ id: 4, role: "judge", upstream_model_id: "m-a", response_content: "final" }),
   ],
 };
 
@@ -47,9 +48,12 @@ test("toTimeline：请求 → 裁判 → 成员调用 → 最终响应（UT-27-1
     "m-a",
     "m-b",
   ]);
+  // 两段式裁判（评论 + 最终）合入同一裁判组
   const judge = timeline[1];
-  expect(judge.kind === "judge" && judge.calls).toHaveLength(1);
-  expect(judge.kind === "judge" && judge.calls[0].upstream_model_id).toBe("m-a");
+  expect(judge.kind === "judge" && judge.calls.map((c) => c.role)).toEqual([
+    "judge_critique",
+    "judge",
+  ]);
 });
 
 test("toTimeline：多次换裁判重跑合成一组并列保留，置于原始请求之后（UT-30-1）", () => {
@@ -57,8 +61,10 @@ test("toTimeline：多次换裁判重跑合成一组并列保留，置于原始�
     ...detail,
     calls: [
       ...detail.calls,
-      call({ id: 4, role: "judge_rerun", upstream_model_id: "m-c", status: "failed", error_message: "boom" }),
-      call({ id: 5, role: "judge_rerun", upstream_model_id: "m-d" }),
+      call({ id: 5, role: "judge_critique", upstream_model_id: "m-c", status: "failed", error_message: "boom" }),
+      call({ id: 6, role: "judge_rerun", upstream_model_id: "m-c", status: "failed", error_message: "boom" }),
+      call({ id: 7, role: "judge_critique", upstream_model_id: "m-d" }),
+      call({ id: 8, role: "judge_rerun", upstream_model_id: "m-d" }),
     ],
   };
   const timeline = toTimeline(rerunDetail);
@@ -66,8 +72,11 @@ test("toTimeline：多次换裁判重跑合成一组并列保留，置于原始�
   expect(timeline.map((entry) => entry.kind)).toEqual(["request", "judge", "call", "call", "final"]);
   const judge = timeline[1];
   expect(judge.kind === "judge" && judge.calls.map((c) => c.role)).toEqual([
+    "judge_critique",
     "judge",
+    "judge_critique",
     "judge_rerun",
+    "judge_critique",
     "judge_rerun",
   ]);
 
@@ -77,6 +86,17 @@ test("toTimeline：多次换裁判重跑合成一组并列保留，置于原始�
     calls: [call({ id: 9, role: "passthrough", upstream_model_id: "m-x" })],
   };
   expect(toTimeline(passthrough).map((entry) => entry.kind)).toEqual(["request", "call", "final"]);
+});
+
+test("judgeVersionCount：仅最终段行计数，评论行不计（UT-31-1）", () => {
+  expect(judgeVersionCount(detail.calls)).toBe(1);
+  const rerunCalls: TraceCall[] = [
+    ...detail.calls,
+    call({ id: 5, role: "judge_critique", upstream_model_id: "m-c" }),
+    call({ id: 6, role: "judge_rerun", upstream_model_id: "m-c" }),
+  ];
+  expect(judgeVersionCount(rerunCalls)).toBe(2);
+  expect(judgeVersionCount([call({ id: 9, role: "judge_critique", upstream_model_id: "m-x" })])).toBe(0);
 });
 
 test("格式化：耗时与字节数（UT-27-1）", () => {

@@ -1,0 +1,7425 @@
+{
+  "scenario": "council_critique",
+  "request_hash": "sha256:e70518d0bfe4fd827b7026d4090b73f4bd6b445ac3746efde10e24b810dd2455",
+  "request": {
+    "model": "deepseek-v4-flash",
+    "messages": [
+      {
+        "role": "user",
+        "content": "你将看到用户的问题，以及多个 AI 模型分别给出的回答。\n请逐个评价每个回答的优劣：指出事实错误、关键信息遗漏、逻辑或表述问题，并给出简短的可信度结论。\n不要输出最终答案，只输出对各回答的评论。\n\n【用户对话】\n[user] 用一句话解释量子纠缠\n\n【各模型回答】\n【回答 1】\n量子纠缠就是：两个或多个粒子一旦形成关联，无论相距多远，对其中一个的测量都会瞬间决定另一个的状态，仿佛它们共享同一个整体命运。\n\n【回答 2】\n量子纠缠是指两个或多个粒子形成一种整体关联，无论相距多远，对其中一个粒子的测量都会立即决定另一个粒子的状态，仿佛它们之间存在着超越时空的联系。\n\n请按【回答 1】【回答 2】… 的顺序逐条评论，不要复述回答原文。"
+      }
+    ],
+    "stream": true,
+    "stream_options": {
+      "include_usage": true
+    }
+  },
+  "non_stream_response": null,
+  "stream_chunks": [
+    {
+      "chunk": {
+        "id": "e4bae4f0-5ae9-4c4d-a880-a41bc2d636dd",
+        "object": "chat.completion.chunk",
+        "created": 1788509517,
+        "model": "deepseek-v4-flash",
+        "system_fingerprint": "a26a7955944dc5c60445bff77fac9c8e",
+        "choices": [
+          {
+            "index": 0,
+            "delta": {
+              "role": "assistant",
+              "content": null,
+              "reasoning_content": ""
+            },
+            "logprobs": null,
+            "finish_reason": null
+          }
+        ],
+        "usage": null
+      },
+      "delay_ms": 0
+    },
+    {
+      "chunk": {
+        "id": "e4bae4f0-5ae9-4c4d-a880-a41bc2d636dd",
+        "object": "chat.completion.chunk",
+        "created": 1788509517,
+        "model": "deepseek-v4-flash",
+        "system_fingerprint": "a26a7955944dc5c60445bff77fac9c8e",
+        "choices": [
+          {
+            "index": 0,
+            "delta": {
+              "content": null,
+              "reasoning_content": "我们"
+            },
+            "logprobs": null,
+            "finish_reason": null
+          }
+        ],
+        "usage": null
+      },
+      "delay_ms": 587
+    },
+    {
+      "chunk": {
+        "id": "e4bae4f0-5ae9-4c4d-a880-a41bc2d636dd",
+        "object": "chat.completion.chunk",
+        "created": 1788509517,
+        "model": "deepseek-v4-flash",
+        "system_fingerprint": "a26a7955944dc5c60445bff77fac9c8e",
+        "choices": [
+          {
+            "index": 0,
+            "delta": {
+              "content": null,
+              "reasoning_content": "只需要"
+            },
+            "logprobs": null,
+            "finish_reason": null
+          }
+        ],
+        "usage": null
+      },
+      "delay_ms": 66
+    },
+    {
+      "chunk": {
+        "id": "e4bae4f0-5ae9-4c4d-a880-a41bc2d636dd",
+        "object": "chat.completion.chunk",
+        "created": 1788509517,
+        "model": "deepseek-v4-flash",
+        "system_fingerprint": "a26a7955944dc5c60445bff77fac9c8e",
+        "choices": [
+          {
+            "index": 0,
+            "delta": {
+              "content": null,
+              "reasoning_content": "评论"
+            },
+            "logprobs": null,
+            "finish_reason": null
+          }
+        ],
+        "usage": null
+      },
+      "delay_ms": 14
+    },
+    {
+      "chunk": {
+        "id": "e4bae4f0-5ae9-4c4d-a880-a41bc2d636dd",
+        "object": "chat.completion.chunk",
+        "created": 1788509517,
+        "model": "deepseek-v4-flash",
+        "system_fingerprint": "a26a7955944dc5c60445bff77fac9c8e",
+        "choices": [
+          {
+            "index": 0,
+            "delta": {
+              "content": null,
+              "reasoning_content": "，"
+            },
+            "logprobs": null,
+            "finish_reason": null
+          }
+        ],
+        "usage": null
+      },
+      "delay_ms": 21
+    },
+    {
+      "chunk": {
+        "id": "e4bae4f0-5ae9-4c4d-a880-a41bc2d636dd",
+        "object": "chat.completion.chunk",
+        "created": 1788509517,
+        "model": "deepseek-v4-flash",
+        "system_fingerprint": "a26a7955944dc5c60445bff77fac9c8e",
+        "choices": [
+          {
+            "index": 0,
+            "delta": {
+              "content": null,
+              "reasoning_content": "不"
+            },
+            "logprobs": null,
+            "finish_reason": null
+          }
+        ],
+        "usage": null
+      },
+      "delay_ms": 20
+    },
+    {
+      "chunk": {
+        "id": "e4bae4f0-5ae9-4c4d-a880-a41bc2d636dd",
+        "object": "chat.completion.chunk",
+        "created": 1788509517,
+        "model": "deepseek-v4-flash",
+        "system_fingerprint": "a26a7955944dc5c60445bff77fac9c8e",
+        "choices": [
+          {
+            "index": 0,
+            "delta": {
+              "content": null,
+              "reasoning_content": "输出"
+            },
+            "logprobs": null,
+            "finish_reason": null
+          }
+        ],
+        "usage": null
+      },
+      "delay_ms": 3
+    },
+    {
+      "chunk": {
+        "id": "e4bae4f0-5ae9-4c4d-a880-a41bc2d636dd",
+        "object": "chat.completion.chunk",
+        "created": 1788509517,
+        "model": "deepseek-v4-flash",
+        "system_fingerprint": "a26a7955944dc5c60445bff77fac9c8e",
+        "choices": [
+          {
+            "index": 0,
+            "delta": {
+              "content": null,
+              "reasoning_content": "最终"
+            },
+            "logprobs": null,
+            "finish_reason": null
+          }
+        ],
+        "usage": null
+      },
+      "delay_ms": 0
+    },
+    {
+      "chunk": {
+        "id": "e4bae4f0-5ae9-4c4d-a880-a41bc2d636dd",
+        "object": "chat.completion.chunk",
+        "created": 1788509517,
+        "model": "deepseek-v4-flash",
+        "system_fingerprint": "a26a7955944dc5c60445bff77fac9c8e",
+        "choices": [
+          {
+            "index": 0,
+            "delta": {
+              "content": null,
+              "reasoning_content": "答案"
+            },
+            "logprobs": null,
+            "finish_reason": null
+          }
+        ],
+        "usage": null
+      },
+      "delay_ms": 18
+    },
+    {
+      "chunk": {
+        "id": "e4bae4f0-5ae9-4c4d-a880-a41bc2d636dd",
+        "object": "chat.completion.chunk",
+        "created": 1788509517,
+        "model": "deepseek-v4-flash",
+        "system_fingerprint": "a26a7955944dc5c60445bff77fac9c8e",
+        "choices": [
+          {
+            "index": 0,
+            "delta": {
+              "content": null,
+              "reasoning_content": "。"
+            },
+            "logprobs": null,
+            "finish_reason": null
+          }
+        ],
+        "usage": null
+      },
+      "delay_ms": 0
+    },
+    {
+      "chunk": {
+        "id": "e4bae4f0-5ae9-4c4d-a880-a41bc2d636dd",
+        "object": "chat.completion.chunk",
+        "created": 1788509517,
+        "model": "deepseek-v4-flash",
+        "system_fingerprint": "a26a7955944dc5c60445bff77fac9c8e",
+        "choices": [
+          {
+            "index": 0,
+            "delta": {
+              "content": null,
+              "reasoning_content": "按"
+            },
+            "logprobs": null,
+            "finish_reason": null
+          }
+        ],
+        "usage": null
+      },
+      "delay_ms": 0
+    },
+    {
+      "chunk": {
+        "id": "e4bae4f0-5ae9-4c4d-a880-a41bc2d636dd",
+        "object": "chat.completion.chunk",
+        "created": 1788509517,
+        "model": "deepseek-v4-flash",
+        "system_fingerprint": "a26a7955944dc5c60445bff77fac9c8e",
+        "choices": [
+          {
+            "index": 0,
+            "delta": {
+              "content": null,
+              "reasoning_content": "顺序"
+            },
+            "logprobs": null,
+            "finish_reason": null
+          }
+        ],
+        "usage": null
+      },
+      "delay_ms": 0
+    },
+    {
+      "chunk": {
+        "id": "e4bae4f0-5ae9-4c4d-a880-a41bc2d636dd",
+        "object": "chat.completion.chunk",
+        "created": 1788509517,
+        "model": "deepseek-v4-flash",
+        "system_fingerprint": "a26a7955944dc5c60445bff77fac9c8e",
+        "choices": [
+          {
+            "index": 0,
+            "delta": {
+              "content": null,
+              "reasoning_content": "评论"
+            },
+            "logprobs": null,
+            "finish_reason": null
+          }
+        ],
+        "usage": null
+      },
+      "delay_ms": 21
+    },
+    {
+      "chunk": {
+        "id": "e4bae4f0-5ae9-4c4d-a880-a41bc2d636dd",
+        "object": "chat.completion.chunk",
+        "created": 1788509517,
+        "model": "deepseek-v4-flash",
+        "system_fingerprint": "a26a7955944dc5c60445bff77fac9c8e",
+        "choices": [
+          {
+            "index": 0,
+            "delta": {
+              "content": null,
+              "reasoning_content": "回答"
+            },
+            "logprobs": null,
+            "finish_reason": null
+          }
+        ],
+        "usage": null
+      },
+      "delay_ms": 0
+    },
+    {
+      "chunk": {
+        "id": "e4bae4f0-5ae9-4c4d-a880-a41bc2d636dd",
+        "object": "chat.completion.chunk",
+        "created": 1788509517,
+        "model": "deepseek-v4-flash",
+        "system_fingerprint": "a26a7955944dc5c60445bff77fac9c8e",
+        "choices": [
+          {
+            "index": 0,
+            "delta": {
+              "content": null,
+              "reasoning_content": "1"
+            },
+            "logprobs": null,
+            "finish_reason": null
+          }
+        ],
+        "usage": null
+      },
+      "delay_ms": 27
+    },
+    {
+      "chunk": {
+        "id": "e4bae4f0-5ae9-4c4d-a880-a41bc2d636dd",
+        "object": "chat.completion.chunk",
+        "created": 1788509517,
+        "model": "deepseek-v4-flash",
+        "system_fingerprint": "a26a7955944dc5c60445bff77fac9c8e",
+        "choices": [
+          {
+            "index": 0,
+            "delta": {
+              "content": null,
+              "reasoning_content": "和"
+            },
+            "logprobs": null,
+            "finish_reason": null
+          }
+        ],
+        "usage": null
+      },
+      "delay_ms": 0
+    },
+    {
+      "chunk": {
+        "id": "e4bae4f0-5ae9-4c4d-a880-a41bc2d636dd",
+        "object": "chat.completion.chunk",
+        "created": 1788509517,
+        "model": "deepseek-v4-flash",
+        "system_fingerprint": "a26a7955944dc5c60445bff77fac9c8e",
+        "choices": [
+          {
+            "index": 0,
+            "delta": {
+              "content": null,
+              "reasoning_content": "2"
+            },
+            "logprobs": null,
+            "finish_reason": null
+          }
+        ],
+        "usage": null
+      },
+      "delay_ms": 0
+    },
+    {
+      "chunk": {
+        "id": "e4bae4f0-5ae9-4c4d-a880-a41bc2d636dd",
+        "object": "chat.completion.chunk",
+        "created": 1788509517,
+        "model": "deepseek-v4-flash",
+        "system_fingerprint": "a26a7955944dc5c60445bff77fac9c8e",
+        "choices": [
+          {
+            "index": 0,
+            "delta": {
+              "content": null,
+              "reasoning_content": "。"
+            },
+            "logprobs": null,
+            "finish_reason": null
+          }
+        ],
+        "usage": null
+      },
+      "delay_ms": 23
+    },
+    {
+      "chunk": {
+        "id": "e4bae4f0-5ae9-4c4d-a880-a41bc2d636dd",
+        "object": "chat.completion.chunk",
+        "created": 1788509517,
+        "model": "deepseek-v4-flash",
+        "system_fingerprint": "a26a7955944dc5c60445bff77fac9c8e",
+        "choices": [
+          {
+            "index": 0,
+            "delta": {
+              "content": null,
+              "reasoning_content": "注意"
+            },
+            "logprobs": null,
+            "finish_reason": null
+          }
+        ],
+        "usage": null
+      },
+      "delay_ms": 0
+    },
+    {
+      "chunk": {
+        "id": "e4bae4f0-5ae9-4c4d-a880-a41bc2d636dd",
+        "object": "chat.completion.chunk",
+        "created": 1788509517,
+        "model": "deepseek-v4-flash",
+        "system_fingerprint": "a26a7955944dc5c60445bff77fac9c8e",
+        "choices": [
+          {
+            "index": 0,
+            "delta": {
+              "content": null,
+              "reasoning_content": "指出"
+            },
+            "logprobs": null,
+            "finish_reason": null
+          }
+        ],
+        "usage": null
+      },
+      "delay_ms": 0
+    },
+    {
+      "chunk": {
+        "id": "e4bae4f0-5ae9-4c4d-a880-a41bc2d636dd",
+        "object": "chat.completion.chunk",
+        "created": 1788509517,
+        "model": "deepseek-v4-flash",
+        "system_fingerprint": "a26a7955944dc5c60445bff77fac9c8e",
+        "choices": [
+          {
+            "index": 0,
+            "delta": {
+              "content": null,
+              "reasoning_content": "优劣"
+            },
+            "logprobs": null,
+            "finish_reason": null
+          }
+        ],
+        "usage": null
+      },
+      "delay_ms": 44
+    },
+    {
+      "chunk": {
+        "id": "e4bae4f0-5ae9-4c4d-a880-a41bc2d636dd",
+        "object": "chat.completion.chunk",
+        "created": 1788509517,
+        "model": "deepseek-v4-flash",
+        "system_fingerprint": "a26a7955944dc5c60445bff77fac9c8e",
+        "choices": [
+          {
+            "index": 0,
+            "delta": {
+              "content": null,
+              "reasoning_content": "、"
+            },
+            "logprobs": null,
+            "finish_reason": null
+          }
+        ],
+        "usage": null
+      },
+      "delay_ms": 0
+    },
+    {
+      "chunk": {
+        "id": "e4bae4f0-5ae9-4c4d-a880-a41bc2d636dd",
+        "object": "chat.completion.chunk",
+        "created": 1788509517,
+        "model": "deepseek-v4-flash",
+        "system_fingerprint": "a26a7955944dc5c60445bff77fac9c8e",
+        "choices": [
+          {
+            "index": 0,
+            "delta": {
+              "content": null,
+              "reasoning_content": "事实"
+            },
+            "logprobs": null,
+            "finish_reason": null
+          }
+        ],
+        "usage": null
+      },
+      "delay_ms": 0
+    },
+    {
+      "chunk": {
+        "id": "e4bae4f0-5ae9-4c4d-a880-a41bc2d636dd",
+        "object": "chat.completion.chunk",
+        "created": 1788509517,
+        "model": "deepseek-v4-flash",
+        "system_fingerprint": "a26a7955944dc5c60445bff77fac9c8e",
+        "choices": [
+          {
+            "index": 0,
+            "delta": {
+              "content": null,
+              "reasoning_content": "错误"
+            },
+            "logprobs": null,
+            "finish_reason": null
+          }
+        ],
+        "usage": null
+      },
+      "delay_ms": 12
+    },
+    {
+      "chunk": {
+        "id": "e4bae4f0-5ae9-4c4d-a880-a41bc2d636dd",
+        "object": "chat.completion.chunk",
+        "created": 1788509517,
+        "model": "deepseek-v4-flash",
+        "system_fingerprint": "a26a7955944dc5c60445bff77fac9c8e",
+        "choices": [
+          {
+            "index": 0,
+            "delta": {
+              "content": null,
+              "reasoning_content": "、"
+            },
+            "logprobs": null,
+            "finish_reason": null
+          }
+        ],
+        "usage": null
+      },
+      "delay_ms": 0
+    },
+    {
+      "chunk": {
+        "id": "e4bae4f0-5ae9-4c4d-a880-a41bc2d636dd",
+        "object": "chat.completion.chunk",
+        "created": 1788509517,
+        "model": "deepseek-v4-flash",
+        "system_fingerprint": "a26a7955944dc5c60445bff77fac9c8e",
+        "choices": [
+          {
+            "index": 0,
+            "delta": {
+              "content": null,
+              "reasoning_content": "关键"
+            },
+            "logprobs": null,
+            "finish_reason": null
+          }
+        ],
+        "usage": null
+      },
+      "delay_ms": 36
+    },
+    {
+      "chunk": {
+        "id": "e4bae4f0-5ae9-4c4d-a880-a41bc2d636dd",
+        "object": "chat.completion.chunk",
+        "created": 1788509517,
+        "model": "deepseek-v4-flash",
+        "system_fingerprint": "a26a7955944dc5c60445bff77fac9c8e",
+        "choices": [
+          {
+            "index": 0,
+            "delta": {
+              "content": null,
+              "reasoning_content": "信息"
+            },
+            "logprobs": null,
+            "finish_reason": null
+          }
+        ],
+        "usage": null
+      },
+      "delay_ms": 17
+    },
+    {
+      "chunk": {
+        "id": "e4bae4f0-5ae9-4c4d-a880-a41bc2d636dd",
+        "object": "chat.completion.chunk",
+        "created": 1788509517,
+        "model": "deepseek-v4-flash",
+        "system_fingerprint": "a26a7955944dc5c60445bff77fac9c8e",
+        "choices": [
+          {
+            "index": 0,
+            "delta": {
+              "content": null,
+              "reasoning_content": "遗漏"
+            },
+            "logprobs": null,
+            "finish_reason": null
+          }
+        ],
+        "usage": null
+      },
+      "delay_ms": 0
+    },
+    {
+      "chunk": {
+        "id": "e4bae4f0-5ae9-4c4d-a880-a41bc2d636dd",
+        "object": "chat.completion.chunk",
+        "created": 1788509517,
+        "model": "deepseek-v4-flash",
+        "system_fingerprint": "a26a7955944dc5c60445bff77fac9c8e",
+        "choices": [
+          {
+            "index": 0,
+            "delta": {
+              "content": null,
+              "reasoning_content": "、"
+            },
+            "logprobs": null,
+            "finish_reason": null
+          }
+        ],
+        "usage": null
+      },
+      "delay_ms": 0
+    },
+    {
+      "chunk": {
+        "id": "e4bae4f0-5ae9-4c4d-a880-a41bc2d636dd",
+        "object": "chat.completion.chunk",
+        "created": 1788509517,
+        "model": "deepseek-v4-flash",
+        "system_fingerprint": "a26a7955944dc5c60445bff77fac9c8e",
+        "choices": [
+          {
+            "index": 0,
+            "delta": {
+              "content": null,
+              "reasoning_content": "逻辑"
+            },
+            "logprobs": null,
+            "finish_reason": null
+          }
+        ],
+        "usage": null
+      },
+      "delay_ms": 0
+    },
+    {
+      "chunk": {
+        "id": "e4bae4f0-5ae9-4c4d-a880-a41bc2d636dd",
+        "object": "chat.completion.chunk",
+        "created": 1788509517,
+        "model": "deepseek-v4-flash",
+        "system_fingerprint": "a26a7955944dc5c60445bff77fac9c8e",
+        "choices": [
+          {
+            "index": 0,
+            "delta": {
+              "content": null,
+              "reasoning_content": "或"
+            },
+            "logprobs": null,
+            "finish_reason": null
+          }
+        ],
+        "usage": null
+      },
+      "delay_ms": 0
+    },
+    {
+      "chunk": {
+        "id": "e4bae4f0-5ae9-4c4d-a880-a41bc2d636dd",
+        "object": "chat.completion.chunk",
+        "created": 1788509517,
+        "model": "deepseek-v4-flash",
+        "system_fingerprint": "a26a7955944dc5c60445bff77fac9c8e",
+        "choices": [
+          {
+            "index": 0,
+            "delta": {
+              "content": null,
+              "reasoning_content": "表述"
+            },
+            "logprobs": null,
+            "finish_reason": null
+          }
+        ],
+        "usage": null
+      },
+      "delay_ms": 14
+    },
+    {
+      "chunk": {
+        "id": "e4bae4f0-5ae9-4c4d-a880-a41bc2d636dd",
+        "object": "chat.completion.chunk",
+        "created": 1788509517,
+        "model": "deepseek-v4-flash",
+        "system_fingerprint": "a26a7955944dc5c60445bff77fac9c8e",
+        "choices": [
+          {
+            "index": 0,
+            "delta": {
+              "content": null,
+              "reasoning_content": "问题"
+            },
+            "logprobs": null,
+            "finish_reason": null
+          }
+        ],
+        "usage": null
+      },
+      "delay_ms": 0
+    },
+    {
+      "chunk": {
+        "id": "e4bae4f0-5ae9-4c4d-a880-a41bc2d636dd",
+        "object": "chat.completion.chunk",
+        "created": 1788509517,
+        "model": "deepseek-v4-flash",
+        "system_fingerprint": "a26a7955944dc5c60445bff77fac9c8e",
+        "choices": [
+          {
+            "index": 0,
+            "delta": {
+              "content": null,
+              "reasoning_content": "，"
+            },
+            "logprobs": null,
+            "finish_reason": null
+          }
+        ],
+        "usage": null
+      },
+      "delay_ms": 0
+    },
+    {
+      "chunk": {
+        "id": "e4bae4f0-5ae9-4c4d-a880-a41bc2d636dd",
+        "object": "chat.completion.chunk",
+        "created": 1788509517,
+        "model": "deepseek-v4-flash",
+        "system_fingerprint": "a26a7955944dc5c60445bff77fac9c8e",
+        "choices": [
+          {
+            "index": 0,
+            "delta": {
+              "content": null,
+              "reasoning_content": "可信"
+            },
+            "logprobs": null,
+            "finish_reason": null
+          }
+        ],
+        "usage": null
+      },
+      "delay_ms": 18
+    },
+    {
+      "chunk": {
+        "id": "e4bae4f0-5ae9-4c4d-a880-a41bc2d636dd",
+        "object": "chat.completion.chunk",
+        "created": 1788509517,
+        "model": "deepseek-v4-flash",
+        "system_fingerprint": "a26a7955944dc5c60445bff77fac9c8e",
+        "choices": [
+          {
+            "index": 0,
+            "delta": {
+              "content": null,
+              "reasoning_content": "度"
+            },
+            "logprobs": null,
+            "finish_reason": null
+          }
+        ],
+        "usage": null
+      },
+      "delay_ms": 0
+    },
+    {
+      "chunk": {
+        "id": "e4bae4f0-5ae9-4c4d-a880-a41bc2d636dd",
+        "object": "chat.completion.chunk",
+        "created": 1788509517,
+        "model": "deepseek-v4-flash",
+        "system_fingerprint": "a26a7955944dc5c60445bff77fac9c8e",
+        "choices": [
+          {
+            "index": 0,
+            "delta": {
+              "content": null,
+              "reasoning_content": "结论"
+            },
+            "logprobs": null,
+            "finish_reason": null
+          }
+        ],
+        "usage": null
+      },
+      "delay_ms": 0
+    },
+    {
+      "chunk": {
+        "id": "e4bae4f0-5ae9-4c4d-a880-a41bc2d636dd",
+        "object": "chat.completion.chunk",
+        "created": 1788509517,
+        "model": "deepseek-v4-flash",
+        "system_fingerprint": "a26a7955944dc5c60445bff77fac9c8e",
+        "choices": [
+          {
+            "index": 0,
+            "delta": {
+              "content": null,
+              "reasoning_content": "。"
+            },
+            "logprobs": null,
+            "finish_reason": null
+          }
+        ],
+        "usage": null
+      },
+      "delay_ms": 0
+    },
+    {
+      "chunk": {
+        "id": "e4bae4f0-5ae9-4c4d-a880-a41bc2d636dd",
+        "object": "chat.completion.chunk",
+        "created": 1788509517,
+        "model": "deepseek-v4-flash",
+        "system_fingerprint": "a26a7955944dc5c60445bff77fac9c8e",
+        "choices": [
+          {
+            "index": 0,
+            "delta": {
+              "content": null,
+              "reasoning_content": "要"
+            },
+            "logprobs": null,
+            "finish_reason": null
+          }
+        ],
+        "usage": null
+      },
+      "delay_ms": 0
+    },
+    {
+      "chunk": {
+        "id": "e4bae4f0-5ae9-4c4d-a880-a41bc2d636dd",
+        "object": "chat.completion.chunk",
+        "created": 1788509517,
+        "model": "deepseek-v4-flash",
+        "system_fingerprint": "a26a7955944dc5c60445bff77fac9c8e",
+        "choices": [
+          {
+            "index": 0,
+            "delta": {
+              "content": null,
+              "reasoning_content": "简短"
+            },
+            "logprobs": null,
+            "finish_reason": null
+          }
+        ],
+        "usage": null
+      },
+      "delay_ms": 0
+    },
+    {
+      "chunk": {
+        "id": "e4bae4f0-5ae9-4c4d-a880-a41bc2d636dd",
+        "object": "chat.completion.chunk",
+        "created": 1788509517,
+        "model": "deepseek-v4-flash",
+        "system_fingerprint": "a26a7955944dc5c60445bff77fac9c8e",
+        "choices": [
+          {
+            "index": 0,
+            "delta": {
+              "content": null,
+              "reasoning_content": "。"
+            },
+            "logprobs": null,
+            "finish_reason": null
+          }
+        ],
+        "usage": null
+      },
+      "delay_ms": 25
+    },
+    {
+      "chunk": {
+        "id": "e4bae4f0-5ae9-4c4d-a880-a41bc2d636dd",
+        "object": "chat.completion.chunk",
+        "created": 1788509517,
+        "model": "deepseek-v4-flash",
+        "system_fingerprint": "a26a7955944dc5c60445bff77fac9c8e",
+        "choices": [
+          {
+            "index": 0,
+            "delta": {
+              "content": null,
+              "reasoning_content": "两条"
+            },
+            "logprobs": null,
+            "finish_reason": null
+          }
+        ],
+        "usage": null
+      },
+      "delay_ms": 0
+    },
+    {
+      "chunk": {
+        "id": "e4bae4f0-5ae9-4c4d-a880-a41bc2d636dd",
+        "object": "chat.completion.chunk",
+        "created": 1788509517,
+        "model": "deepseek-v4-flash",
+        "system_fingerprint": "a26a7955944dc5c60445bff77fac9c8e",
+        "choices": [
+          {
+            "index": 0,
+            "delta": {
+              "content": null,
+              "reasoning_content": "回答"
+            },
+            "logprobs": null,
+            "finish_reason": null
+          }
+        ],
+        "usage": null
+      },
+      "delay_ms": 17
+    },
+    {
+      "chunk": {
+        "id": "e4bae4f0-5ae9-4c4d-a880-a41bc2d636dd",
+        "object": "chat.completion.chunk",
+        "created": 1788509517,
+        "model": "deepseek-v4-flash",
+        "system_fingerprint": "a26a7955944dc5c60445bff77fac9c8e",
+        "choices": [
+          {
+            "index": 0,
+            "delta": {
+              "content": null,
+              "reasoning_content": "几乎"
+            },
+            "logprobs": null,
+            "finish_reason": null
+          }
+        ],
+        "usage": null
+      },
+      "delay_ms": 0
+    },
+    {
+      "chunk": {
+        "id": "e4bae4f0-5ae9-4c4d-a880-a41bc2d636dd",
+        "object": "chat.completion.chunk",
+        "created": 1788509517,
+        "model": "deepseek-v4-flash",
+        "system_fingerprint": "a26a7955944dc5c60445bff77fac9c8e",
+        "choices": [
+          {
+            "index": 0,
+            "delta": {
+              "content": null,
+              "reasoning_content": "一样"
+            },
+            "logprobs": null,
+            "finish_reason": null
+          }
+        ],
+        "usage": null
+      },
+      "delay_ms": 20
+    },
+    {
+      "chunk": {
+        "id": "e4bae4f0-5ae9-4c4d-a880-a41bc2d636dd",
+        "object": "chat.completion.chunk",
+        "created": 1788509517,
+        "model": "deepseek-v4-flash",
+        "system_fingerprint": "a26a7955944dc5c60445bff77fac9c8e",
+        "choices": [
+          {
+            "index": 0,
+            "delta": {
+              "content": null,
+              "reasoning_content": "，"
+            },
+            "logprobs": null,
+            "finish_reason": null
+          }
+        ],
+        "usage": null
+      },
+      "delay_ms": 0
+    },
+    {
+      "chunk": {
+        "id": "e4bae4f0-5ae9-4c4d-a880-a41bc2d636dd",
+        "object": "chat.completion.chunk",
+        "created": 1788509517,
+        "model": "deepseek-v4-flash",
+        "system_fingerprint": "a26a7955944dc5c60445bff77fac9c8e",
+        "choices": [
+          {
+            "index": 0,
+            "delta": {
+              "content": null,
+              "reasoning_content": "可能"
+            },
+            "logprobs": null,
+            "finish_reason": null
+          }
+        ],
+        "usage": null
+      },
+      "delay_ms": 0
+    },
+    {
+      "chunk": {
+        "id": "e4bae4f0-5ae9-4c4d-a880-a41bc2d636dd",
+        "object": "chat.completion.chunk",
+        "created": 1788509517,
+        "model": "deepseek-v4-flash",
+        "system_fingerprint": "a26a7955944dc5c60445bff77fac9c8e",
+        "choices": [
+          {
+            "index": 0,
+            "delta": {
+              "content": null,
+              "reasoning_content": "都有"
+            },
+            "logprobs": null,
+            "finish_reason": null
+          }
+        ],
+        "usage": null
+      },
+      "delay_ms": 0
+    },
+    {
+      "chunk": {
+        "id": "e4bae4f0-5ae9-4c4d-a880-a41bc2d636dd",
+        "object": "chat.completion.chunk",
+        "created": 1788509517,
+        "model": "deepseek-v4-flash",
+        "system_fingerprint": "a26a7955944dc5c60445bff77fac9c8e",
+        "choices": [
+          {
+            "index": 0,
+            "delta": {
+              "content": null,
+              "reasoning_content": "常见"
+            },
+            "logprobs": null,
+            "finish_reason": null
+          }
+        ],
+        "usage": null
+      },
+      "delay_ms": 153
+    },
+    {
+      "chunk": {
+        "id": "e4bae4f0-5ae9-4c4d-a880-a41bc2d636dd",
+        "object": "chat.completion.chunk",
+        "created": 1788509517,
+        "model": "deepseek-v4-flash",
+        "system_fingerprint": "a26a7955944dc5c60445bff77fac9c8e",
+        "choices": [
+          {
+            "index": 0,
+            "delta": {
+              "content": null,
+              "reasoning_content": "误解"
+            },
+            "logprobs": null,
+            "finish_reason": null
+          }
+        ],
+        "usage": null
+      },
+      "delay_ms": 2
+    },
+    {
+      "chunk": {
+        "id": "e4bae4f0-5ae9-4c4d-a880-a41bc2d636dd",
+        "object": "chat.completion.chunk",
+        "created": 1788509517,
+        "model": "deepseek-v4-flash",
+        "system_fingerprint": "a26a7955944dc5c60445bff77fac9c8e",
+        "choices": [
+          {
+            "index": 0,
+            "delta": {
+              "content": null,
+              "reasoning_content": "："
+            },
+            "logprobs": null,
+            "finish_reason": null
+          }
+        ],
+        "usage": null
+      },
+      "delay_ms": 0
+    },
+    {
+      "chunk": {
+        "id": "e4bae4f0-5ae9-4c4d-a880-a41bc2d636dd",
+        "object": "chat.completion.chunk",
+        "created": 1788509517,
+        "model": "deepseek-v4-flash",
+        "system_fingerprint": "a26a7955944dc5c60445bff77fac9c8e",
+        "choices": [
+          {
+            "index": 0,
+            "delta": {
+              "content": null,
+              "reasoning_content": "测量"
+            },
+            "logprobs": null,
+            "finish_reason": null
+          }
+        ],
+        "usage": null
+      },
+      "delay_ms": 0
+    },
+    {
+      "chunk": {
+        "id": "e4bae4f0-5ae9-4c4d-a880-a41bc2d636dd",
+        "object": "chat.completion.chunk",
+        "created": 1788509517,
+        "model": "deepseek-v4-flash",
+        "system_fingerprint": "a26a7955944dc5c60445bff77fac9c8e",
+        "choices": [
+          {
+            "index": 0,
+            "delta": {
+              "content": null,
+              "reasoning_content": "“"
+            },
+            "logprobs": null,
+            "finish_reason": null
+          }
+        ],
+        "usage": null
+      },
+      "delay_ms": 0
+    },
+    {
+      "chunk": {
+        "id": "e4bae4f0-5ae9-4c4d-a880-a41bc2d636dd",
+        "object": "chat.completion.chunk",
+        "created": 1788509517,
+        "model": "deepseek-v4-flash",
+        "system_fingerprint": "a26a7955944dc5c60445bff77fac9c8e",
+        "choices": [
+          {
+            "index": 0,
+            "delta": {
+              "content": null,
+              "reasoning_content": "瞬间"
+            },
+            "logprobs": null,
+            "finish_reason": null
+          }
+        ],
+        "usage": null
+      },
+      "delay_ms": 2
+    },
+    {
+      "chunk": {
+        "id": "e4bae4f0-5ae9-4c4d-a880-a41bc2d636dd",
+        "object": "chat.completion.chunk",
+        "created": 1788509517,
+        "model": "deepseek-v4-flash",
+        "system_fingerprint": "a26a7955944dc5c60445bff77fac9c8e",
+        "choices": [
+          {
+            "index": 0,
+            "delta": {
+              "content": null,
+              "reasoning_content": "决定"
+            },
+            "logprobs": null,
+            "finish_reason": null
+          }
+        ],
+        "usage": null
+      },
+      "delay_ms": 0
+    },
+    {
+      "chunk": {
+        "id": "e4bae4f0-5ae9-4c4d-a880-a41bc2d636dd",
+        "object": "chat.completion.chunk",
+        "created": 1788509517,
+        "model": "deepseek-v4-flash",
+        "system_fingerprint": "a26a7955944dc5c60445bff77fac9c8e",
+        "choices": [
+          {
+            "index": 0,
+            "delta": {
+              "content": null,
+              "reasoning_content": "另一个"
+            },
+            "logprobs": null,
+            "finish_reason": null
+          }
+        ],
+        "usage": null
+      },
+      "delay_ms": 0
+    },
+    {
+      "chunk": {
+        "id": "e4bae4f0-5ae9-4c4d-a880-a41bc2d636dd",
+        "object": "chat.completion.chunk",
+        "created": 1788509517,
+        "model": "deepseek-v4-flash",
+        "system_fingerprint": "a26a7955944dc5c60445bff77fac9c8e",
+        "choices": [
+          {
+            "index": 0,
+            "delta": {
+              "content": null,
+              "reasoning_content": "状态"
+            },
+            "logprobs": null,
+            "finish_reason": null
+          }
+        ],
+        "usage": null
+      },
+      "delay_ms": 0
+    },
+    {
+      "chunk": {
+        "id": "e4bae4f0-5ae9-4c4d-a880-a41bc2d636dd",
+        "object": "chat.completion.chunk",
+        "created": 1788509517,
+        "model": "deepseek-v4-flash",
+        "system_fingerprint": "a26a7955944dc5c60445bff77fac9c8e",
+        "choices": [
+          {
+            "index": 0,
+            "delta": {
+              "content": null,
+              "reasoning_content": "”"
+            },
+            "logprobs": null,
+            "finish_reason": null
+          }
+        ],
+        "usage": null
+      },
+      "delay_ms": 0
+    },
+    {
+      "chunk": {
+        "id": "e4bae4f0-5ae9-4c4d-a880-a41bc2d636dd",
+        "object": "chat.completion.chunk",
+        "created": 1788509517,
+        "model": "deepseek-v4-flash",
+        "system_fingerprint": "a26a7955944dc5c60445bff77fac9c8e",
+        "choices": [
+          {
+            "index": 0,
+            "delta": {
+              "content": null,
+              "reasoning_content": "不"
+            },
+            "logprobs": null,
+            "finish_reason": null
+          }
+        ],
+        "usage": null
+      },
+      "delay_ms": 0
+    },
+    {
+      "chunk": {
+        "id": "e4bae4f0-5ae9-4c4d-a880-a41bc2d636dd",
+        "object": "chat.completion.chunk",
+        "created": 1788509517,
+        "model": "deepseek-v4-flash",
+        "system_fingerprint": "a26a7955944dc5c60445bff77fac9c8e",
+        "choices": [
+          {
+            "index": 0,
+            "delta": {
+              "content": null,
+              "reasoning_content": "准确"
+            },
+            "logprobs": null,
+            "finish_reason": null
+          }
+        ],
+        "usage": null
+      },
+      "delay_ms": 0
+    },
+    {
+      "chunk": {
+        "id": "e4bae4f0-5ae9-4c4d-a880-a41bc2d636dd",
+        "object": "chat.completion.chunk",
+        "created": 1788509517,
+        "model": "deepseek-v4-flash",
+        "system_fingerprint": "a26a7955944dc5c60445bff77fac9c8e",
+        "choices": [
+          {
+            "index": 0,
+            "delta": {
+              "content": null,
+              "reasoning_content": "，"
+            },
+            "logprobs": null,
+            "finish_reason": null
+          }
+        ],
+        "usage": null
+      },
+      "delay_ms": 6
+    },
+    {
+      "chunk": {
+        "id": "e4bae4f0-5ae9-4c4d-a880-a41bc2d636dd",
+        "object": "chat.completion.chunk",
+        "created": 1788509517,
+        "model": "deepseek-v4-flash",
+        "system_fingerprint": "a26a7955944dc5c60445bff77fac9c8e",
+        "choices": [
+          {
+            "index": 0,
+            "delta": {
+              "content": null,
+              "reasoning_content": "实际上"
+            },
+            "logprobs": null,
+            "finish_reason": null
+          }
+        ],
+        "usage": null
+      },
+      "delay_ms": 0
+    },
+    {
+      "chunk": {
+        "id": "e4bae4f0-5ae9-4c4d-a880-a41bc2d636dd",
+        "object": "chat.completion.chunk",
+        "created": 1788509517,
+        "model": "deepseek-v4-flash",
+        "system_fingerprint": "a26a7955944dc5c60445bff77fac9c8e",
+        "choices": [
+          {
+            "index": 0,
+            "delta": {
+              "content": null,
+              "reasoning_content": "测量"
+            },
+            "logprobs": null,
+            "finish_reason": null
+          }
+        ],
+        "usage": null
+      },
+      "delay_ms": 0
+    },
+    {
+      "chunk": {
+        "id": "e4bae4f0-5ae9-4c4d-a880-a41bc2d636dd",
+        "object": "chat.completion.chunk",
+        "created": 1788509517,
+        "model": "deepseek-v4-flash",
+        "system_fingerprint": "a26a7955944dc5c60445bff77fac9c8e",
+        "choices": [
+          {
+            "index": 0,
+            "delta": {
+              "content": null,
+              "reasoning_content": "结果"
+            },
+            "logprobs": null,
+            "finish_reason": null
+          }
+        ],
+        "usage": null
+      },
+      "delay_ms": 36
+    },
+    {
+      "chunk": {
+        "id": "e4bae4f0-5ae9-4c4d-a880-a41bc2d636dd",
+        "object": "chat.completion.chunk",
+        "created": 1788509517,
+        "model": "deepseek-v4-flash",
+        "system_fingerprint": "a26a7955944dc5c60445bff77fac9c8e",
+        "choices": [
+          {
+            "index": 0,
+            "delta": {
+              "content": null,
+              "reasoning_content": "关联"
+            },
+            "logprobs": null,
+            "finish_reason": null
+          }
+        ],
+        "usage": null
+      },
+      "delay_ms": 0
+    },
+    {
+      "chunk": {
+        "id": "e4bae4f0-5ae9-4c4d-a880-a41bc2d636dd",
+        "object": "chat.completion.chunk",
+        "created": 1788509517,
+        "model": "deepseek-v4-flash",
+        "system_fingerprint": "a26a7955944dc5c60445bff77fac9c8e",
+        "choices": [
+          {
+            "index": 0,
+            "delta": {
+              "content": null,
+              "reasoning_content": "，"
+            },
+            "logprobs": null,
+            "finish_reason": null
+          }
+        ],
+        "usage": null
+      },
+      "delay_ms": 4
+    },
+    {
+      "chunk": {
+        "id": "e4bae4f0-5ae9-4c4d-a880-a41bc2d636dd",
+        "object": "chat.completion.chunk",
+        "created": 1788509517,
+        "model": "deepseek-v4-flash",
+        "system_fingerprint": "a26a7955944dc5c60445bff77fac9c8e",
+        "choices": [
+          {
+            "index": 0,
+            "delta": {
+              "content": null,
+              "reasoning_content": "不是"
+            },
+            "logprobs": null,
+            "finish_reason": null
+          }
+        ],
+        "usage": null
+      },
+      "delay_ms": 0
+    },
+    {
+      "chunk": {
+        "id": "e4bae4f0-5ae9-4c4d-a880-a41bc2d636dd",
+        "object": "chat.completion.chunk",
+        "created": 1788509517,
+        "model": "deepseek-v4-flash",
+        "system_fingerprint": "a26a7955944dc5c60445bff77fac9c8e",
+        "choices": [
+          {
+            "index": 0,
+            "delta": {
+              "content": null,
+              "reasoning_content": "决定"
+            },
+            "logprobs": null,
+            "finish_reason": null
+          }
+        ],
+        "usage": null
+      },
+      "delay_ms": 19
+    },
+    {
+      "chunk": {
+        "id": "e4bae4f0-5ae9-4c4d-a880-a41bc2d636dd",
+        "object": "chat.completion.chunk",
+        "created": 1788509517,
+        "model": "deepseek-v4-flash",
+        "system_fingerprint": "a26a7955944dc5c60445bff77fac9c8e",
+        "choices": [
+          {
+            "index": 0,
+            "delta": {
+              "content": null,
+              "reasoning_content": "；"
+            },
+            "logprobs": null,
+            "finish_reason": null
+          }
+        ],
+        "usage": null
+      },
+      "delay_ms": 0
+    },
+    {
+      "chunk": {
+        "id": "e4bae4f0-5ae9-4c4d-a880-a41bc2d636dd",
+        "object": "chat.completion.chunk",
+        "created": 1788509517,
+        "model": "deepseek-v4-flash",
+        "system_fingerprint": "a26a7955944dc5c60445bff77fac9c8e",
+        "choices": [
+          {
+            "index": 0,
+            "delta": {
+              "content": null,
+              "reasoning_content": "未"
+            },
+            "logprobs": null,
+            "finish_reason": null
+          }
+        ],
+        "usage": null
+      },
+      "delay_ms": 44
+    },
+    {
+      "chunk": {
+        "id": "e4bae4f0-5ae9-4c4d-a880-a41bc2d636dd",
+        "object": "chat.completion.chunk",
+        "created": 1788509517,
+        "model": "deepseek-v4-flash",
+        "system_fingerprint": "a26a7955944dc5c60445bff77fac9c8e",
+        "choices": [
+          {
+            "index": 0,
+            "delta": {
+              "content": null,
+              "reasoning_content": "提"
+            },
+            "logprobs": null,
+            "finish_reason": null
+          }
+        ],
+        "usage": null
+      },
+      "delay_ms": 0
+    },
+    {
+      "chunk": {
+        "id": "e4bae4f0-5ae9-4c4d-a880-a41bc2d636dd",
+        "object": "chat.completion.chunk",
+        "created": 1788509517,
+        "model": "deepseek-v4-flash",
+        "system_fingerprint": "a26a7955944dc5c60445bff77fac9c8e",
+        "choices": [
+          {
+            "index": 0,
+            "delta": {
+              "content": null,
+              "reasoning_content": "叠加"
+            },
+            "logprobs": null,
+            "finish_reason": null
+          }
+        ],
+        "usage": null
+      },
+      "delay_ms": 8
+    },
+    {
+      "chunk": {
+        "id": "e4bae4f0-5ae9-4c4d-a880-a41bc2d636dd",
+        "object": "chat.completion.chunk",
+        "created": 1788509517,
+        "model": "deepseek-v4-flash",
+        "system_fingerprint": "a26a7955944dc5c60445bff77fac9c8e",
+        "choices": [
+          {
+            "index": 0,
+            "delta": {
+              "content": null,
+              "reasoning_content": "态"
+            },
+            "logprobs": null,
+            "finish_reason": null
+          }
+        ],
+        "usage": null
+      },
+      "delay_ms": 15
+    },
+    {
+      "chunk": {
+        "id": "e4bae4f0-5ae9-4c4d-a880-a41bc2d636dd",
+        "object": "chat.completion.chunk",
+        "created": 1788509517,
+        "model": "deepseek-v4-flash",
+        "system_fingerprint": "a26a7955944dc5c60445bff77fac9c8e",
+        "choices": [
+          {
+            "index": 0,
+            "delta": {
+              "content": null,
+              "reasoning_content": "、"
+            },
+            "logprobs": null,
+            "finish_reason": null
+          }
+        ],
+        "usage": null
+      },
+      "delay_ms": 25
+    },
+    {
+      "chunk": {
+        "id": "e4bae4f0-5ae9-4c4d-a880-a41bc2d636dd",
+        "object": "chat.completion.chunk",
+        "created": 1788509517,
+        "model": "deepseek-v4-flash",
+        "system_fingerprint": "a26a7955944dc5c60445bff77fac9c8e",
+        "choices": [
+          {
+            "index": 0,
+            "delta": {
+              "content": null,
+              "reasoning_content": "坍"
+            },
+            "logprobs": null,
+            "finish_reason": null
+          }
+        ],
+        "usage": null
+      },
+      "delay_ms": 0
+    },
+    {
+      "chunk": {
+        "id": "e4bae4f0-5ae9-4c4d-a880-a41bc2d636dd",
+        "object": "chat.completion.chunk",
+        "created": 1788509517,
+        "model": "deepseek-v4-flash",
+        "system_fingerprint": "a26a7955944dc5c60445bff77fac9c8e",
+        "choices": [
+          {
+            "index": 0,
+            "delta": {
+              "content": null,
+              "reasoning_content": "缩"
+            },
+            "logprobs": null,
+            "finish_reason": null
+          }
+        ],
+        "usage": null
+      },
+      "delay_ms": 22
+    },
+    {
+      "chunk": {
+        "id": "e4bae4f0-5ae9-4c4d-a880-a41bc2d636dd",
+        "object": "chat.completion.chunk",
+        "created": 1788509517,
+        "model": "deepseek-v4-flash",
+        "system_fingerprint": "a26a7955944dc5c60445bff77fac9c8e",
+        "choices": [
+          {
+            "index": 0,
+            "delta": {
+              "content": null,
+              "reasoning_content": "、"
+            },
+            "logprobs": null,
+            "finish_reason": null
+          }
+        ],
+        "usage": null
+      },
+      "delay_ms": 0
+    },
+    {
+      "chunk": {
+        "id": "e4bae4f0-5ae9-4c4d-a880-a41bc2d636dd",
+        "object": "chat.completion.chunk",
+        "created": 1788509517,
+        "model": "deepseek-v4-flash",
+        "system_fingerprint": "a26a7955944dc5c60445bff77fac9c8e",
+        "choices": [
+          {
+            "index": 0,
+            "delta": {
+              "content": null,
+              "reasoning_content": "关联"
+            },
+            "logprobs": null,
+            "finish_reason": null
+          }
+        ],
+        "usage": null
+      },
+      "delay_ms": 0
+    },
+    {
+      "chunk": {
+        "id": "e4bae4f0-5ae9-4c4d-a880-a41bc2d636dd",
+        "object": "chat.completion.chunk",
+        "created": 1788509517,
+        "model": "deepseek-v4-flash",
+        "system_fingerprint": "a26a7955944dc5c60445bff77fac9c8e",
+        "choices": [
+          {
+            "index": 0,
+            "delta": {
+              "content": null,
+              "reasoning_content": "是"
+            },
+            "logprobs": null,
+            "finish_reason": null
+          }
+        ],
+        "usage": null
+      },
+      "delay_ms": 62
+    },
+    {
+      "chunk": {
+        "id": "e4bae4f0-5ae9-4c4d-a880-a41bc2d636dd",
+        "object": "chat.completion.chunk",
+        "created": 1788509517,
+        "model": "deepseek-v4-flash",
+        "system_fingerprint": "a26a7955944dc5c60445bff77fac9c8e",
+        "choices": [
+          {
+            "index": 0,
+            "delta": {
+              "content": null,
+              "reasoning_content": "量子"
+            },
+            "logprobs": null,
+            "finish_reason": null
+          }
+        ],
+        "usage": null
+      },
+      "delay_ms": 0
+    },
+    {
+      "chunk": {
+        "id": "e4bae4f0-5ae9-4c4d-a880-a41bc2d636dd",
+        "object": "chat.completion.chunk",
+        "created": 1788509517,
+        "model": "deepseek-v4-flash",
+        "system_fingerprint": "a26a7955944dc5c60445bff77fac9c8e",
+        "choices": [
+          {
+            "index": 0,
+            "delta": {
+              "content": null,
+              "reasoning_content": "态"
+            },
+            "logprobs": null,
+            "finish_reason": null
+          }
+        ],
+        "usage": null
+      },
+      "delay_ms": 0
+    },
+    {
+      "chunk": {
+        "id": "e4bae4f0-5ae9-4c4d-a880-a41bc2d636dd",
+        "object": "chat.completion.chunk",
+        "created": 1788509517,
+        "model": "deepseek-v4-flash",
+        "system_fingerprint": "a26a7955944dc5c60445bff77fac9c8e",
+        "choices": [
+          {
+            "index": 0,
+            "delta": {
+              "content": null,
+              "reasoning_content": "整体"
+            },
+            "logprobs": null,
+            "finish_reason": null
+          }
+        ],
+        "usage": null
+      },
+      "delay_ms": 19
+    },
+    {
+      "chunk": {
+        "id": "e4bae4f0-5ae9-4c4d-a880-a41bc2d636dd",
+        "object": "chat.completion.chunk",
+        "created": 1788509517,
+        "model": "deepseek-v4-flash",
+        "system_fingerprint": "a26a7955944dc5c60445bff77fac9c8e",
+        "choices": [
+          {
+            "index": 0,
+            "delta": {
+              "content": null,
+              "reasoning_content": "性质"
+            },
+            "logprobs": null,
+            "finish_reason": null
+          }
+        ],
+        "usage": null
+      },
+      "delay_ms": 25
+    },
+    {
+      "chunk": {
+        "id": "e4bae4f0-5ae9-4c4d-a880-a41bc2d636dd",
+        "object": "chat.completion.chunk",
+        "created": 1788509517,
+        "model": "deepseek-v4-flash",
+        "system_fingerprint": "a26a7955944dc5c60445bff77fac9c8e",
+        "choices": [
+          {
+            "index": 0,
+            "delta": {
+              "content": null,
+              "reasoning_content": "，"
+            },
+            "logprobs": null,
+            "finish_reason": null
+          }
+        ],
+        "usage": null
+      },
+      "delay_ms": 26
+    },
+    {
+      "chunk": {
+        "id": "e4bae4f0-5ae9-4c4d-a880-a41bc2d636dd",
+        "object": "chat.completion.chunk",
+        "created": 1788509517,
+        "model": "deepseek-v4-flash",
+        "system_fingerprint": "a26a7955944dc5c60445bff77fac9c8e",
+        "choices": [
+          {
+            "index": 0,
+            "delta": {
+              "content": null,
+              "reasoning_content": "非"
+            },
+            "logprobs": null,
+            "finish_reason": null
+          }
+        ],
+        "usage": null
+      },
+      "delay_ms": 0
+    },
+    {
+      "chunk": {
+        "id": "e4bae4f0-5ae9-4c4d-a880-a41bc2d636dd",
+        "object": "chat.completion.chunk",
+        "created": 1788509517,
+        "model": "deepseek-v4-flash",
+        "system_fingerprint": "a26a7955944dc5c60445bff77fac9c8e",
+        "choices": [
+          {
+            "index": 0,
+            "delta": {
+              "content": null,
+              "reasoning_content": "经典"
+            },
+            "logprobs": null,
+            "finish_reason": null
+          }
+        ],
+        "usage": null
+      },
+      "delay_ms": 0
+    },
+    {
+      "chunk": {
+        "id": "e4bae4f0-5ae9-4c4d-a880-a41bc2d636dd",
+        "object": "chat.completion.chunk",
+        "created": 1788509517,
+        "model": "deepseek-v4-flash",
+        "system_fingerprint": "a26a7955944dc5c60445bff77fac9c8e",
+        "choices": [
+          {
+            "index": 0,
+            "delta": {
+              "content": null,
+              "reasoning_content": "关联"
+            },
+            "logprobs": null,
+            "finish_reason": null
+          }
+        ],
+        "usage": null
+      },
+      "delay_ms": 9
+    },
+    {
+      "chunk": {
+        "id": "e4bae4f0-5ae9-4c4d-a880-a41bc2d636dd",
+        "object": "chat.completion.chunk",
+        "created": 1788509517,
+        "model": "deepseek-v4-flash",
+        "system_fingerprint": "a26a7955944dc5c60445bff77fac9c8e",
+        "choices": [
+          {
+            "index": 0,
+            "delta": {
+              "content": null,
+              "reasoning_content": "；"
+            },
+            "logprobs": null,
+            "finish_reason": null
+          }
+        ],
+        "usage": null
+      },
+      "delay_ms": 32
+    },
+    {
+      "chunk": {
+        "id": "e4bae4f0-5ae9-4c4d-a880-a41bc2d636dd",
+        "object": "chat.completion.chunk",
+        "created": 1788509517,
+        "model": "deepseek-v4-flash",
+        "system_fingerprint": "a26a7955944dc5c60445bff77fac9c8e",
+        "choices": [
+          {
+            "index": 0,
+            "delta": {
+              "content": null,
+              "reasoning_content": "没说"
+            },
+            "logprobs": null,
+            "finish_reason": null
+          }
+        ],
+        "usage": null
+      },
+      "delay_ms": 0
+    },
+    {
+      "chunk": {
+        "id": "e4bae4f0-5ae9-4c4d-a880-a41bc2d636dd",
+        "object": "chat.completion.chunk",
+        "created": 1788509517,
+        "model": "deepseek-v4-flash",
+        "system_fingerprint": "a26a7955944dc5c60445bff77fac9c8e",
+        "choices": [
+          {
+            "index": 0,
+            "delta": {
+              "content": null,
+              "reasoning_content": "纠缠"
+            },
+            "logprobs": null,
+            "finish_reason": null
+          }
+        ],
+        "usage": null
+      },
+      "delay_ms": 7
+    },
+    {
+      "chunk": {
+        "id": "e4bae4f0-5ae9-4c4d-a880-a41bc2d636dd",
+        "object": "chat.completion.chunk",
+        "created": 1788509517,
+        "model": "deepseek-v4-flash",
+        "system_fingerprint": "a26a7955944dc5c60445bff77fac9c8e",
+        "choices": [
+          {
+            "index": 0,
+            "delta": {
+              "content": null,
+              "reasoning_content": "不能"
+            },
+            "logprobs": null,
+            "finish_reason": null
+          }
+        ],
+        "usage": null
+      },
+      "delay_ms": 20
+    },
+    {
+      "chunk": {
+        "id": "e4bae4f0-5ae9-4c4d-a880-a41bc2d636dd",
+        "object": "chat.completion.chunk",
+        "created": 1788509517,
+        "model": "deepseek-v4-flash",
+        "system_fingerprint": "a26a7955944dc5c60445bff77fac9c8e",
+        "choices": [
+          {
+            "index": 0,
+            "delta": {
+              "content": null,
+              "reasoning_content": "用来"
+            },
+            "logprobs": null,
+            "finish_reason": null
+          }
+        ],
+        "usage": null
+      },
+      "delay_ms": 0
+    },
+    {
+      "chunk": {
+        "id": "e4bae4f0-5ae9-4c4d-a880-a41bc2d636dd",
+        "object": "chat.completion.chunk",
+        "created": 1788509517,
+        "model": "deepseek-v4-flash",
+        "system_fingerprint": "a26a7955944dc5c60445bff77fac9c8e",
+        "choices": [
+          {
+            "index": 0,
+            "delta": {
+              "content": null,
+              "reasoning_content": "超"
+            },
+            "logprobs": null,
+            "finish_reason": null
+          }
+        ],
+        "usage": null
+      },
+      "delay_ms": 20
+    },
+    {
+      "chunk": {
+        "id": "e4bae4f0-5ae9-4c4d-a880-a41bc2d636dd",
+        "object": "chat.completion.chunk",
+        "created": 1788509517,
+        "model": "deepseek-v4-flash",
+        "system_fingerprint": "a26a7955944dc5c60445bff77fac9c8e",
+        "choices": [
+          {
+            "index": 0,
+            "delta": {
+              "content": null,
+              "reasoning_content": "光"
+            },
+            "logprobs": null,
+            "finish_reason": null
+          }
+        ],
+        "usage": null
+      },
+      "delay_ms": 22
+    },
+    {
+      "chunk": {
+        "id": "e4bae4f0-5ae9-4c4d-a880-a41bc2d636dd",
+        "object": "chat.completion.chunk",
+        "created": 1788509517,
+        "model": "deepseek-v4-flash",
+        "system_fingerprint": "a26a7955944dc5c60445bff77fac9c8e",
+        "choices": [
+          {
+            "index": 0,
+            "delta": {
+              "content": null,
+              "reasoning_content": "速"
+            },
+            "logprobs": null,
+            "finish_reason": null
+          }
+        ],
+        "usage": null
+      },
+      "delay_ms": 0
+    },
+    {
+      "chunk": {
+        "id": "e4bae4f0-5ae9-4c4d-a880-a41bc2d636dd",
+        "object": "chat.completion.chunk",
+        "created": 1788509517,
+        "model": "deepseek-v4-flash",
+        "system_fingerprint": "a26a7955944dc5c60445bff77fac9c8e",
+        "choices": [
+          {
+            "index": 0,
+            "delta": {
+              "content": null,
+              "reasoning_content": "通信"
+            },
+            "logprobs": null,
+            "finish_reason": null
+          }
+        ],
+        "usage": null
+      },
+      "delay_ms": 0
+    },
+    {
+      "chunk": {
+        "id": "e4bae4f0-5ae9-4c4d-a880-a41bc2d636dd",
+        "object": "chat.completion.chunk",
+        "created": 1788509517,
+        "model": "deepseek-v4-flash",
+        "system_fingerprint": "a26a7955944dc5c60445bff77fac9c8e",
+        "choices": [
+          {
+            "index": 0,
+            "delta": {
+              "content": null,
+              "reasoning_content": "；"
+            },
+            "logprobs": null,
+            "finish_reason": null
+          }
+        ],
+        "usage": null
+      },
+      "delay_ms": 22
+    },
+    {
+      "chunk": {
+        "id": "e4bae4f0-5ae9-4c4d-a880-a41bc2d636dd",
+        "object": "chat.completion.chunk",
+        "created": 1788509517,
+        "model": "deepseek-v4-flash",
+        "system_fingerprint": "a26a7955944dc5c60445bff77fac9c8e",
+        "choices": [
+          {
+            "index": 0,
+            "delta": {
+              "content": null,
+              "reasoning_content": "可能"
+            },
+            "logprobs": null,
+            "finish_reason": null
+          }
+        ],
+        "usage": null
+      },
+      "delay_ms": 24
+    },
+    {
+      "chunk": {
+        "id": "e4bae4f0-5ae9-4c4d-a880-a41bc2d636dd",
+        "object": "chat.completion.chunk",
+        "created": 1788509517,
+        "model": "deepseek-v4-flash",
+        "system_fingerprint": "a26a7955944dc5c60445bff77fac9c8e",
+        "choices": [
+          {
+            "index": 0,
+            "delta": {
+              "content": null,
+              "reasoning_content": "暗示"
+            },
+            "logprobs": null,
+            "finish_reason": null
+          }
+        ],
+        "usage": null
+      },
+      "delay_ms": 16
+    },
+    {
+      "chunk": {
+        "id": "e4bae4f0-5ae9-4c4d-a880-a41bc2d636dd",
+        "object": "chat.completion.chunk",
+        "created": 1788509517,
+        "model": "deepseek-v4-flash",
+        "system_fingerprint": "a26a7955944dc5c60445bff77fac9c8e",
+        "choices": [
+          {
+            "index": 0,
+            "delta": {
+              "content": null,
+              "reasoning_content": "“"
+            },
+            "logprobs": null,
+            "finish_reason": null
+          }
+        ],
+        "usage": null
+      },
+      "delay_ms": 22
+    },
+    {
+      "chunk": {
+        "id": "e4bae4f0-5ae9-4c4d-a880-a41bc2d636dd",
+        "object": "chat.completion.chunk",
+        "created": 1788509517,
+        "model": "deepseek-v4-flash",
+        "system_fingerprint": "a26a7955944dc5c60445bff77fac9c8e",
+        "choices": [
+          {
+            "index": 0,
+            "delta": {
+              "content": null,
+              "reasoning_content": "超越"
+            },
+            "logprobs": null,
+            "finish_reason": null
+          }
+        ],
+        "usage": null
+      },
+      "delay_ms": 0
+    },
+    {
+      "chunk": {
+        "id": "e4bae4f0-5ae9-4c4d-a880-a41bc2d636dd",
+        "object": "chat.completion.chunk",
+        "created": 1788509517,
+        "model": "deepseek-v4-flash",
+        "system_fingerprint": "a26a7955944dc5c60445bff77fac9c8e",
+        "choices": [
+          {
+            "index": 0,
+            "delta": {
+              "content": null,
+              "reasoning_content": "时空"
+            },
+            "logprobs": null,
+            "finish_reason": null
+          }
+        ],
+        "usage": null
+      },
+      "delay_ms": 21
+    },
+    {
+      "chunk": {
+        "id": "e4bae4f0-5ae9-4c4d-a880-a41bc2d636dd",
+        "object": "chat.completion.chunk",
+        "created": 1788509517,
+        "model": "deepseek-v4-flash",
+        "system_fingerprint": "a26a7955944dc5c60445bff77fac9c8e",
+        "choices": [
+          {
+            "index": 0,
+            "delta": {
+              "content": null,
+              "reasoning_content": "”"
+            },
+            "logprobs": null,
+            "finish_reason": null
+          }
+        ],
+        "usage": null
+      },
+      "delay_ms": 0
+    },
+    {
+      "chunk": {
+        "id": "e4bae4f0-5ae9-4c4d-a880-a41bc2d636dd",
+        "object": "chat.completion.chunk",
+        "created": 1788509517,
+        "model": "deepseek-v4-flash",
+        "system_fingerprint": "a26a7955944dc5c60445bff77fac9c8e",
+        "choices": [
+          {
+            "index": 0,
+            "delta": {
+              "content": null,
+              "reasoning_content": "容易"
+            },
+            "logprobs": null,
+            "finish_reason": null
+          }
+        ],
+        "usage": null
+      },
+      "delay_ms": 49
+    },
+    {
+      "chunk": {
+        "id": "e4bae4f0-5ae9-4c4d-a880-a41bc2d636dd",
+        "object": "chat.completion.chunk",
+        "created": 1788509517,
+        "model": "deepseek-v4-flash",
+        "system_fingerprint": "a26a7955944dc5c60445bff77fac9c8e",
+        "choices": [
+          {
+            "index": 0,
+            "delta": {
+              "content": null,
+              "reasoning_content": "误解"
+            },
+            "logprobs": null,
+            "finish_reason": null
+          }
+        ],
+        "usage": null
+      },
+      "delay_ms": 0
+    },
+    {
+      "chunk": {
+        "id": "e4bae4f0-5ae9-4c4d-a880-a41bc2d636dd",
+        "object": "chat.completion.chunk",
+        "created": 1788509517,
+        "model": "deepseek-v4-flash",
+        "system_fingerprint": "a26a7955944dc5c60445bff77fac9c8e",
+        "choices": [
+          {
+            "index": 0,
+            "delta": {
+              "content": null,
+              "reasoning_content": "。"
+            },
+            "logprobs": null,
+            "finish_reason": null
+          }
+        ],
+        "usage": null
+      },
+      "delay_ms": 0
+    },
+    {
+      "chunk": {
+        "id": "e4bae4f0-5ae9-4c4d-a880-a41bc2d636dd",
+        "object": "chat.completion.chunk",
+        "created": 1788509517,
+        "model": "deepseek-v4-flash",
+        "system_fingerprint": "a26a7955944dc5c60445bff77fac9c8e",
+        "choices": [
+          {
+            "index": 0,
+            "delta": {
+              "content": null,
+              "reasoning_content": "但"
+            },
+            "logprobs": null,
+            "finish_reason": null
+          }
+        ],
+        "usage": null
+      },
+      "delay_ms": 0
+    },
+    {
+      "chunk": {
+        "id": "e4bae4f0-5ae9-4c4d-a880-a41bc2d636dd",
+        "object": "chat.completion.chunk",
+        "created": 1788509517,
+        "model": "deepseek-v4-flash",
+        "system_fingerprint": "a26a7955944dc5c60445bff77fac9c8e",
+        "choices": [
+          {
+            "index": 0,
+            "delta": {
+              "content": null,
+              "reasoning_content": "用户"
+            },
+            "logprobs": null,
+            "finish_reason": null
+          }
+        ],
+        "usage": null
+      },
+      "delay_ms": 0
+    },
+    {
+      "chunk": {
+        "id": "e4bae4f0-5ae9-4c4d-a880-a41bc2d636dd",
+        "object": "chat.completion.chunk",
+        "created": 1788509517,
+        "model": "deepseek-v4-flash",
+        "system_fingerprint": "a26a7955944dc5c60445bff77fac9c8e",
+        "choices": [
+          {
+            "index": 0,
+            "delta": {
+              "content": null,
+              "reasoning_content": "要求"
+            },
+            "logprobs": null,
+            "finish_reason": null
+          }
+        ],
+        "usage": null
+      },
+      "delay_ms": 15
+    },
+    {
+      "chunk": {
+        "id": "e4bae4f0-5ae9-4c4d-a880-a41bc2d636dd",
+        "object": "chat.completion.chunk",
+        "created": 1788509517,
+        "model": "deepseek-v4-flash",
+        "system_fingerprint": "a26a7955944dc5c60445bff77fac9c8e",
+        "choices": [
+          {
+            "index": 0,
+            "delta": {
+              "content": null,
+              "reasoning_content": "一句话"
+            },
+            "logprobs": null,
+            "finish_reason": null
+          }
+        ],
+        "usage": null
+      },
+      "delay_ms": 0
+    },
+    {
+      "chunk": {
+        "id": "e4bae4f0-5ae9-4c4d-a880-a41bc2d636dd",
+        "object": "chat.completion.chunk",
+        "created": 1788509517,
+        "model": "deepseek-v4-flash",
+        "system_fingerprint": "a26a7955944dc5c60445bff77fac9c8e",
+        "choices": [
+          {
+            "index": 0,
+            "delta": {
+              "content": null,
+              "reasoning_content": "解释"
+            },
+            "logprobs": null,
+            "finish_reason": null
+          }
+        ],
+        "usage": null
+      },
+      "delay_ms": 0
+    },
+    {
+      "chunk": {
+        "id": "e4bae4f0-5ae9-4c4d-a880-a41bc2d636dd",
+        "object": "chat.completion.chunk",
+        "created": 1788509517,
+        "model": "deepseek-v4-flash",
+        "system_fingerprint": "a26a7955944dc5c60445bff77fac9c8e",
+        "choices": [
+          {
+            "index": 0,
+            "delta": {
+              "content": null,
+              "reasoning_content": "，"
+            },
+            "logprobs": null,
+            "finish_reason": null
+          }
+        ],
+        "usage": null
+      },
+      "delay_ms": 27
+    },
+    {
+      "chunk": {
+        "id": "e4bae4f0-5ae9-4c4d-a880-a41bc2d636dd",
+        "object": "chat.completion.chunk",
+        "created": 1788509517,
+        "model": "deepseek-v4-flash",
+        "system_fingerprint": "a26a7955944dc5c60445bff77fac9c8e",
+        "choices": [
+          {
+            "index": 0,
+            "delta": {
+              "content": null,
+              "reasoning_content": "简化"
+            },
+            "logprobs": null,
+            "finish_reason": null
+          }
+        ],
+        "usage": null
+      },
+      "delay_ms": 0
+    },
+    {
+      "chunk": {
+        "id": "e4bae4f0-5ae9-4c4d-a880-a41bc2d636dd",
+        "object": "chat.completion.chunk",
+        "created": 1788509517,
+        "model": "deepseek-v4-flash",
+        "system_fingerprint": "a26a7955944dc5c60445bff77fac9c8e",
+        "choices": [
+          {
+            "index": 0,
+            "delta": {
+              "content": null,
+              "reasoning_content": "可"
+            },
+            "logprobs": null,
+            "finish_reason": null
+          }
+        ],
+        "usage": null
+      },
+      "delay_ms": 11
+    },
+    {
+      "chunk": {
+        "id": "e4bae4f0-5ae9-4c4d-a880-a41bc2d636dd",
+        "object": "chat.completion.chunk",
+        "created": 1788509517,
+        "model": "deepseek-v4-flash",
+        "system_fingerprint": "a26a7955944dc5c60445bff77fac9c8e",
+        "choices": [
+          {
+            "index": 0,
+            "delta": {
+              "content": null,
+              "reasoning_content": "接受"
+            },
+            "logprobs": null,
+            "finish_reason": null
+          }
+        ],
+        "usage": null
+      },
+      "delay_ms": 0
+    },
+    {
+      "chunk": {
+        "id": "e4bae4f0-5ae9-4c4d-a880-a41bc2d636dd",
+        "object": "chat.completion.chunk",
+        "created": 1788509517,
+        "model": "deepseek-v4-flash",
+        "system_fingerprint": "a26a7955944dc5c60445bff77fac9c8e",
+        "choices": [
+          {
+            "index": 0,
+            "delta": {
+              "content": null,
+              "reasoning_content": "。"
+            },
+            "logprobs": null,
+            "finish_reason": null
+          }
+        ],
+        "usage": null
+      },
+      "delay_ms": 0
+    },
+    {
+      "chunk": {
+        "id": "e4bae4f0-5ae9-4c4d-a880-a41bc2d636dd",
+        "object": "chat.completion.chunk",
+        "created": 1788509517,
+        "model": "deepseek-v4-flash",
+        "system_fingerprint": "a26a7955944dc5c60445bff77fac9c8e",
+        "choices": [
+          {
+            "index": 0,
+            "delta": {
+              "content": null,
+              "reasoning_content": "需"
+            },
+            "logprobs": null,
+            "finish_reason": null
+          }
+        ],
+        "usage": null
+      },
+      "delay_ms": 19
+    },
+    {
+      "chunk": {
+        "id": "e4bae4f0-5ae9-4c4d-a880-a41bc2d636dd",
+        "object": "chat.completion.chunk",
+        "created": 1788509517,
+        "model": "deepseek-v4-flash",
+        "system_fingerprint": "a26a7955944dc5c60445bff77fac9c8e",
+        "choices": [
+          {
+            "index": 0,
+            "delta": {
+              "content": null,
+              "reasoning_content": "客观"
+            },
+            "logprobs": null,
+            "finish_reason": null
+          }
+        ],
+        "usage": null
+      },
+      "delay_ms": 27
+    },
+    {
+      "chunk": {
+        "id": "e4bae4f0-5ae9-4c4d-a880-a41bc2d636dd",
+        "object": "chat.completion.chunk",
+        "created": 1788509517,
+        "model": "deepseek-v4-flash",
+        "system_fingerprint": "a26a7955944dc5c60445bff77fac9c8e",
+        "choices": [
+          {
+            "index": 0,
+            "delta": {
+              "content": null,
+              "reasoning_content": "。\n\n"
+            },
+            "logprobs": null,
+            "finish_reason": null
+          }
+        ],
+        "usage": null
+      },
+      "delay_ms": 19
+    },
+    {
+      "chunk": {
+        "id": "e4bae4f0-5ae9-4c4d-a880-a41bc2d636dd",
+        "object": "chat.completion.chunk",
+        "created": 1788509517,
+        "model": "deepseek-v4-flash",
+        "system_fingerprint": "a26a7955944dc5c60445bff77fac9c8e",
+        "choices": [
+          {
+            "index": 0,
+            "delta": {
+              "content": null,
+              "reasoning_content": "注意"
+            },
+            "logprobs": null,
+            "finish_reason": null
+          }
+        ],
+        "usage": null
+      },
+      "delay_ms": 0
+    },
+    {
+      "chunk": {
+        "id": "e4bae4f0-5ae9-4c4d-a880-a41bc2d636dd",
+        "object": "chat.completion.chunk",
+        "created": 1788509517,
+        "model": "deepseek-v4-flash",
+        "system_fingerprint": "a26a7955944dc5c60445bff77fac9c8e",
+        "choices": [
+          {
+            "index": 0,
+            "delta": {
+              "content": null,
+              "reasoning_content": "："
+            },
+            "logprobs": null,
+            "finish_reason": null
+          }
+        ],
+        "usage": null
+      },
+      "delay_ms": 17
+    },
+    {
+      "chunk": {
+        "id": "e4bae4f0-5ae9-4c4d-a880-a41bc2d636dd",
+        "object": "chat.completion.chunk",
+        "created": 1788509517,
+        "model": "deepseek-v4-flash",
+        "system_fingerprint": "a26a7955944dc5c60445bff77fac9c8e",
+        "choices": [
+          {
+            "index": 0,
+            "delta": {
+              "content": null,
+              "reasoning_content": "回答"
+            },
+            "logprobs": null,
+            "finish_reason": null
+          }
+        ],
+        "usage": null
+      },
+      "delay_ms": 0
+    },
+    {
+      "chunk": {
+        "id": "e4bae4f0-5ae9-4c4d-a880-a41bc2d636dd",
+        "object": "chat.completion.chunk",
+        "created": 1788509517,
+        "model": "deepseek-v4-flash",
+        "system_fingerprint": "a26a7955944dc5c60445bff77fac9c8e",
+        "choices": [
+          {
+            "index": 0,
+            "delta": {
+              "content": null,
+              "reasoning_content": "1"
+            },
+            "logprobs": null,
+            "finish_reason": null
+          }
+        ],
+        "usage": null
+      },
+      "delay_ms": 20
+    },
+    {
+      "chunk": {
+        "id": "e4bae4f0-5ae9-4c4d-a880-a41bc2d636dd",
+        "object": "chat.completion.chunk",
+        "created": 1788509517,
+        "model": "deepseek-v4-flash",
+        "system_fingerprint": "a26a7955944dc5c60445bff77fac9c8e",
+        "choices": [
+          {
+            "index": 0,
+            "delta": {
+              "content": null,
+              "reasoning_content": "“"
+            },
+            "logprobs": null,
+            "finish_reason": null
+          }
+        ],
+        "usage": null
+      },
+      "delay_ms": 0
+    },
+    {
+      "chunk": {
+        "id": "e4bae4f0-5ae9-4c4d-a880-a41bc2d636dd",
+        "object": "chat.completion.chunk",
+        "created": 1788509517,
+        "model": "deepseek-v4-flash",
+        "system_fingerprint": "a26a7955944dc5c60445bff77fac9c8e",
+        "choices": [
+          {
+            "index": 0,
+            "delta": {
+              "content": null,
+              "reasoning_content": "仿佛"
+            },
+            "logprobs": null,
+            "finish_reason": null
+          }
+        ],
+        "usage": null
+      },
+      "delay_ms": 20
+    },
+    {
+      "chunk": {
+        "id": "e4bae4f0-5ae9-4c4d-a880-a41bc2d636dd",
+        "object": "chat.completion.chunk",
+        "created": 1788509517,
+        "model": "deepseek-v4-flash",
+        "system_fingerprint": "a26a7955944dc5c60445bff77fac9c8e",
+        "choices": [
+          {
+            "index": 0,
+            "delta": {
+              "content": null,
+              "reasoning_content": "共享"
+            },
+            "logprobs": null,
+            "finish_reason": null
+          }
+        ],
+        "usage": null
+      },
+      "delay_ms": 34
+    },
+    {
+      "chunk": {
+        "id": "e4bae4f0-5ae9-4c4d-a880-a41bc2d636dd",
+        "object": "chat.completion.chunk",
+        "created": 1788509517,
+        "model": "deepseek-v4-flash",
+        "system_fingerprint": "a26a7955944dc5c60445bff77fac9c8e",
+        "choices": [
+          {
+            "index": 0,
+            "delta": {
+              "content": null,
+              "reasoning_content": "同一个"
+            },
+            "logprobs": null,
+            "finish_reason": null
+          }
+        ],
+        "usage": null
+      },
+      "delay_ms": 43
+    },
+    {
+      "chunk": {
+        "id": "e4bae4f0-5ae9-4c4d-a880-a41bc2d636dd",
+        "object": "chat.completion.chunk",
+        "created": 1788509517,
+        "model": "deepseek-v4-flash",
+        "system_fingerprint": "a26a7955944dc5c60445bff77fac9c8e",
+        "choices": [
+          {
+            "index": 0,
+            "delta": {
+              "content": null,
+              "reasoning_content": "整体"
+            },
+            "logprobs": null,
+            "finish_reason": null
+          }
+        ],
+        "usage": null
+      },
+      "delay_ms": 0
+    },
+    {
+      "chunk": {
+        "id": "e4bae4f0-5ae9-4c4d-a880-a41bc2d636dd",
+        "object": "chat.completion.chunk",
+        "created": 1788509517,
+        "model": "deepseek-v4-flash",
+        "system_fingerprint": "a26a7955944dc5c60445bff77fac9c8e",
+        "choices": [
+          {
+            "index": 0,
+            "delta": {
+              "content": null,
+              "reasoning_content": "命运"
+            },
+            "logprobs": null,
+            "finish_reason": null
+          }
+        ],
+        "usage": null
+      },
+      "delay_ms": 0
+    },
+    {
+      "chunk": {
+        "id": "e4bae4f0-5ae9-4c4d-a880-a41bc2d636dd",
+        "object": "chat.completion.chunk",
+        "created": 1788509517,
+        "model": "deepseek-v4-flash",
+        "system_fingerprint": "a26a7955944dc5c60445bff77fac9c8e",
+        "choices": [
+          {
+            "index": 0,
+            "delta": {
+              "content": null,
+              "reasoning_content": "”"
+            },
+            "logprobs": null,
+            "finish_reason": null
+          }
+        ],
+        "usage": null
+      },
+      "delay_ms": 0
+    },
+    {
+      "chunk": {
+        "id": "e4bae4f0-5ae9-4c4d-a880-a41bc2d636dd",
+        "object": "chat.completion.chunk",
+        "created": 1788509517,
+        "model": "deepseek-v4-flash",
+        "system_fingerprint": "a26a7955944dc5c60445bff77fac9c8e",
+        "choices": [
+          {
+            "index": 0,
+            "delta": {
+              "content": null,
+              "reasoning_content": "较"
+            },
+            "logprobs": null,
+            "finish_reason": null
+          }
+        ],
+        "usage": null
+      },
+      "delay_ms": 0
+    },
+    {
+      "chunk": {
+        "id": "e4bae4f0-5ae9-4c4d-a880-a41bc2d636dd",
+        "object": "chat.completion.chunk",
+        "created": 1788509517,
+        "model": "deepseek-v4-flash",
+        "system_fingerprint": "a26a7955944dc5c60445bff77fac9c8e",
+        "choices": [
+          {
+            "index": 0,
+            "delta": {
+              "content": null,
+              "reasoning_content": "文学"
+            },
+            "logprobs": null,
+            "finish_reason": null
+          }
+        ],
+        "usage": null
+      },
+      "delay_ms": 8
+    },
+    {
+      "chunk": {
+        "id": "e4bae4f0-5ae9-4c4d-a880-a41bc2d636dd",
+        "object": "chat.completion.chunk",
+        "created": 1788509517,
+        "model": "deepseek-v4-flash",
+        "system_fingerprint": "a26a7955944dc5c60445bff77fac9c8e",
+        "choices": [
+          {
+            "index": 0,
+            "delta": {
+              "content": null,
+              "reasoning_content": "化"
+            },
+            "logprobs": null,
+            "finish_reason": null
+          }
+        ],
+        "usage": null
+      },
+      "delay_ms": 35
+    },
+    {
+      "chunk": {
+        "id": "e4bae4f0-5ae9-4c4d-a880-a41bc2d636dd",
+        "object": "chat.completion.chunk",
+        "created": 1788509517,
+        "model": "deepseek-v4-flash",
+        "system_fingerprint": "a26a7955944dc5c60445bff77fac9c8e",
+        "choices": [
+          {
+            "index": 0,
+            "delta": {
+              "content": null,
+              "reasoning_content": "。"
+            },
+            "logprobs": null,
+            "finish_reason": null
+          }
+        ],
+        "usage": null
+      },
+      "delay_ms": 0
+    },
+    {
+      "chunk": {
+        "id": "e4bae4f0-5ae9-4c4d-a880-a41bc2d636dd",
+        "object": "chat.completion.chunk",
+        "created": 1788509517,
+        "model": "deepseek-v4-flash",
+        "system_fingerprint": "a26a7955944dc5c60445bff77fac9c8e",
+        "choices": [
+          {
+            "index": 0,
+            "delta": {
+              "content": null,
+              "reasoning_content": "回答"
+            },
+            "logprobs": null,
+            "finish_reason": null
+          }
+        ],
+        "usage": null
+      },
+      "delay_ms": 0
+    },
+    {
+      "chunk": {
+        "id": "e4bae4f0-5ae9-4c4d-a880-a41bc2d636dd",
+        "object": "chat.completion.chunk",
+        "created": 1788509517,
+        "model": "deepseek-v4-flash",
+        "system_fingerprint": "a26a7955944dc5c60445bff77fac9c8e",
+        "choices": [
+          {
+            "index": 0,
+            "delta": {
+              "content": null,
+              "reasoning_content": "2"
+            },
+            "logprobs": null,
+            "finish_reason": null
+          }
+        ],
+        "usage": null
+      },
+      "delay_ms": 0
+    },
+    {
+      "chunk": {
+        "id": "e4bae4f0-5ae9-4c4d-a880-a41bc2d636dd",
+        "object": "chat.completion.chunk",
+        "created": 1788509517,
+        "model": "deepseek-v4-flash",
+        "system_fingerprint": "a26a7955944dc5c60445bff77fac9c8e",
+        "choices": [
+          {
+            "index": 0,
+            "delta": {
+              "content": null,
+              "reasoning_content": "“"
+            },
+            "logprobs": null,
+            "finish_reason": null
+          }
+        ],
+        "usage": null
+      },
+      "delay_ms": 4
+    },
+    {
+      "chunk": {
+        "id": "e4bae4f0-5ae9-4c4d-a880-a41bc2d636dd",
+        "object": "chat.completion.chunk",
+        "created": 1788509517,
+        "model": "deepseek-v4-flash",
+        "system_fingerprint": "a26a7955944dc5c60445bff77fac9c8e",
+        "choices": [
+          {
+            "index": 0,
+            "delta": {
+              "content": null,
+              "reasoning_content": "立即"
+            },
+            "logprobs": null,
+            "finish_reason": null
+          }
+        ],
+        "usage": null
+      },
+      "delay_ms": 0
+    },
+    {
+      "chunk": {
+        "id": "e4bae4f0-5ae9-4c4d-a880-a41bc2d636dd",
+        "object": "chat.completion.chunk",
+        "created": 1788509517,
+        "model": "deepseek-v4-flash",
+        "system_fingerprint": "a26a7955944dc5c60445bff77fac9c8e",
+        "choices": [
+          {
+            "index": 0,
+            "delta": {
+              "content": null,
+              "reasoning_content": "决定"
+            },
+            "logprobs": null,
+            "finish_reason": null
+          }
+        ],
+        "usage": null
+      },
+      "delay_ms": 24
+    },
+    {
+      "chunk": {
+        "id": "e4bae4f0-5ae9-4c4d-a880-a41bc2d636dd",
+        "object": "chat.completion.chunk",
+        "created": 1788509517,
+        "model": "deepseek-v4-flash",
+        "system_fingerprint": "a26a7955944dc5c60445bff77fac9c8e",
+        "choices": [
+          {
+            "index": 0,
+            "delta": {
+              "content": null,
+              "reasoning_content": "另一个"
+            },
+            "logprobs": null,
+            "finish_reason": null
+          }
+        ],
+        "usage": null
+      },
+      "delay_ms": 0
+    },
+    {
+      "chunk": {
+        "id": "e4bae4f0-5ae9-4c4d-a880-a41bc2d636dd",
+        "object": "chat.completion.chunk",
+        "created": 1788509517,
+        "model": "deepseek-v4-flash",
+        "system_fingerprint": "a26a7955944dc5c60445bff77fac9c8e",
+        "choices": [
+          {
+            "index": 0,
+            "delta": {
+              "content": null,
+              "reasoning_content": "粒"
+            },
+            "logprobs": null,
+            "finish_reason": null
+          }
+        ],
+        "usage": null
+      },
+      "delay_ms": 15
+    },
+    {
+      "chunk": {
+        "id": "e4bae4f0-5ae9-4c4d-a880-a41bc2d636dd",
+        "object": "chat.completion.chunk",
+        "created": 1788509517,
+        "model": "deepseek-v4-flash",
+        "system_fingerprint": "a26a7955944dc5c60445bff77fac9c8e",
+        "choices": [
+          {
+            "index": 0,
+            "delta": {
+              "content": null,
+              "reasoning_content": "子的"
+            },
+            "logprobs": null,
+            "finish_reason": null
+          }
+        ],
+        "usage": null
+      },
+      "delay_ms": 0
+    },
+    {
+      "chunk": {
+        "id": "e4bae4f0-5ae9-4c4d-a880-a41bc2d636dd",
+        "object": "chat.completion.chunk",
+        "created": 1788509517,
+        "model": "deepseek-v4-flash",
+        "system_fingerprint": "a26a7955944dc5c60445bff77fac9c8e",
+        "choices": [
+          {
+            "index": 0,
+            "delta": {
+              "content": null,
+              "reasoning_content": "状态"
+            },
+            "logprobs": null,
+            "finish_reason": null
+          }
+        ],
+        "usage": null
+      },
+      "delay_ms": 0
+    },
+    {
+      "chunk": {
+        "id": "e4bae4f0-5ae9-4c4d-a880-a41bc2d636dd",
+        "object": "chat.completion.chunk",
+        "created": 1788509517,
+        "model": "deepseek-v4-flash",
+        "system_fingerprint": "a26a7955944dc5c60445bff77fac9c8e",
+        "choices": [
+          {
+            "index": 0,
+            "delta": {
+              "content": null,
+              "reasoning_content": "”"
+            },
+            "logprobs": null,
+            "finish_reason": null
+          }
+        ],
+        "usage": null
+      },
+      "delay_ms": 18
+    },
+    {
+      "chunk": {
+        "id": "e4bae4f0-5ae9-4c4d-a880-a41bc2d636dd",
+        "object": "chat.completion.chunk",
+        "created": 1788509517,
+        "model": "deepseek-v4-flash",
+        "system_fingerprint": "a26a7955944dc5c60445bff77fac9c8e",
+        "choices": [
+          {
+            "index": 0,
+            "delta": {
+              "content": null,
+              "reasoning_content": "和"
+            },
+            "logprobs": null,
+            "finish_reason": null
+          }
+        ],
+        "usage": null
+      },
+      "delay_ms": 0
+    },
+    {
+      "chunk": {
+        "id": "e4bae4f0-5ae9-4c4d-a880-a41bc2d636dd",
+        "object": "chat.completion.chunk",
+        "created": 1788509517,
+        "model": "deepseek-v4-flash",
+        "system_fingerprint": "a26a7955944dc5c60445bff77fac9c8e",
+        "choices": [
+          {
+            "index": 0,
+            "delta": {
+              "content": null,
+              "reasoning_content": "“"
+            },
+            "logprobs": null,
+            "finish_reason": null
+          }
+        ],
+        "usage": null
+      },
+      "delay_ms": 0
+    },
+    {
+      "chunk": {
+        "id": "e4bae4f0-5ae9-4c4d-a880-a41bc2d636dd",
+        "object": "chat.completion.chunk",
+        "created": 1788509517,
+        "model": "deepseek-v4-flash",
+        "system_fingerprint": "a26a7955944dc5c60445bff77fac9c8e",
+        "choices": [
+          {
+            "index": 0,
+            "delta": {
+              "content": null,
+              "reasoning_content": "超越"
+            },
+            "logprobs": null,
+            "finish_reason": null
+          }
+        ],
+        "usage": null
+      },
+      "delay_ms": 13
+    },
+    {
+      "chunk": {
+        "id": "e4bae4f0-5ae9-4c4d-a880-a41bc2d636dd",
+        "object": "chat.completion.chunk",
+        "created": 1788509517,
+        "model": "deepseek-v4-flash",
+        "system_fingerprint": "a26a7955944dc5c60445bff77fac9c8e",
+        "choices": [
+          {
+            "index": 0,
+            "delta": {
+              "content": null,
+              "reasoning_content": "时空"
+            },
+            "logprobs": null,
+            "finish_reason": null
+          }
+        ],
+        "usage": null
+      },
+      "delay_ms": 0
+    },
+    {
+      "chunk": {
+        "id": "e4bae4f0-5ae9-4c4d-a880-a41bc2d636dd",
+        "object": "chat.completion.chunk",
+        "created": 1788509517,
+        "model": "deepseek-v4-flash",
+        "system_fingerprint": "a26a7955944dc5c60445bff77fac9c8e",
+        "choices": [
+          {
+            "index": 0,
+            "delta": {
+              "content": null,
+              "reasoning_content": "的联系"
+            },
+            "logprobs": null,
+            "finish_reason": null
+          }
+        ],
+        "usage": null
+      },
+      "delay_ms": 0
+    },
+    {
+      "chunk": {
+        "id": "e4bae4f0-5ae9-4c4d-a880-a41bc2d636dd",
+        "object": "chat.completion.chunk",
+        "created": 1788509517,
+        "model": "deepseek-v4-flash",
+        "system_fingerprint": "a26a7955944dc5c60445bff77fac9c8e",
+        "choices": [
+          {
+            "index": 0,
+            "delta": {
+              "content": null,
+              "reasoning_content": "”"
+            },
+            "logprobs": null,
+            "finish_reason": null
+          }
+        ],
+        "usage": null
+      },
+      "delay_ms": 0
+    },
+    {
+      "chunk": {
+        "id": "e4bae4f0-5ae9-4c4d-a880-a41bc2d636dd",
+        "object": "chat.completion.chunk",
+        "created": 1788509517,
+        "model": "deepseek-v4-flash",
+        "system_fingerprint": "a26a7955944dc5c60445bff77fac9c8e",
+        "choices": [
+          {
+            "index": 0,
+            "delta": {
+              "content": null,
+              "reasoning_content": "有"
+            },
+            "logprobs": null,
+            "finish_reason": null
+          }
+        ],
+        "usage": null
+      },
+      "delay_ms": 0
+    },
+    {
+      "chunk": {
+        "id": "e4bae4f0-5ae9-4c4d-a880-a41bc2d636dd",
+        "object": "chat.completion.chunk",
+        "created": 1788509517,
+        "model": "deepseek-v4-flash",
+        "system_fingerprint": "a26a7955944dc5c60445bff77fac9c8e",
+        "choices": [
+          {
+            "index": 0,
+            "delta": {
+              "content": null,
+              "reasoning_content": "误导"
+            },
+            "logprobs": null,
+            "finish_reason": null
+          }
+        ],
+        "usage": null
+      },
+      "delay_ms": 35
+    },
+    {
+      "chunk": {
+        "id": "e4bae4f0-5ae9-4c4d-a880-a41bc2d636dd",
+        "object": "chat.completion.chunk",
+        "created": 1788509517,
+        "model": "deepseek-v4-flash",
+        "system_fingerprint": "a26a7955944dc5c60445bff77fac9c8e",
+        "choices": [
+          {
+            "index": 0,
+            "delta": {
+              "content": null,
+              "reasoning_content": "。"
+            },
+            "logprobs": null,
+            "finish_reason": null
+          }
+        ],
+        "usage": null
+      },
+      "delay_ms": 0
+    },
+    {
+      "chunk": {
+        "id": "e4bae4f0-5ae9-4c4d-a880-a41bc2d636dd",
+        "object": "chat.completion.chunk",
+        "created": 1788509517,
+        "model": "deepseek-v4-flash",
+        "system_fingerprint": "a26a7955944dc5c60445bff77fac9c8e",
+        "choices": [
+          {
+            "index": 0,
+            "delta": {
+              "content": null,
+              "reasoning_content": "需要"
+            },
+            "logprobs": null,
+            "finish_reason": null
+          }
+        ],
+        "usage": null
+      },
+      "delay_ms": 0
+    },
+    {
+      "chunk": {
+        "id": "e4bae4f0-5ae9-4c4d-a880-a41bc2d636dd",
+        "object": "chat.completion.chunk",
+        "created": 1788509517,
+        "model": "deepseek-v4-flash",
+        "system_fingerprint": "a26a7955944dc5c60445bff77fac9c8e",
+        "choices": [
+          {
+            "index": 0,
+            "delta": {
+              "content": null,
+              "reasoning_content": "评价"
+            },
+            "logprobs": null,
+            "finish_reason": null
+          }
+        ],
+        "usage": null
+      },
+      "delay_ms": 0
+    },
+    {
+      "chunk": {
+        "id": "e4bae4f0-5ae9-4c4d-a880-a41bc2d636dd",
+        "object": "chat.completion.chunk",
+        "created": 1788509517,
+        "model": "deepseek-v4-flash",
+        "system_fingerprint": "a26a7955944dc5c60445bff77fac9c8e",
+        "choices": [
+          {
+            "index": 0,
+            "delta": {
+              "content": null,
+              "reasoning_content": "。\n\n"
+            },
+            "logprobs": null,
+            "finish_reason": null
+          }
+        ],
+        "usage": null
+      },
+      "delay_ms": 27
+    },
+    {
+      "chunk": {
+        "id": "e4bae4f0-5ae9-4c4d-a880-a41bc2d636dd",
+        "object": "chat.completion.chunk",
+        "created": 1788509517,
+        "model": "deepseek-v4-flash",
+        "system_fingerprint": "a26a7955944dc5c60445bff77fac9c8e",
+        "choices": [
+          {
+            "index": 0,
+            "delta": {
+              "content": null,
+              "reasoning_content": "我们"
+            },
+            "logprobs": null,
+            "finish_reason": null
+          }
+        ],
+        "usage": null
+      },
+      "delay_ms": 0
+    },
+    {
+      "chunk": {
+        "id": "e4bae4f0-5ae9-4c4d-a880-a41bc2d636dd",
+        "object": "chat.completion.chunk",
+        "created": 1788509517,
+        "model": "deepseek-v4-flash",
+        "system_fingerprint": "a26a7955944dc5c60445bff77fac9c8e",
+        "choices": [
+          {
+            "index": 0,
+            "delta": {
+              "content": null,
+              "reasoning_content": "开始"
+            },
+            "logprobs": null,
+            "finish_reason": null
+          }
+        ],
+        "usage": null
+      },
+      "delay_ms": 25
+    },
+    {
+      "chunk": {
+        "id": "e4bae4f0-5ae9-4c4d-a880-a41bc2d636dd",
+        "object": "chat.completion.chunk",
+        "created": 1788509517,
+        "model": "deepseek-v4-flash",
+        "system_fingerprint": "a26a7955944dc5c60445bff77fac9c8e",
+        "choices": [
+          {
+            "index": 0,
+            "delta": {
+              "content": null,
+              "reasoning_content": "。"
+            },
+            "logprobs": null,
+            "finish_reason": null
+          }
+        ],
+        "usage": null
+      },
+      "delay_ms": 0
+    },
+    {
+      "chunk": {
+        "id": "e4bae4f0-5ae9-4c4d-a880-a41bc2d636dd",
+        "object": "chat.completion.chunk",
+        "created": 1788509517,
+        "model": "deepseek-v4-flash",
+        "system_fingerprint": "a26a7955944dc5c60445bff77fac9c8e",
+        "choices": [
+          {
+            "index": 0,
+            "delta": {
+              "content": "【",
+              "reasoning_content": null
+            },
+            "logprobs": null,
+            "finish_reason": null
+          }
+        ],
+        "usage": null
+      },
+      "delay_ms": 11
+    },
+    {
+      "chunk": {
+        "id": "e4bae4f0-5ae9-4c4d-a880-a41bc2d636dd",
+        "object": "chat.completion.chunk",
+        "created": 1788509517,
+        "model": "deepseek-v4-flash",
+        "system_fingerprint": "a26a7955944dc5c60445bff77fac9c8e",
+        "choices": [
+          {
+            "index": 0,
+            "delta": {
+              "content": "回答",
+              "reasoning_content": null
+            },
+            "logprobs": null,
+            "finish_reason": null
+          }
+        ],
+        "usage": null
+      },
+      "delay_ms": 0
+    },
+    {
+      "chunk": {
+        "id": "e4bae4f0-5ae9-4c4d-a880-a41bc2d636dd",
+        "object": "chat.completion.chunk",
+        "created": 1788509517,
+        "model": "deepseek-v4-flash",
+        "system_fingerprint": "a26a7955944dc5c60445bff77fac9c8e",
+        "choices": [
+          {
+            "index": 0,
+            "delta": {
+              "content": " ",
+              "reasoning_content": null
+            },
+            "logprobs": null,
+            "finish_reason": null
+          }
+        ],
+        "usage": null
+      },
+      "delay_ms": 39
+    },
+    {
+      "chunk": {
+        "id": "e4bae4f0-5ae9-4c4d-a880-a41bc2d636dd",
+        "object": "chat.completion.chunk",
+        "created": 1788509517,
+        "model": "deepseek-v4-flash",
+        "system_fingerprint": "a26a7955944dc5c60445bff77fac9c8e",
+        "choices": [
+          {
+            "index": 0,
+            "delta": {
+              "content": "1",
+              "reasoning_content": null
+            },
+            "logprobs": null,
+            "finish_reason": null
+          }
+        ],
+        "usage": null
+      },
+      "delay_ms": 0
+    },
+    {
+      "chunk": {
+        "id": "e4bae4f0-5ae9-4c4d-a880-a41bc2d636dd",
+        "object": "chat.completion.chunk",
+        "created": 1788509517,
+        "model": "deepseek-v4-flash",
+        "system_fingerprint": "a26a7955944dc5c60445bff77fac9c8e",
+        "choices": [
+          {
+            "index": 0,
+            "delta": {
+              "content": "】\n",
+              "reasoning_content": null
+            },
+            "logprobs": null,
+            "finish_reason": null
+          }
+        ],
+        "usage": null
+      },
+      "delay_ms": 0
+    },
+    {
+      "chunk": {
+        "id": "e4bae4f0-5ae9-4c4d-a880-a41bc2d636dd",
+        "object": "chat.completion.chunk",
+        "created": 1788509517,
+        "model": "deepseek-v4-flash",
+        "system_fingerprint": "a26a7955944dc5c60445bff77fac9c8e",
+        "choices": [
+          {
+            "index": 0,
+            "delta": {
+              "content": "优点",
+              "reasoning_content": null
+            },
+            "logprobs": null,
+            "finish_reason": null
+          }
+        ],
+        "usage": null
+      },
+      "delay_ms": 0
+    },
+    {
+      "chunk": {
+        "id": "e4bae4f0-5ae9-4c4d-a880-a41bc2d636dd",
+        "object": "chat.completion.chunk",
+        "created": 1788509517,
+        "model": "deepseek-v4-flash",
+        "system_fingerprint": "a26a7955944dc5c60445bff77fac9c8e",
+        "choices": [
+          {
+            "index": 0,
+            "delta": {
+              "content": "：",
+              "reasoning_content": null
+            },
+            "logprobs": null,
+            "finish_reason": null
+          }
+        ],
+        "usage": null
+      },
+      "delay_ms": 0
+    },
+    {
+      "chunk": {
+        "id": "e4bae4f0-5ae9-4c4d-a880-a41bc2d636dd",
+        "object": "chat.completion.chunk",
+        "created": 1788509517,
+        "model": "deepseek-v4-flash",
+        "system_fingerprint": "a26a7955944dc5c60445bff77fac9c8e",
+        "choices": [
+          {
+            "index": 0,
+            "delta": {
+              "content": "用",
+              "reasoning_content": null
+            },
+            "logprobs": null,
+            "finish_reason": null
+          }
+        ],
+        "usage": null
+      },
+      "delay_ms": 0
+    },
+    {
+      "chunk": {
+        "id": "e4bae4f0-5ae9-4c4d-a880-a41bc2d636dd",
+        "object": "chat.completion.chunk",
+        "created": 1788509517,
+        "model": "deepseek-v4-flash",
+        "system_fingerprint": "a26a7955944dc5c60445bff77fac9c8e",
+        "choices": [
+          {
+            "index": 0,
+            "delta": {
+              "content": "一句话",
+              "reasoning_content": null
+            },
+            "logprobs": null,
+            "finish_reason": null
+          }
+        ],
+        "usage": null
+      },
+      "delay_ms": 23
+    },
+    {
+      "chunk": {
+        "id": "e4bae4f0-5ae9-4c4d-a880-a41bc2d636dd",
+        "object": "chat.completion.chunk",
+        "created": 1788509517,
+        "model": "deepseek-v4-flash",
+        "system_fingerprint": "a26a7955944dc5c60445bff77fac9c8e",
+        "choices": [
+          {
+            "index": 0,
+            "delta": {
+              "content": "概括",
+              "reasoning_content": null
+            },
+            "logprobs": null,
+            "finish_reason": null
+          }
+        ],
+        "usage": null
+      },
+      "delay_ms": 0
+    },
+    {
+      "chunk": {
+        "id": "e4bae4f0-5ae9-4c4d-a880-a41bc2d636dd",
+        "object": "chat.completion.chunk",
+        "created": 1788509517,
+        "model": "deepseek-v4-flash",
+        "system_fingerprint": "a26a7955944dc5c60445bff77fac9c8e",
+        "choices": [
+          {
+            "index": 0,
+            "delta": {
+              "content": "，",
+              "reasoning_content": null
+            },
+            "logprobs": null,
+            "finish_reason": null
+          }
+        ],
+        "usage": null
+      },
+      "delay_ms": 22
+    },
+    {
+      "chunk": {
+        "id": "e4bae4f0-5ae9-4c4d-a880-a41bc2d636dd",
+        "object": "chat.completion.chunk",
+        "created": 1788509517,
+        "model": "deepseek-v4-flash",
+        "system_fingerprint": "a26a7955944dc5c60445bff77fac9c8e",
+        "choices": [
+          {
+            "index": 0,
+            "delta": {
+              "content": "抓住了",
+              "reasoning_content": null
+            },
+            "logprobs": null,
+            "finish_reason": null
+          }
+        ],
+        "usage": null
+      },
+      "delay_ms": 0
+    },
+    {
+      "chunk": {
+        "id": "e4bae4f0-5ae9-4c4d-a880-a41bc2d636dd",
+        "object": "chat.completion.chunk",
+        "created": 1788509517,
+        "model": "deepseek-v4-flash",
+        "system_fingerprint": "a26a7955944dc5c60445bff77fac9c8e",
+        "choices": [
+          {
+            "index": 0,
+            "delta": {
+              "content": "“",
+              "reasoning_content": null
+            },
+            "logprobs": null,
+            "finish_reason": null
+          }
+        ],
+        "usage": null
+      },
+      "delay_ms": 24
+    },
+    {
+      "chunk": {
+        "id": "e4bae4f0-5ae9-4c4d-a880-a41bc2d636dd",
+        "object": "chat.completion.chunk",
+        "created": 1788509517,
+        "model": "deepseek-v4-flash",
+        "system_fingerprint": "a26a7955944dc5c60445bff77fac9c8e",
+        "choices": [
+          {
+            "index": 0,
+            "delta": {
+              "content": "粒子",
+              "reasoning_content": null
+            },
+            "logprobs": null,
+            "finish_reason": null
+          }
+        ],
+        "usage": null
+      },
+      "delay_ms": 0
+    },
+    {
+      "chunk": {
+        "id": "e4bae4f0-5ae9-4c4d-a880-a41bc2d636dd",
+        "object": "chat.completion.chunk",
+        "created": 1788509517,
+        "model": "deepseek-v4-flash",
+        "system_fingerprint": "a26a7955944dc5c60445bff77fac9c8e",
+        "choices": [
+          {
+            "index": 0,
+            "delta": {
+              "content": "间",
+              "reasoning_content": null
+            },
+            "logprobs": null,
+            "finish_reason": null
+          }
+        ],
+        "usage": null
+      },
+      "delay_ms": 14
+    },
+    {
+      "chunk": {
+        "id": "e4bae4f0-5ae9-4c4d-a880-a41bc2d636dd",
+        "object": "chat.completion.chunk",
+        "created": 1788509517,
+        "model": "deepseek-v4-flash",
+        "system_fingerprint": "a26a7955944dc5c60445bff77fac9c8e",
+        "choices": [
+          {
+            "index": 0,
+            "delta": {
+              "content": "存在",
+              "reasoning_content": null
+            },
+            "logprobs": null,
+            "finish_reason": null
+          }
+        ],
+        "usage": null
+      },
+      "delay_ms": 0
+    },
+    {
+      "chunk": {
+        "id": "e4bae4f0-5ae9-4c4d-a880-a41bc2d636dd",
+        "object": "chat.completion.chunk",
+        "created": 1788509517,
+        "model": "deepseek-v4-flash",
+        "system_fingerprint": "a26a7955944dc5c60445bff77fac9c8e",
+        "choices": [
+          {
+            "index": 0,
+            "delta": {
+              "content": "关联",
+              "reasoning_content": null
+            },
+            "logprobs": null,
+            "finish_reason": null
+          }
+        ],
+        "usage": null
+      },
+      "delay_ms": 50
+    },
+    {
+      "chunk": {
+        "id": "e4bae4f0-5ae9-4c4d-a880-a41bc2d636dd",
+        "object": "chat.completion.chunk",
+        "created": 1788509517,
+        "model": "deepseek-v4-flash",
+        "system_fingerprint": "a26a7955944dc5c60445bff77fac9c8e",
+        "choices": [
+          {
+            "index": 0,
+            "delta": {
+              "content": "”",
+              "reasoning_content": null
+            },
+            "logprobs": null,
+            "finish_reason": null
+          }
+        ],
+        "usage": null
+      },
+      "delay_ms": 0
+    },
+    {
+      "chunk": {
+        "id": "e4bae4f0-5ae9-4c4d-a880-a41bc2d636dd",
+        "object": "chat.completion.chunk",
+        "created": 1788509517,
+        "model": "deepseek-v4-flash",
+        "system_fingerprint": "a26a7955944dc5c60445bff77fac9c8e",
+        "choices": [
+          {
+            "index": 0,
+            "delta": {
+              "content": "和",
+              "reasoning_content": null
+            },
+            "logprobs": null,
+            "finish_reason": null
+          }
+        ],
+        "usage": null
+      },
+      "delay_ms": 0
+    },
+    {
+      "chunk": {
+        "id": "e4bae4f0-5ae9-4c4d-a880-a41bc2d636dd",
+        "object": "chat.completion.chunk",
+        "created": 1788509517,
+        "model": "deepseek-v4-flash",
+        "system_fingerprint": "a26a7955944dc5c60445bff77fac9c8e",
+        "choices": [
+          {
+            "index": 0,
+            "delta": {
+              "content": "“",
+              "reasoning_content": null
+            },
+            "logprobs": null,
+            "finish_reason": null
+          }
+        ],
+        "usage": null
+      },
+      "delay_ms": 0
+    },
+    {
+      "chunk": {
+        "id": "e4bae4f0-5ae9-4c4d-a880-a41bc2d636dd",
+        "object": "chat.completion.chunk",
+        "created": 1788509517,
+        "model": "deepseek-v4-flash",
+        "system_fingerprint": "a26a7955944dc5c60445bff77fac9c8e",
+        "choices": [
+          {
+            "index": 0,
+            "delta": {
+              "content": "距离",
+              "reasoning_content": null
+            },
+            "logprobs": null,
+            "finish_reason": null
+          }
+        ],
+        "usage": null
+      },
+      "delay_ms": 0
+    },
+    {
+      "chunk": {
+        "id": "e4bae4f0-5ae9-4c4d-a880-a41bc2d636dd",
+        "object": "chat.completion.chunk",
+        "created": 1788509517,
+        "model": "deepseek-v4-flash",
+        "system_fingerprint": "a26a7955944dc5c60445bff77fac9c8e",
+        "choices": [
+          {
+            "index": 0,
+            "delta": {
+              "content": "无关",
+              "reasoning_content": null
+            },
+            "logprobs": null,
+            "finish_reason": null
+          }
+        ],
+        "usage": null
+      },
+      "delay_ms": 31
+    },
+    {
+      "chunk": {
+        "id": "e4bae4f0-5ae9-4c4d-a880-a41bc2d636dd",
+        "object": "chat.completion.chunk",
+        "created": 1788509517,
+        "model": "deepseek-v4-flash",
+        "system_fingerprint": "a26a7955944dc5c60445bff77fac9c8e",
+        "choices": [
+          {
+            "index": 0,
+            "delta": {
+              "content": "”",
+              "reasoning_content": null
+            },
+            "logprobs": null,
+            "finish_reason": null
+          }
+        ],
+        "usage": null
+      },
+      "delay_ms": 17
+    },
+    {
+      "chunk": {
+        "id": "e4bae4f0-5ae9-4c4d-a880-a41bc2d636dd",
+        "object": "chat.completion.chunk",
+        "created": 1788509517,
+        "model": "deepseek-v4-flash",
+        "system_fingerprint": "a26a7955944dc5c60445bff77fac9c8e",
+        "choices": [
+          {
+            "index": 0,
+            "delta": {
+              "content": "的核心",
+              "reasoning_content": null
+            },
+            "logprobs": null,
+            "finish_reason": null
+          }
+        ],
+        "usage": null
+      },
+      "delay_ms": 0
+    },
+    {
+      "chunk": {
+        "id": "e4bae4f0-5ae9-4c4d-a880-a41bc2d636dd",
+        "object": "chat.completion.chunk",
+        "created": 1788509517,
+        "model": "deepseek-v4-flash",
+        "system_fingerprint": "a26a7955944dc5c60445bff77fac9c8e",
+        "choices": [
+          {
+            "index": 0,
+            "delta": {
+              "content": "特征",
+              "reasoning_content": null
+            },
+            "logprobs": null,
+            "finish_reason": null
+          }
+        ],
+        "usage": null
+      },
+      "delay_ms": 0
+    },
+    {
+      "chunk": {
+        "id": "e4bae4f0-5ae9-4c4d-a880-a41bc2d636dd",
+        "object": "chat.completion.chunk",
+        "created": 1788509517,
+        "model": "deepseek-v4-flash",
+        "system_fingerprint": "a26a7955944dc5c60445bff77fac9c8e",
+        "choices": [
+          {
+            "index": 0,
+            "delta": {
+              "content": "，",
+              "reasoning_content": null
+            },
+            "logprobs": null,
+            "finish_reason": null
+          }
+        ],
+        "usage": null
+      },
+      "delay_ms": 0
+    },
+    {
+      "chunk": {
+        "id": "e4bae4f0-5ae9-4c4d-a880-a41bc2d636dd",
+        "object": "chat.completion.chunk",
+        "created": 1788509517,
+        "model": "deepseek-v4-flash",
+        "system_fingerprint": "a26a7955944dc5c60445bff77fac9c8e",
+        "choices": [
+          {
+            "index": 0,
+            "delta": {
+              "content": "表述",
+              "reasoning_content": null
+            },
+            "logprobs": null,
+            "finish_reason": null
+          }
+        ],
+        "usage": null
+      },
+      "delay_ms": 0
+    },
+    {
+      "chunk": {
+        "id": "e4bae4f0-5ae9-4c4d-a880-a41bc2d636dd",
+        "object": "chat.completion.chunk",
+        "created": 1788509517,
+        "model": "deepseek-v4-flash",
+        "system_fingerprint": "a26a7955944dc5c60445bff77fac9c8e",
+        "choices": [
+          {
+            "index": 0,
+            "delta": {
+              "content": "通俗",
+              "reasoning_content": null
+            },
+            "logprobs": null,
+            "finish_reason": null
+          }
+        ],
+        "usage": null
+      },
+      "delay_ms": 26
+    },
+    {
+      "chunk": {
+        "id": "e4bae4f0-5ae9-4c4d-a880-a41bc2d636dd",
+        "object": "chat.completion.chunk",
+        "created": 1788509517,
+        "model": "deepseek-v4-flash",
+        "system_fingerprint": "a26a7955944dc5c60445bff77fac9c8e",
+        "choices": [
+          {
+            "index": 0,
+            "delta": {
+              "content": "。\n",
+              "reasoning_content": null
+            },
+            "logprobs": null,
+            "finish_reason": null
+          }
+        ],
+        "usage": null
+      },
+      "delay_ms": 0
+    },
+    {
+      "chunk": {
+        "id": "e4bae4f0-5ae9-4c4d-a880-a41bc2d636dd",
+        "object": "chat.completion.chunk",
+        "created": 1788509517,
+        "model": "deepseek-v4-flash",
+        "system_fingerprint": "a26a7955944dc5c60445bff77fac9c8e",
+        "choices": [
+          {
+            "index": 0,
+            "delta": {
+              "content": "问题",
+              "reasoning_content": null
+            },
+            "logprobs": null,
+            "finish_reason": null
+          }
+        ],
+        "usage": null
+      },
+      "delay_ms": 20
+    },
+    {
+      "chunk": {
+        "id": "e4bae4f0-5ae9-4c4d-a880-a41bc2d636dd",
+        "object": "chat.completion.chunk",
+        "created": 1788509517,
+        "model": "deepseek-v4-flash",
+        "system_fingerprint": "a26a7955944dc5c60445bff77fac9c8e",
+        "choices": [
+          {
+            "index": 0,
+            "delta": {
+              "content": "：",
+              "reasoning_content": null
+            },
+            "logprobs": null,
+            "finish_reason": null
+          }
+        ],
+        "usage": null
+      },
+      "delay_ms": 97
+    },
+    {
+      "chunk": {
+        "id": "e4bae4f0-5ae9-4c4d-a880-a41bc2d636dd",
+        "object": "chat.completion.chunk",
+        "created": 1788509517,
+        "model": "deepseek-v4-flash",
+        "system_fingerprint": "a26a7955944dc5c60445bff77fac9c8e",
+        "choices": [
+          {
+            "index": 0,
+            "delta": {
+              "content": "说",
+              "reasoning_content": null
+            },
+            "logprobs": null,
+            "finish_reason": null
+          }
+        ],
+        "usage": null
+      },
+      "delay_ms": 0
+    },
+    {
+      "chunk": {
+        "id": "e4bae4f0-5ae9-4c4d-a880-a41bc2d636dd",
+        "object": "chat.completion.chunk",
+        "created": 1788509517,
+        "model": "deepseek-v4-flash",
+        "system_fingerprint": "a26a7955944dc5c60445bff77fac9c8e",
+        "choices": [
+          {
+            "index": 0,
+            "delta": {
+              "content": "“",
+              "reasoning_content": null
+            },
+            "logprobs": null,
+            "finish_reason": null
+          }
+        ],
+        "usage": null
+      },
+      "delay_ms": 0
+    },
+    {
+      "chunk": {
+        "id": "e4bae4f0-5ae9-4c4d-a880-a41bc2d636dd",
+        "object": "chat.completion.chunk",
+        "created": 1788509517,
+        "model": "deepseek-v4-flash",
+        "system_fingerprint": "a26a7955944dc5c60445bff77fac9c8e",
+        "choices": [
+          {
+            "index": 0,
+            "delta": {
+              "content": "测量",
+              "reasoning_content": null
+            },
+            "logprobs": null,
+            "finish_reason": null
+          }
+        ],
+        "usage": null
+      },
+      "delay_ms": 0
+    },
+    {
+      "chunk": {
+        "id": "e4bae4f0-5ae9-4c4d-a880-a41bc2d636dd",
+        "object": "chat.completion.chunk",
+        "created": 1788509517,
+        "model": "deepseek-v4-flash",
+        "system_fingerprint": "a26a7955944dc5c60445bff77fac9c8e",
+        "choices": [
+          {
+            "index": 0,
+            "delta": {
+              "content": "都会",
+              "reasoning_content": null
+            },
+            "logprobs": null,
+            "finish_reason": null
+          }
+        ],
+        "usage": null
+      },
+      "delay_ms": 0
+    },
+    {
+      "chunk": {
+        "id": "e4bae4f0-5ae9-4c4d-a880-a41bc2d636dd",
+        "object": "chat.completion.chunk",
+        "created": 1788509517,
+        "model": "deepseek-v4-flash",
+        "system_fingerprint": "a26a7955944dc5c60445bff77fac9c8e",
+        "choices": [
+          {
+            "index": 0,
+            "delta": {
+              "content": "瞬间",
+              "reasoning_content": null
+            },
+            "logprobs": null,
+            "finish_reason": null
+          }
+        ],
+        "usage": null
+      },
+      "delay_ms": 0
+    },
+    {
+      "chunk": {
+        "id": "e4bae4f0-5ae9-4c4d-a880-a41bc2d636dd",
+        "object": "chat.completion.chunk",
+        "created": 1788509517,
+        "model": "deepseek-v4-flash",
+        "system_fingerprint": "a26a7955944dc5c60445bff77fac9c8e",
+        "choices": [
+          {
+            "index": 0,
+            "delta": {
+              "content": "决定",
+              "reasoning_content": null
+            },
+            "logprobs": null,
+            "finish_reason": null
+          }
+        ],
+        "usage": null
+      },
+      "delay_ms": 0
+    },
+    {
+      "chunk": {
+        "id": "e4bae4f0-5ae9-4c4d-a880-a41bc2d636dd",
+        "object": "chat.completion.chunk",
+        "created": 1788509517,
+        "model": "deepseek-v4-flash",
+        "system_fingerprint": "a26a7955944dc5c60445bff77fac9c8e",
+        "choices": [
+          {
+            "index": 0,
+            "delta": {
+              "content": "另一个",
+              "reasoning_content": null
+            },
+            "logprobs": null,
+            "finish_reason": null
+          }
+        ],
+        "usage": null
+      },
+      "delay_ms": 0
+    },
+    {
+      "chunk": {
+        "id": "e4bae4f0-5ae9-4c4d-a880-a41bc2d636dd",
+        "object": "chat.completion.chunk",
+        "created": 1788509517,
+        "model": "deepseek-v4-flash",
+        "system_fingerprint": "a26a7955944dc5c60445bff77fac9c8e",
+        "choices": [
+          {
+            "index": 0,
+            "delta": {
+              "content": "的状态",
+              "reasoning_content": null
+            },
+            "logprobs": null,
+            "finish_reason": null
+          }
+        ],
+        "usage": null
+      },
+      "delay_ms": 0
+    },
+    {
+      "chunk": {
+        "id": "e4bae4f0-5ae9-4c4d-a880-a41bc2d636dd",
+        "object": "chat.completion.chunk",
+        "created": 1788509517,
+        "model": "deepseek-v4-flash",
+        "system_fingerprint": "a26a7955944dc5c60445bff77fac9c8e",
+        "choices": [
+          {
+            "index": 0,
+            "delta": {
+              "content": "”",
+              "reasoning_content": null
+            },
+            "logprobs": null,
+            "finish_reason": null
+          }
+        ],
+        "usage": null
+      },
+      "delay_ms": 0
+    },
+    {
+      "chunk": {
+        "id": "e4bae4f0-5ae9-4c4d-a880-a41bc2d636dd",
+        "object": "chat.completion.chunk",
+        "created": 1788509517,
+        "model": "deepseek-v4-flash",
+        "system_fingerprint": "a26a7955944dc5c60445bff77fac9c8e",
+        "choices": [
+          {
+            "index": 0,
+            "delta": {
+              "content": "不够",
+              "reasoning_content": null
+            },
+            "logprobs": null,
+            "finish_reason": null
+          }
+        ],
+        "usage": null
+      },
+      "delay_ms": 0
+    },
+    {
+      "chunk": {
+        "id": "e4bae4f0-5ae9-4c4d-a880-a41bc2d636dd",
+        "object": "chat.completion.chunk",
+        "created": 1788509517,
+        "model": "deepseek-v4-flash",
+        "system_fingerprint": "a26a7955944dc5c60445bff77fac9c8e",
+        "choices": [
+          {
+            "index": 0,
+            "delta": {
+              "content": "严谨",
+              "reasoning_content": null
+            },
+            "logprobs": null,
+            "finish_reason": null
+          }
+        ],
+        "usage": null
+      },
+      "delay_ms": 16
+    },
+    {
+      "chunk": {
+        "id": "e4bae4f0-5ae9-4c4d-a880-a41bc2d636dd",
+        "object": "chat.completion.chunk",
+        "created": 1788509517,
+        "model": "deepseek-v4-flash",
+        "system_fingerprint": "a26a7955944dc5c60445bff77fac9c8e",
+        "choices": [
+          {
+            "index": 0,
+            "delta": {
+              "content": "，",
+              "reasoning_content": null
+            },
+            "logprobs": null,
+            "finish_reason": null
+          }
+        ],
+        "usage": null
+      },
+      "delay_ms": 0
+    },
+    {
+      "chunk": {
+        "id": "e4bae4f0-5ae9-4c4d-a880-a41bc2d636dd",
+        "object": "chat.completion.chunk",
+        "created": 1788509517,
+        "model": "deepseek-v4-flash",
+        "system_fingerprint": "a26a7955944dc5c60445bff77fac9c8e",
+        "choices": [
+          {
+            "index": 0,
+            "delta": {
+              "content": "易",
+              "reasoning_content": null
+            },
+            "logprobs": null,
+            "finish_reason": null
+          }
+        ],
+        "usage": null
+      },
+      "delay_ms": 0
+    },
+    {
+      "chunk": {
+        "id": "e4bae4f0-5ae9-4c4d-a880-a41bc2d636dd",
+        "object": "chat.completion.chunk",
+        "created": 1788509517,
+        "model": "deepseek-v4-flash",
+        "system_fingerprint": "a26a7955944dc5c60445bff77fac9c8e",
+        "choices": [
+          {
+            "index": 0,
+            "delta": {
+              "content": "让人",
+              "reasoning_content": null
+            },
+            "logprobs": null,
+            "finish_reason": null
+          }
+        ],
+        "usage": null
+      },
+      "delay_ms": 23
+    },
+    {
+      "chunk": {
+        "id": "e4bae4f0-5ae9-4c4d-a880-a41bc2d636dd",
+        "object": "chat.completion.chunk",
+        "created": 1788509517,
+        "model": "deepseek-v4-flash",
+        "system_fingerprint": "a26a7955944dc5c60445bff77fac9c8e",
+        "choices": [
+          {
+            "index": 0,
+            "delta": {
+              "content": "误",
+              "reasoning_content": null
+            },
+            "logprobs": null,
+            "finish_reason": null
+          }
+        ],
+        "usage": null
+      },
+      "delay_ms": 10
+    },
+    {
+      "chunk": {
+        "id": "e4bae4f0-5ae9-4c4d-a880-a41bc2d636dd",
+        "object": "chat.completion.chunk",
+        "created": 1788509517,
+        "model": "deepseek-v4-flash",
+        "system_fingerprint": "a26a7955944dc5c60445bff77fac9c8e",
+        "choices": [
+          {
+            "index": 0,
+            "delta": {
+              "content": "以为",
+              "reasoning_content": null
+            },
+            "logprobs": null,
+            "finish_reason": null
+          }
+        ],
+        "usage": null
+      },
+      "delay_ms": 0
+    },
+    {
+      "chunk": {
+        "id": "e4bae4f0-5ae9-4c4d-a880-a41bc2d636dd",
+        "object": "chat.completion.chunk",
+        "created": 1788509517,
+        "model": "deepseek-v4-flash",
+        "system_fingerprint": "a26a7955944dc5c60445bff77fac9c8e",
+        "choices": [
+          {
+            "index": 0,
+            "delta": {
+              "content": "测量",
+              "reasoning_content": null
+            },
+            "logprobs": null,
+            "finish_reason": null
+          }
+        ],
+        "usage": null
+      },
+      "delay_ms": 0
+    },
+    {
+      "chunk": {
+        "id": "e4bae4f0-5ae9-4c4d-a880-a41bc2d636dd",
+        "object": "chat.completion.chunk",
+        "created": 1788509517,
+        "model": "deepseek-v4-flash",
+        "system_fingerprint": "a26a7955944dc5c60445bff77fac9c8e",
+        "choices": [
+          {
+            "index": 0,
+            "delta": {
+              "content": "能",
+              "reasoning_content": null
+            },
+            "logprobs": null,
+            "finish_reason": null
+          }
+        ],
+        "usage": null
+      },
+      "delay_ms": 22
+    },
+    {
+      "chunk": {
+        "id": "e4bae4f0-5ae9-4c4d-a880-a41bc2d636dd",
+        "object": "chat.completion.chunk",
+        "created": 1788509517,
+        "model": "deepseek-v4-flash",
+        "system_fingerprint": "a26a7955944dc5c60445bff77fac9c8e",
+        "choices": [
+          {
+            "index": 0,
+            "delta": {
+              "content": "直接",
+              "reasoning_content": null
+            },
+            "logprobs": null,
+            "finish_reason": null
+          }
+        ],
+        "usage": null
+      },
+      "delay_ms": 25
+    },
+    {
+      "chunk": {
+        "id": "e4bae4f0-5ae9-4c4d-a880-a41bc2d636dd",
+        "object": "chat.completion.chunk",
+        "created": 1788509517,
+        "model": "deepseek-v4-flash",
+        "system_fingerprint": "a26a7955944dc5c60445bff77fac9c8e",
+        "choices": [
+          {
+            "index": 0,
+            "delta": {
+              "content": "控制",
+              "reasoning_content": null
+            },
+            "logprobs": null,
+            "finish_reason": null
+          }
+        ],
+        "usage": null
+      },
+      "delay_ms": 0
+    },
+    {
+      "chunk": {
+        "id": "e4bae4f0-5ae9-4c4d-a880-a41bc2d636dd",
+        "object": "chat.completion.chunk",
+        "created": 1788509517,
+        "model": "deepseek-v4-flash",
+        "system_fingerprint": "a26a7955944dc5c60445bff77fac9c8e",
+        "choices": [
+          {
+            "index": 0,
+            "delta": {
+              "content": "或",
+              "reasoning_content": null
+            },
+            "logprobs": null,
+            "finish_reason": null
+          }
+        ],
+        "usage": null
+      },
+      "delay_ms": 22
+    },
+    {
+      "chunk": {
+        "id": "e4bae4f0-5ae9-4c4d-a880-a41bc2d636dd",
+        "object": "chat.completion.chunk",
+        "created": 1788509517,
+        "model": "deepseek-v4-flash",
+        "system_fingerprint": "a26a7955944dc5c60445bff77fac9c8e",
+        "choices": [
+          {
+            "index": 0,
+            "delta": {
+              "content": "影响",
+              "reasoning_content": null
+            },
+            "logprobs": null,
+            "finish_reason": null
+          }
+        ],
+        "usage": null
+      },
+      "delay_ms": 16
+    },
+    {
+      "chunk": {
+        "id": "e4bae4f0-5ae9-4c4d-a880-a41bc2d636dd",
+        "object": "chat.completion.chunk",
+        "created": 1788509517,
+        "model": "deepseek-v4-flash",
+        "system_fingerprint": "a26a7955944dc5c60445bff77fac9c8e",
+        "choices": [
+          {
+            "index": 0,
+            "delta": {
+              "content": "对方",
+              "reasoning_content": null
+            },
+            "logprobs": null,
+            "finish_reason": null
+          }
+        ],
+        "usage": null
+      },
+      "delay_ms": 22
+    },
+    {
+      "chunk": {
+        "id": "e4bae4f0-5ae9-4c4d-a880-a41bc2d636dd",
+        "object": "chat.completion.chunk",
+        "created": 1788509517,
+        "model": "deepseek-v4-flash",
+        "system_fingerprint": "a26a7955944dc5c60445bff77fac9c8e",
+        "choices": [
+          {
+            "index": 0,
+            "delta": {
+              "content": "；",
+              "reasoning_content": null
+            },
+            "logprobs": null,
+            "finish_reason": null
+          }
+        ],
+        "usage": null
+      },
+      "delay_ms": 18
+    },
+    {
+      "chunk": {
+        "id": "e4bae4f0-5ae9-4c4d-a880-a41bc2d636dd",
+        "object": "chat.completion.chunk",
+        "created": 1788509517,
+        "model": "deepseek-v4-flash",
+        "system_fingerprint": "a26a7955944dc5c60445bff77fac9c8e",
+        "choices": [
+          {
+            "index": 0,
+            "delta": {
+              "content": "未",
+              "reasoning_content": null
+            },
+            "logprobs": null,
+            "finish_reason": null
+          }
+        ],
+        "usage": null
+      },
+      "delay_ms": 26
+    },
+    {
+      "chunk": {
+        "id": "e4bae4f0-5ae9-4c4d-a880-a41bc2d636dd",
+        "object": "chat.completion.chunk",
+        "created": 1788509517,
+        "model": "deepseek-v4-flash",
+        "system_fingerprint": "a26a7955944dc5c60445bff77fac9c8e",
+        "choices": [
+          {
+            "index": 0,
+            "delta": {
+              "content": "说明",
+              "reasoning_content": null
+            },
+            "logprobs": null,
+            "finish_reason": null
+          }
+        ],
+        "usage": null
+      },
+      "delay_ms": 15
+    },
+    {
+      "chunk": {
+        "id": "e4bae4f0-5ae9-4c4d-a880-a41bc2d636dd",
+        "object": "chat.completion.chunk",
+        "created": 1788509517,
+        "model": "deepseek-v4-flash",
+        "system_fingerprint": "a26a7955944dc5c60445bff77fac9c8e",
+        "choices": [
+          {
+            "index": 0,
+            "delta": {
+              "content": "这种",
+              "reasoning_content": null
+            },
+            "logprobs": null,
+            "finish_reason": null
+          }
+        ],
+        "usage": null
+      },
+      "delay_ms": 0
+    },
+    {
+      "chunk": {
+        "id": "e4bae4f0-5ae9-4c4d-a880-a41bc2d636dd",
+        "object": "chat.completion.chunk",
+        "created": 1788509517,
+        "model": "deepseek-v4-flash",
+        "system_fingerprint": "a26a7955944dc5c60445bff77fac9c8e",
+        "choices": [
+          {
+            "index": 0,
+            "delta": {
+              "content": "关联",
+              "reasoning_content": null
+            },
+            "logprobs": null,
+            "finish_reason": null
+          }
+        ],
+        "usage": null
+      },
+      "delay_ms": 29
+    },
+    {
+      "chunk": {
+        "id": "e4bae4f0-5ae9-4c4d-a880-a41bc2d636dd",
+        "object": "chat.completion.chunk",
+        "created": 1788509517,
+        "model": "deepseek-v4-flash",
+        "system_fingerprint": "a26a7955944dc5c60445bff77fac9c8e",
+        "choices": [
+          {
+            "index": 0,
+            "delta": {
+              "content": "来自",
+              "reasoning_content": null
+            },
+            "logprobs": null,
+            "finish_reason": null
+          }
+        ],
+        "usage": null
+      },
+      "delay_ms": 0
+    },
+    {
+      "chunk": {
+        "id": "e4bae4f0-5ae9-4c4d-a880-a41bc2d636dd",
+        "object": "chat.completion.chunk",
+        "created": 1788509517,
+        "model": "deepseek-v4-flash",
+        "system_fingerprint": "a26a7955944dc5c60445bff77fac9c8e",
+        "choices": [
+          {
+            "index": 0,
+            "delta": {
+              "content": "共同",
+              "reasoning_content": null
+            },
+            "logprobs": null,
+            "finish_reason": null
+          }
+        ],
+        "usage": null
+      },
+      "delay_ms": 43
+    },
+    {
+      "chunk": {
+        "id": "e4bae4f0-5ae9-4c4d-a880-a41bc2d636dd",
+        "object": "chat.completion.chunk",
+        "created": 1788509517,
+        "model": "deepseek-v4-flash",
+        "system_fingerprint": "a26a7955944dc5c60445bff77fac9c8e",
+        "choices": [
+          {
+            "index": 0,
+            "delta": {
+              "content": "量子",
+              "reasoning_content": null
+            },
+            "logprobs": null,
+            "finish_reason": null
+          }
+        ],
+        "usage": null
+      },
+      "delay_ms": 0
+    },
+    {
+      "chunk": {
+        "id": "e4bae4f0-5ae9-4c4d-a880-a41bc2d636dd",
+        "object": "chat.completion.chunk",
+        "created": 1788509517,
+        "model": "deepseek-v4-flash",
+        "system_fingerprint": "a26a7955944dc5c60445bff77fac9c8e",
+        "choices": [
+          {
+            "index": 0,
+            "delta": {
+              "content": "态",
+              "reasoning_content": null
+            },
+            "logprobs": null,
+            "finish_reason": null
+          }
+        ],
+        "usage": null
+      },
+      "delay_ms": 0
+    },
+    {
+      "chunk": {
+        "id": "e4bae4f0-5ae9-4c4d-a880-a41bc2d636dd",
+        "object": "chat.completion.chunk",
+        "created": 1788509517,
+        "model": "deepseek-v4-flash",
+        "system_fingerprint": "a26a7955944dc5c60445bff77fac9c8e",
+        "choices": [
+          {
+            "index": 0,
+            "delta": {
+              "content": "，",
+              "reasoning_content": null
+            },
+            "logprobs": null,
+            "finish_reason": null
+          }
+        ],
+        "usage": null
+      },
+      "delay_ms": 0
+    },
+    {
+      "chunk": {
+        "id": "e4bae4f0-5ae9-4c4d-a880-a41bc2d636dd",
+        "object": "chat.completion.chunk",
+        "created": 1788509517,
+        "model": "deepseek-v4-flash",
+        "system_fingerprint": "a26a7955944dc5c60445bff77fac9c8e",
+        "choices": [
+          {
+            "index": 0,
+            "delta": {
+              "content": "且",
+              "reasoning_content": null
+            },
+            "logprobs": null,
+            "finish_reason": null
+          }
+        ],
+        "usage": null
+      },
+      "delay_ms": 17
+    },
+    {
+      "chunk": {
+        "id": "e4bae4f0-5ae9-4c4d-a880-a41bc2d636dd",
+        "object": "chat.completion.chunk",
+        "created": 1788509517,
+        "model": "deepseek-v4-flash",
+        "system_fingerprint": "a26a7955944dc5c60445bff77fac9c8e",
+        "choices": [
+          {
+            "index": 0,
+            "delta": {
+              "content": "不能",
+              "reasoning_content": null
+            },
+            "logprobs": null,
+            "finish_reason": null
+          }
+        ],
+        "usage": null
+      },
+      "delay_ms": 0
+    },
+    {
+      "chunk": {
+        "id": "e4bae4f0-5ae9-4c4d-a880-a41bc2d636dd",
+        "object": "chat.completion.chunk",
+        "created": 1788509517,
+        "model": "deepseek-v4-flash",
+        "system_fingerprint": "a26a7955944dc5c60445bff77fac9c8e",
+        "choices": [
+          {
+            "index": 0,
+            "delta": {
+              "content": "用来",
+              "reasoning_content": null
+            },
+            "logprobs": null,
+            "finish_reason": null
+          }
+        ],
+        "usage": null
+      },
+      "delay_ms": 18
+    },
+    {
+      "chunk": {
+        "id": "e4bae4f0-5ae9-4c4d-a880-a41bc2d636dd",
+        "object": "chat.completion.chunk",
+        "created": 1788509517,
+        "model": "deepseek-v4-flash",
+        "system_fingerprint": "a26a7955944dc5c60445bff77fac9c8e",
+        "choices": [
+          {
+            "index": 0,
+            "delta": {
+              "content": "超",
+              "reasoning_content": null
+            },
+            "logprobs": null,
+            "finish_reason": null
+          }
+        ],
+        "usage": null
+      },
+      "delay_ms": 0
+    },
+    {
+      "chunk": {
+        "id": "e4bae4f0-5ae9-4c4d-a880-a41bc2d636dd",
+        "object": "chat.completion.chunk",
+        "created": 1788509517,
+        "model": "deepseek-v4-flash",
+        "system_fingerprint": "a26a7955944dc5c60445bff77fac9c8e",
+        "choices": [
+          {
+            "index": 0,
+            "delta": {
+              "content": "光",
+              "reasoning_content": null
+            },
+            "logprobs": null,
+            "finish_reason": null
+          }
+        ],
+        "usage": null
+      },
+      "delay_ms": 20
+    },
+    {
+      "chunk": {
+        "id": "e4bae4f0-5ae9-4c4d-a880-a41bc2d636dd",
+        "object": "chat.completion.chunk",
+        "created": 1788509517,
+        "model": "deepseek-v4-flash",
+        "system_fingerprint": "a26a7955944dc5c60445bff77fac9c8e",
+        "choices": [
+          {
+            "index": 0,
+            "delta": {
+              "content": "速",
+              "reasoning_content": null
+            },
+            "logprobs": null,
+            "finish_reason": null
+          }
+        ],
+        "usage": null
+      },
+      "delay_ms": 0
+    },
+    {
+      "chunk": {
+        "id": "e4bae4f0-5ae9-4c4d-a880-a41bc2d636dd",
+        "object": "chat.completion.chunk",
+        "created": 1788509517,
+        "model": "deepseek-v4-flash",
+        "system_fingerprint": "a26a7955944dc5c60445bff77fac9c8e",
+        "choices": [
+          {
+            "index": 0,
+            "delta": {
+              "content": "通信",
+              "reasoning_content": null
+            },
+            "logprobs": null,
+            "finish_reason": null
+          }
+        ],
+        "usage": null
+      },
+      "delay_ms": 0
+    },
+    {
+      "chunk": {
+        "id": "e4bae4f0-5ae9-4c4d-a880-a41bc2d636dd",
+        "object": "chat.completion.chunk",
+        "created": 1788509517,
+        "model": "deepseek-v4-flash",
+        "system_fingerprint": "a26a7955944dc5c60445bff77fac9c8e",
+        "choices": [
+          {
+            "index": 0,
+            "delta": {
+              "content": "。",
+              "reasoning_content": null
+            },
+            "logprobs": null,
+            "finish_reason": null
+          }
+        ],
+        "usage": null
+      },
+      "delay_ms": 0
+    },
+    {
+      "chunk": {
+        "id": "e4bae4f0-5ae9-4c4d-a880-a41bc2d636dd",
+        "object": "chat.completion.chunk",
+        "created": 1788509517,
+        "model": "deepseek-v4-flash",
+        "system_fingerprint": "a26a7955944dc5c60445bff77fac9c8e",
+        "choices": [
+          {
+            "index": 0,
+            "delta": {
+              "content": "总体上",
+              "reasoning_content": null
+            },
+            "logprobs": null,
+            "finish_reason": null
+          }
+        ],
+        "usage": null
+      },
+      "delay_ms": 0
+    },
+    {
+      "chunk": {
+        "id": "e4bae4f0-5ae9-4c4d-a880-a41bc2d636dd",
+        "object": "chat.completion.chunk",
+        "created": 1788509517,
+        "model": "deepseek-v4-flash",
+        "system_fingerprint": "a26a7955944dc5c60445bff77fac9c8e",
+        "choices": [
+          {
+            "index": 0,
+            "delta": {
+              "content": "方向",
+              "reasoning_content": null
+            },
+            "logprobs": null,
+            "finish_reason": null
+          }
+        ],
+        "usage": null
+      },
+      "delay_ms": 19
+    },
+    {
+      "chunk": {
+        "id": "e4bae4f0-5ae9-4c4d-a880-a41bc2d636dd",
+        "object": "chat.completion.chunk",
+        "created": 1788509517,
+        "model": "deepseek-v4-flash",
+        "system_fingerprint": "a26a7955944dc5c60445bff77fac9c8e",
+        "choices": [
+          {
+            "index": 0,
+            "delta": {
+              "content": "正确",
+              "reasoning_content": null
+            },
+            "logprobs": null,
+            "finish_reason": null
+          }
+        ],
+        "usage": null
+      },
+      "delay_ms": 24
+    },
+    {
+      "chunk": {
+        "id": "e4bae4f0-5ae9-4c4d-a880-a41bc2d636dd",
+        "object": "chat.completion.chunk",
+        "created": 1788509517,
+        "model": "deepseek-v4-flash",
+        "system_fingerprint": "a26a7955944dc5c60445bff77fac9c8e",
+        "choices": [
+          {
+            "index": 0,
+            "delta": {
+              "content": "，",
+              "reasoning_content": null
+            },
+            "logprobs": null,
+            "finish_reason": null
+          }
+        ],
+        "usage": null
+      },
+      "delay_ms": 23
+    },
+    {
+      "chunk": {
+        "id": "e4bae4f0-5ae9-4c4d-a880-a41bc2d636dd",
+        "object": "chat.completion.chunk",
+        "created": 1788509517,
+        "model": "deepseek-v4-flash",
+        "system_fingerprint": "a26a7955944dc5c60445bff77fac9c8e",
+        "choices": [
+          {
+            "index": 0,
+            "delta": {
+              "content": "但有",
+              "reasoning_content": null
+            },
+            "logprobs": null,
+            "finish_reason": null
+          }
+        ],
+        "usage": null
+      },
+      "delay_ms": 0
+    },
+    {
+      "chunk": {
+        "id": "e4bae4f0-5ae9-4c4d-a880-a41bc2d636dd",
+        "object": "chat.completion.chunk",
+        "created": 1788509517,
+        "model": "deepseek-v4-flash",
+        "system_fingerprint": "a26a7955944dc5c60445bff77fac9c8e",
+        "choices": [
+          {
+            "index": 0,
+            "delta": {
+              "content": "误导",
+              "reasoning_content": null
+            },
+            "logprobs": null,
+            "finish_reason": null
+          }
+        ],
+        "usage": null
+      },
+      "delay_ms": 24
+    },
+    {
+      "chunk": {
+        "id": "e4bae4f0-5ae9-4c4d-a880-a41bc2d636dd",
+        "object": "chat.completion.chunk",
+        "created": 1788509517,
+        "model": "deepseek-v4-flash",
+        "system_fingerprint": "a26a7955944dc5c60445bff77fac9c8e",
+        "choices": [
+          {
+            "index": 0,
+            "delta": {
+              "content": "风险",
+              "reasoning_content": null
+            },
+            "logprobs": null,
+            "finish_reason": null
+          }
+        ],
+        "usage": null
+      },
+      "delay_ms": 0
+    },
+    {
+      "chunk": {
+        "id": "e4bae4f0-5ae9-4c4d-a880-a41bc2d636dd",
+        "object": "chat.completion.chunk",
+        "created": 1788509517,
+        "model": "deepseek-v4-flash",
+        "system_fingerprint": "a26a7955944dc5c60445bff77fac9c8e",
+        "choices": [
+          {
+            "index": 0,
+            "delta": {
+              "content": "，",
+              "reasoning_content": null
+            },
+            "logprobs": null,
+            "finish_reason": null
+          }
+        ],
+        "usage": null
+      },
+      "delay_ms": 14
+    },
+    {
+      "chunk": {
+        "id": "e4bae4f0-5ae9-4c4d-a880-a41bc2d636dd",
+        "object": "chat.completion.chunk",
+        "created": 1788509517,
+        "model": "deepseek-v4-flash",
+        "system_fingerprint": "a26a7955944dc5c60445bff77fac9c8e",
+        "choices": [
+          {
+            "index": 0,
+            "delta": {
+              "content": "可信",
+              "reasoning_content": null
+            },
+            "logprobs": null,
+            "finish_reason": null
+          }
+        ],
+        "usage": null
+      },
+      "delay_ms": 0
+    },
+    {
+      "chunk": {
+        "id": "e4bae4f0-5ae9-4c4d-a880-a41bc2d636dd",
+        "object": "chat.completion.chunk",
+        "created": 1788509517,
+        "model": "deepseek-v4-flash",
+        "system_fingerprint": "a26a7955944dc5c60445bff77fac9c8e",
+        "choices": [
+          {
+            "index": 0,
+            "delta": {
+              "content": "度",
+              "reasoning_content": null
+            },
+            "logprobs": null,
+            "finish_reason": null
+          }
+        ],
+        "usage": null
+      },
+      "delay_ms": 0
+    },
+    {
+      "chunk": {
+        "id": "e4bae4f0-5ae9-4c4d-a880-a41bc2d636dd",
+        "object": "chat.completion.chunk",
+        "created": 1788509517,
+        "model": "deepseek-v4-flash",
+        "system_fingerprint": "a26a7955944dc5c60445bff77fac9c8e",
+        "choices": [
+          {
+            "index": 0,
+            "delta": {
+              "content": "中等",
+              "reasoning_content": null
+            },
+            "logprobs": null,
+            "finish_reason": null
+          }
+        ],
+        "usage": null
+      },
+      "delay_ms": 30
+    },
+    {
+      "chunk": {
+        "id": "e4bae4f0-5ae9-4c4d-a880-a41bc2d636dd",
+        "object": "chat.completion.chunk",
+        "created": 1788509517,
+        "model": "deepseek-v4-flash",
+        "system_fingerprint": "a26a7955944dc5c60445bff77fac9c8e",
+        "choices": [
+          {
+            "index": 0,
+            "delta": {
+              "content": "。\n\n",
+              "reasoning_content": null
+            },
+            "logprobs": null,
+            "finish_reason": null
+          }
+        ],
+        "usage": null
+      },
+      "delay_ms": 0
+    },
+    {
+      "chunk": {
+        "id": "e4bae4f0-5ae9-4c4d-a880-a41bc2d636dd",
+        "object": "chat.completion.chunk",
+        "created": 1788509517,
+        "model": "deepseek-v4-flash",
+        "system_fingerprint": "a26a7955944dc5c60445bff77fac9c8e",
+        "choices": [
+          {
+            "index": 0,
+            "delta": {
+              "content": "【",
+              "reasoning_content": null
+            },
+            "logprobs": null,
+            "finish_reason": null
+          }
+        ],
+        "usage": null
+      },
+      "delay_ms": 0
+    },
+    {
+      "chunk": {
+        "id": "e4bae4f0-5ae9-4c4d-a880-a41bc2d636dd",
+        "object": "chat.completion.chunk",
+        "created": 1788509517,
+        "model": "deepseek-v4-flash",
+        "system_fingerprint": "a26a7955944dc5c60445bff77fac9c8e",
+        "choices": [
+          {
+            "index": 0,
+            "delta": {
+              "content": "回答",
+              "reasoning_content": null
+            },
+            "logprobs": null,
+            "finish_reason": null
+          }
+        ],
+        "usage": null
+      },
+      "delay_ms": 0
+    },
+    {
+      "chunk": {
+        "id": "e4bae4f0-5ae9-4c4d-a880-a41bc2d636dd",
+        "object": "chat.completion.chunk",
+        "created": 1788509517,
+        "model": "deepseek-v4-flash",
+        "system_fingerprint": "a26a7955944dc5c60445bff77fac9c8e",
+        "choices": [
+          {
+            "index": 0,
+            "delta": {
+              "content": " ",
+              "reasoning_content": null
+            },
+            "logprobs": null,
+            "finish_reason": null
+          }
+        ],
+        "usage": null
+      },
+      "delay_ms": 0
+    },
+    {
+      "chunk": {
+        "id": "e4bae4f0-5ae9-4c4d-a880-a41bc2d636dd",
+        "object": "chat.completion.chunk",
+        "created": 1788509517,
+        "model": "deepseek-v4-flash",
+        "system_fingerprint": "a26a7955944dc5c60445bff77fac9c8e",
+        "choices": [
+          {
+            "index": 0,
+            "delta": {
+              "content": "2",
+              "reasoning_content": null
+            },
+            "logprobs": null,
+            "finish_reason": null
+          }
+        ],
+        "usage": null
+      },
+      "delay_ms": 15
+    },
+    {
+      "chunk": {
+        "id": "e4bae4f0-5ae9-4c4d-a880-a41bc2d636dd",
+        "object": "chat.completion.chunk",
+        "created": 1788509517,
+        "model": "deepseek-v4-flash",
+        "system_fingerprint": "a26a7955944dc5c60445bff77fac9c8e",
+        "choices": [
+          {
+            "index": 0,
+            "delta": {
+              "content": "】\n",
+              "reasoning_content": null
+            },
+            "logprobs": null,
+            "finish_reason": null
+          }
+        ],
+        "usage": null
+      },
+      "delay_ms": 0
+    },
+    {
+      "chunk": {
+        "id": "e4bae4f0-5ae9-4c4d-a880-a41bc2d636dd",
+        "object": "chat.completion.chunk",
+        "created": 1788509517,
+        "model": "deepseek-v4-flash",
+        "system_fingerprint": "a26a7955944dc5c60445bff77fac9c8e",
+        "choices": [
+          {
+            "index": 0,
+            "delta": {
+              "content": "优点",
+              "reasoning_content": null
+            },
+            "logprobs": null,
+            "finish_reason": null
+          }
+        ],
+        "usage": null
+      },
+      "delay_ms": 0
+    },
+    {
+      "chunk": {
+        "id": "e4bae4f0-5ae9-4c4d-a880-a41bc2d636dd",
+        "object": "chat.completion.chunk",
+        "created": 1788509517,
+        "model": "deepseek-v4-flash",
+        "system_fingerprint": "a26a7955944dc5c60445bff77fac9c8e",
+        "choices": [
+          {
+            "index": 0,
+            "delta": {
+              "content": "：",
+              "reasoning_content": null
+            },
+            "logprobs": null,
+            "finish_reason": null
+          }
+        ],
+        "usage": null
+      },
+      "delay_ms": 0
+    },
+    {
+      "chunk": {
+        "id": "e4bae4f0-5ae9-4c4d-a880-a41bc2d636dd",
+        "object": "chat.completion.chunk",
+        "created": 1788509517,
+        "model": "deepseek-v4-flash",
+        "system_fingerprint": "a26a7955944dc5c60445bff77fac9c8e",
+        "choices": [
+          {
+            "index": 0,
+            "delta": {
+              "content": "同样",
+              "reasoning_content": null
+            },
+            "logprobs": null,
+            "finish_reason": null
+          }
+        ],
+        "usage": null
+      },
+      "delay_ms": 0
+    },
+    {
+      "chunk": {
+        "id": "e4bae4f0-5ae9-4c4d-a880-a41bc2d636dd",
+        "object": "chat.completion.chunk",
+        "created": 1788509517,
+        "model": "deepseek-v4-flash",
+        "system_fingerprint": "a26a7955944dc5c60445bff77fac9c8e",
+        "choices": [
+          {
+            "index": 0,
+            "delta": {
+              "content": "简明",
+              "reasoning_content": null
+            },
+            "logprobs": null,
+            "finish_reason": null
+          }
+        ],
+        "usage": null
+      },
+      "delay_ms": 14
+    },
+    {
+      "chunk": {
+        "id": "e4bae4f0-5ae9-4c4d-a880-a41bc2d636dd",
+        "object": "chat.completion.chunk",
+        "created": 1788509517,
+        "model": "deepseek-v4-flash",
+        "system_fingerprint": "a26a7955944dc5c60445bff77fac9c8e",
+        "choices": [
+          {
+            "index": 0,
+            "delta": {
+              "content": "，",
+              "reasoning_content": null
+            },
+            "logprobs": null,
+            "finish_reason": null
+          }
+        ],
+        "usage": null
+      },
+      "delay_ms": 23
+    },
+    {
+      "chunk": {
+        "id": "e4bae4f0-5ae9-4c4d-a880-a41bc2d636dd",
+        "object": "chat.completion.chunk",
+        "created": 1788509517,
+        "model": "deepseek-v4-flash",
+        "system_fingerprint": "a26a7955944dc5c60445bff77fac9c8e",
+        "choices": [
+          {
+            "index": 0,
+            "delta": {
+              "content": "强调了",
+              "reasoning_content": null
+            },
+            "logprobs": null,
+            "finish_reason": null
+          }
+        ],
+        "usage": null
+      },
+      "delay_ms": 0
+    },
+    {
+      "chunk": {
+        "id": "e4bae4f0-5ae9-4c4d-a880-a41bc2d636dd",
+        "object": "chat.completion.chunk",
+        "created": 1788509517,
+        "model": "deepseek-v4-flash",
+        "system_fingerprint": "a26a7955944dc5c60445bff77fac9c8e",
+        "choices": [
+          {
+            "index": 0,
+            "delta": {
+              "content": "“",
+              "reasoning_content": null
+            },
+            "logprobs": null,
+            "finish_reason": null
+          }
+        ],
+        "usage": null
+      },
+      "delay_ms": 18
+    },
+    {
+      "chunk": {
+        "id": "e4bae4f0-5ae9-4c4d-a880-a41bc2d636dd",
+        "object": "chat.completion.chunk",
+        "created": 1788509517,
+        "model": "deepseek-v4-flash",
+        "system_fingerprint": "a26a7955944dc5c60445bff77fac9c8e",
+        "choices": [
+          {
+            "index": 0,
+            "delta": {
+              "content": "整体",
+              "reasoning_content": null
+            },
+            "logprobs": null,
+            "finish_reason": null
+          }
+        ],
+        "usage": null
+      },
+      "delay_ms": 0
+    },
+    {
+      "chunk": {
+        "id": "e4bae4f0-5ae9-4c4d-a880-a41bc2d636dd",
+        "object": "chat.completion.chunk",
+        "created": 1788509517,
+        "model": "deepseek-v4-flash",
+        "system_fingerprint": "a26a7955944dc5c60445bff77fac9c8e",
+        "choices": [
+          {
+            "index": 0,
+            "delta": {
+              "content": "关联",
+              "reasoning_content": null
+            },
+            "logprobs": null,
+            "finish_reason": null
+          }
+        ],
+        "usage": null
+      },
+      "delay_ms": 22
+    },
+    {
+      "chunk": {
+        "id": "e4bae4f0-5ae9-4c4d-a880-a41bc2d636dd",
+        "object": "chat.completion.chunk",
+        "created": 1788509517,
+        "model": "deepseek-v4-flash",
+        "system_fingerprint": "a26a7955944dc5c60445bff77fac9c8e",
+        "choices": [
+          {
+            "index": 0,
+            "delta": {
+              "content": "”",
+              "reasoning_content": null
+            },
+            "logprobs": null,
+            "finish_reason": null
+          }
+        ],
+        "usage": null
+      },
+      "delay_ms": 0
+    },
+    {
+      "chunk": {
+        "id": "e4bae4f0-5ae9-4c4d-a880-a41bc2d636dd",
+        "object": "chat.completion.chunk",
+        "created": 1788509517,
+        "model": "deepseek-v4-flash",
+        "system_fingerprint": "a26a7955944dc5c60445bff77fac9c8e",
+        "choices": [
+          {
+            "index": 0,
+            "delta": {
+              "content": "和",
+              "reasoning_content": null
+            },
+            "logprobs": null,
+            "finish_reason": null
+          }
+        ],
+        "usage": null
+      },
+      "delay_ms": 0
+    },
+    {
+      "chunk": {
+        "id": "e4bae4f0-5ae9-4c4d-a880-a41bc2d636dd",
+        "object": "chat.completion.chunk",
+        "created": 1788509517,
+        "model": "deepseek-v4-flash",
+        "system_fingerprint": "a26a7955944dc5c60445bff77fac9c8e",
+        "choices": [
+          {
+            "index": 0,
+            "delta": {
+              "content": "“",
+              "reasoning_content": null
+            },
+            "logprobs": null,
+            "finish_reason": null
+          }
+        ],
+        "usage": null
+      },
+      "delay_ms": 0
+    },
+    {
+      "chunk": {
+        "id": "e4bae4f0-5ae9-4c4d-a880-a41bc2d636dd",
+        "object": "chat.completion.chunk",
+        "created": 1788509517,
+        "model": "deepseek-v4-flash",
+        "system_fingerprint": "a26a7955944dc5c60445bff77fac9c8e",
+        "choices": [
+          {
+            "index": 0,
+            "delta": {
+              "content": "距离",
+              "reasoning_content": null
+            },
+            "logprobs": null,
+            "finish_reason": null
+          }
+        ],
+        "usage": null
+      },
+      "delay_ms": 0
+    },
+    {
+      "chunk": {
+        "id": "e4bae4f0-5ae9-4c4d-a880-a41bc2d636dd",
+        "object": "chat.completion.chunk",
+        "created": 1788509517,
+        "model": "deepseek-v4-flash",
+        "system_fingerprint": "a26a7955944dc5c60445bff77fac9c8e",
+        "choices": [
+          {
+            "index": 0,
+            "delta": {
+              "content": "无关",
+              "reasoning_content": null
+            },
+            "logprobs": null,
+            "finish_reason": null
+          }
+        ],
+        "usage": null
+      },
+      "delay_ms": 22
+    },
+    {
+      "chunk": {
+        "id": "e4bae4f0-5ae9-4c4d-a880-a41bc2d636dd",
+        "object": "chat.completion.chunk",
+        "created": 1788509517,
+        "model": "deepseek-v4-flash",
+        "system_fingerprint": "a26a7955944dc5c60445bff77fac9c8e",
+        "choices": [
+          {
+            "index": 0,
+            "delta": {
+              "content": "”。\n",
+              "reasoning_content": null
+            },
+            "logprobs": null,
+            "finish_reason": null
+          }
+        ],
+        "usage": null
+      },
+      "delay_ms": 42
+    },
+    {
+      "chunk": {
+        "id": "e4bae4f0-5ae9-4c4d-a880-a41bc2d636dd",
+        "object": "chat.completion.chunk",
+        "created": 1788509517,
+        "model": "deepseek-v4-flash",
+        "system_fingerprint": "a26a7955944dc5c60445bff77fac9c8e",
+        "choices": [
+          {
+            "index": 0,
+            "delta": {
+              "content": "问题",
+              "reasoning_content": null
+            },
+            "logprobs": null,
+            "finish_reason": null
+          }
+        ],
+        "usage": null
+      },
+      "delay_ms": 0
+    },
+    {
+      "chunk": {
+        "id": "e4bae4f0-5ae9-4c4d-a880-a41bc2d636dd",
+        "object": "chat.completion.chunk",
+        "created": 1788509517,
+        "model": "deepseek-v4-flash",
+        "system_fingerprint": "a26a7955944dc5c60445bff77fac9c8e",
+        "choices": [
+          {
+            "index": 0,
+            "delta": {
+              "content": "：",
+              "reasoning_content": null
+            },
+            "logprobs": null,
+            "finish_reason": null
+          }
+        ],
+        "usage": null
+      },
+      "delay_ms": 5
+    },
+    {
+      "chunk": {
+        "id": "e4bae4f0-5ae9-4c4d-a880-a41bc2d636dd",
+        "object": "chat.completion.chunk",
+        "created": 1788509517,
+        "model": "deepseek-v4-flash",
+        "system_fingerprint": "a26a7955944dc5c60445bff77fac9c8e",
+        "choices": [
+          {
+            "index": 0,
+            "delta": {
+              "content": "比",
+              "reasoning_content": null
+            },
+            "logprobs": null,
+            "finish_reason": null
+          }
+        ],
+        "usage": null
+      },
+      "delay_ms": 0
+    },
+    {
+      "chunk": {
+        "id": "e4bae4f0-5ae9-4c4d-a880-a41bc2d636dd",
+        "object": "chat.completion.chunk",
+        "created": 1788509517,
+        "model": "deepseek-v4-flash",
+        "system_fingerprint": "a26a7955944dc5c60445bff77fac9c8e",
+        "choices": [
+          {
+            "index": 0,
+            "delta": {
+              "content": "回答",
+              "reasoning_content": null
+            },
+            "logprobs": null,
+            "finish_reason": null
+          }
+        ],
+        "usage": null
+      },
+      "delay_ms": 21
+    },
+    {
+      "chunk": {
+        "id": "e4bae4f0-5ae9-4c4d-a880-a41bc2d636dd",
+        "object": "chat.completion.chunk",
+        "created": 1788509517,
+        "model": "deepseek-v4-flash",
+        "system_fingerprint": "a26a7955944dc5c60445bff77fac9c8e",
+        "choices": [
+          {
+            "index": 0,
+            "delta": {
+              "content": "1",
+              "reasoning_content": null
+            },
+            "logprobs": null,
+            "finish_reason": null
+          }
+        ],
+        "usage": null
+      },
+      "delay_ms": 0
+    },
+    {
+      "chunk": {
+        "id": "e4bae4f0-5ae9-4c4d-a880-a41bc2d636dd",
+        "object": "chat.completion.chunk",
+        "created": 1788509517,
+        "model": "deepseek-v4-flash",
+        "system_fingerprint": "a26a7955944dc5c60445bff77fac9c8e",
+        "choices": [
+          {
+            "index": 0,
+            "delta": {
+              "content": "更",
+              "reasoning_content": null
+            },
+            "logprobs": null,
+            "finish_reason": null
+          }
+        ],
+        "usage": null
+      },
+      "delay_ms": 16
+    },
+    {
+      "chunk": {
+        "id": "e4bae4f0-5ae9-4c4d-a880-a41bc2d636dd",
+        "object": "chat.completion.chunk",
+        "created": 1788509517,
+        "model": "deepseek-v4-flash",
+        "system_fingerprint": "a26a7955944dc5c60445bff77fac9c8e",
+        "choices": [
+          {
+            "index": 0,
+            "delta": {
+              "content": "明确",
+              "reasoning_content": null
+            },
+            "logprobs": null,
+            "finish_reason": null
+          }
+        ],
+        "usage": null
+      },
+      "delay_ms": 0
+    },
+    {
+      "chunk": {
+        "id": "e4bae4f0-5ae9-4c4d-a880-a41bc2d636dd",
+        "object": "chat.completion.chunk",
+        "created": 1788509517,
+        "model": "deepseek-v4-flash",
+        "system_fingerprint": "a26a7955944dc5c60445bff77fac9c8e",
+        "choices": [
+          {
+            "index": 0,
+            "delta": {
+              "content": "地",
+              "reasoning_content": null
+            },
+            "logprobs": null,
+            "finish_reason": null
+          }
+        ],
+        "usage": null
+      },
+      "delay_ms": 25
+    },
+    {
+      "chunk": {
+        "id": "e4bae4f0-5ae9-4c4d-a880-a41bc2d636dd",
+        "object": "chat.completion.chunk",
+        "created": 1788509517,
+        "model": "deepseek-v4-flash",
+        "system_fingerprint": "a26a7955944dc5c60445bff77fac9c8e",
+        "choices": [
+          {
+            "index": 0,
+            "delta": {
+              "content": "说了",
+              "reasoning_content": null
+            },
+            "logprobs": null,
+            "finish_reason": null
+          }
+        ],
+        "usage": null
+      },
+      "delay_ms": 0
+    },
+    {
+      "chunk": {
+        "id": "e4bae4f0-5ae9-4c4d-a880-a41bc2d636dd",
+        "object": "chat.completion.chunk",
+        "created": 1788509517,
+        "model": "deepseek-v4-flash",
+        "system_fingerprint": "a26a7955944dc5c60445bff77fac9c8e",
+        "choices": [
+          {
+            "index": 0,
+            "delta": {
+              "content": "“",
+              "reasoning_content": null
+            },
+            "logprobs": null,
+            "finish_reason": null
+          }
+        ],
+        "usage": null
+      },
+      "delay_ms": 38
+    },
+    {
+      "chunk": {
+        "id": "e4bae4f0-5ae9-4c4d-a880-a41bc2d636dd",
+        "object": "chat.completion.chunk",
+        "created": 1788509517,
+        "model": "deepseek-v4-flash",
+        "system_fingerprint": "a26a7955944dc5c60445bff77fac9c8e",
+        "choices": [
+          {
+            "index": 0,
+            "delta": {
+              "content": "立即",
+              "reasoning_content": null
+            },
+            "logprobs": null,
+            "finish_reason": null
+          }
+        ],
+        "usage": null
+      },
+      "delay_ms": 0
+    },
+    {
+      "chunk": {
+        "id": "e4bae4f0-5ae9-4c4d-a880-a41bc2d636dd",
+        "object": "chat.completion.chunk",
+        "created": 1788509517,
+        "model": "deepseek-v4-flash",
+        "system_fingerprint": "a26a7955944dc5c60445bff77fac9c8e",
+        "choices": [
+          {
+            "index": 0,
+            "delta": {
+              "content": "决定",
+              "reasoning_content": null
+            },
+            "logprobs": null,
+            "finish_reason": null
+          }
+        ],
+        "usage": null
+      },
+      "delay_ms": 0
+    },
+    {
+      "chunk": {
+        "id": "e4bae4f0-5ae9-4c4d-a880-a41bc2d636dd",
+        "object": "chat.completion.chunk",
+        "created": 1788509517,
+        "model": "deepseek-v4-flash",
+        "system_fingerprint": "a26a7955944dc5c60445bff77fac9c8e",
+        "choices": [
+          {
+            "index": 0,
+            "delta": {
+              "content": "”",
+              "reasoning_content": null
+            },
+            "logprobs": null,
+            "finish_reason": null
+          }
+        ],
+        "usage": null
+      },
+      "delay_ms": 0
+    },
+    {
+      "chunk": {
+        "id": "e4bae4f0-5ae9-4c4d-a880-a41bc2d636dd",
+        "object": "chat.completion.chunk",
+        "created": 1788509517,
+        "model": "deepseek-v4-flash",
+        "system_fingerprint": "a26a7955944dc5c60445bff77fac9c8e",
+        "choices": [
+          {
+            "index": 0,
+            "delta": {
+              "content": "和",
+              "reasoning_content": null
+            },
+            "logprobs": null,
+            "finish_reason": null
+          }
+        ],
+        "usage": null
+      },
+      "delay_ms": 0
+    },
+    {
+      "chunk": {
+        "id": "e4bae4f0-5ae9-4c4d-a880-a41bc2d636dd",
+        "object": "chat.completion.chunk",
+        "created": 1788509517,
+        "model": "deepseek-v4-flash",
+        "system_fingerprint": "a26a7955944dc5c60445bff77fac9c8e",
+        "choices": [
+          {
+            "index": 0,
+            "delta": {
+              "content": "“",
+              "reasoning_content": null
+            },
+            "logprobs": null,
+            "finish_reason": null
+          }
+        ],
+        "usage": null
+      },
+      "delay_ms": 0
+    },
+    {
+      "chunk": {
+        "id": "e4bae4f0-5ae9-4c4d-a880-a41bc2d636dd",
+        "object": "chat.completion.chunk",
+        "created": 1788509517,
+        "model": "deepseek-v4-flash",
+        "system_fingerprint": "a26a7955944dc5c60445bff77fac9c8e",
+        "choices": [
+          {
+            "index": 0,
+            "delta": {
+              "content": "超越",
+              "reasoning_content": null
+            },
+            "logprobs": null,
+            "finish_reason": null
+          }
+        ],
+        "usage": null
+      },
+      "delay_ms": 0
+    },
+    {
+      "chunk": {
+        "id": "e4bae4f0-5ae9-4c4d-a880-a41bc2d636dd",
+        "object": "chat.completion.chunk",
+        "created": 1788509517,
+        "model": "deepseek-v4-flash",
+        "system_fingerprint": "a26a7955944dc5c60445bff77fac9c8e",
+        "choices": [
+          {
+            "index": 0,
+            "delta": {
+              "content": "时空",
+              "reasoning_content": null
+            },
+            "logprobs": null,
+            "finish_reason": null
+          }
+        ],
+        "usage": null
+      },
+      "delay_ms": 20
+    },
+    {
+      "chunk": {
+        "id": "e4bae4f0-5ae9-4c4d-a880-a41bc2d636dd",
+        "object": "chat.completion.chunk",
+        "created": 1788509517,
+        "model": "deepseek-v4-flash",
+        "system_fingerprint": "a26a7955944dc5c60445bff77fac9c8e",
+        "choices": [
+          {
+            "index": 0,
+            "delta": {
+              "content": "的联系",
+              "reasoning_content": null
+            },
+            "logprobs": null,
+            "finish_reason": null
+          }
+        ],
+        "usage": null
+      },
+      "delay_ms": 0
+    },
+    {
+      "chunk": {
+        "id": "e4bae4f0-5ae9-4c4d-a880-a41bc2d636dd",
+        "object": "chat.completion.chunk",
+        "created": 1788509517,
+        "model": "deepseek-v4-flash",
+        "system_fingerprint": "a26a7955944dc5c60445bff77fac9c8e",
+        "choices": [
+          {
+            "index": 0,
+            "delta": {
+              "content": "”，",
+              "reasoning_content": null
+            },
+            "logprobs": null,
+            "finish_reason": null
+          }
+        ],
+        "usage": null
+      },
+      "delay_ms": 0
+    },
+    {
+      "chunk": {
+        "id": "e4bae4f0-5ae9-4c4d-a880-a41bc2d636dd",
+        "object": "chat.completion.chunk",
+        "created": 1788509517,
+        "model": "deepseek-v4-flash",
+        "system_fingerprint": "a26a7955944dc5c60445bff77fac9c8e",
+        "choices": [
+          {
+            "index": 0,
+            "delta": {
+              "content": "这在",
+              "reasoning_content": null
+            },
+            "logprobs": null,
+            "finish_reason": null
+          }
+        ],
+        "usage": null
+      },
+      "delay_ms": 0
+    },
+    {
+      "chunk": {
+        "id": "e4bae4f0-5ae9-4c4d-a880-a41bc2d636dd",
+        "object": "chat.completion.chunk",
+        "created": 1788509517,
+        "model": "deepseek-v4-flash",
+        "system_fingerprint": "a26a7955944dc5c60445bff77fac9c8e",
+        "choices": [
+          {
+            "index": 0,
+            "delta": {
+              "content": "物理",
+              "reasoning_content": null
+            },
+            "logprobs": null,
+            "finish_reason": null
+          }
+        ],
+        "usage": null
+      },
+      "delay_ms": 45
+    },
+    {
+      "chunk": {
+        "id": "e4bae4f0-5ae9-4c4d-a880-a41bc2d636dd",
+        "object": "chat.completion.chunk",
+        "created": 1788509517,
+        "model": "deepseek-v4-flash",
+        "system_fingerprint": "a26a7955944dc5c60445bff77fac9c8e",
+        "choices": [
+          {
+            "index": 0,
+            "delta": {
+              "content": "上",
+              "reasoning_content": null
+            },
+            "logprobs": null,
+            "finish_reason": null
+          }
+        ],
+        "usage": null
+      },
+      "delay_ms": 0
+    },
+    {
+      "chunk": {
+        "id": "e4bae4f0-5ae9-4c4d-a880-a41bc2d636dd",
+        "object": "chat.completion.chunk",
+        "created": 1788509517,
+        "model": "deepseek-v4-flash",
+        "system_fingerprint": "a26a7955944dc5c60445bff77fac9c8e",
+        "choices": [
+          {
+            "index": 0,
+            "delta": {
+              "content": "容易",
+              "reasoning_content": null
+            },
+            "logprobs": null,
+            "finish_reason": null
+          }
+        ],
+        "usage": null
+      },
+      "delay_ms": 0
+    },
+    {
+      "chunk": {
+        "id": "e4bae4f0-5ae9-4c4d-a880-a41bc2d636dd",
+        "object": "chat.completion.chunk",
+        "created": 1788509517,
+        "model": "deepseek-v4-flash",
+        "system_fingerprint": "a26a7955944dc5c60445bff77fac9c8e",
+        "choices": [
+          {
+            "index": 0,
+            "delta": {
+              "content": "造成",
+              "reasoning_content": null
+            },
+            "logprobs": null,
+            "finish_reason": null
+          }
+        ],
+        "usage": null
+      },
+      "delay_ms": 17
+    },
+    {
+      "chunk": {
+        "id": "e4bae4f0-5ae9-4c4d-a880-a41bc2d636dd",
+        "object": "chat.completion.chunk",
+        "created": 1788509517,
+        "model": "deepseek-v4-flash",
+        "system_fingerprint": "a26a7955944dc5c60445bff77fac9c8e",
+        "choices": [
+          {
+            "index": 0,
+            "delta": {
+              "content": "严重",
+              "reasoning_content": null
+            },
+            "logprobs": null,
+            "finish_reason": null
+          }
+        ],
+        "usage": null
+      },
+      "delay_ms": 24
+    },
+    {
+      "chunk": {
+        "id": "e4bae4f0-5ae9-4c4d-a880-a41bc2d636dd",
+        "object": "chat.completion.chunk",
+        "created": 1788509517,
+        "model": "deepseek-v4-flash",
+        "system_fingerprint": "a26a7955944dc5c60445bff77fac9c8e",
+        "choices": [
+          {
+            "index": 0,
+            "delta": {
+              "content": "误解",
+              "reasoning_content": null
+            },
+            "logprobs": null,
+            "finish_reason": null
+          }
+        ],
+        "usage": null
+      },
+      "delay_ms": 14
+    },
+    {
+      "chunk": {
+        "id": "e4bae4f0-5ae9-4c4d-a880-a41bc2d636dd",
+        "object": "chat.completion.chunk",
+        "created": 1788509517,
+        "model": "deepseek-v4-flash",
+        "system_fingerprint": "a26a7955944dc5c60445bff77fac9c8e",
+        "choices": [
+          {
+            "index": 0,
+            "delta": {
+              "content": "——",
+              "reasoning_content": null
+            },
+            "logprobs": null,
+            "finish_reason": null
+          }
+        ],
+        "usage": null
+      },
+      "delay_ms": 0
+    },
+    {
+      "chunk": {
+        "id": "e4bae4f0-5ae9-4c4d-a880-a41bc2d636dd",
+        "object": "chat.completion.chunk",
+        "created": 1788509517,
+        "model": "deepseek-v4-flash",
+        "system_fingerprint": "a26a7955944dc5c60445bff77fac9c8e",
+        "choices": [
+          {
+            "index": 0,
+            "delta": {
+              "content": "量子",
+              "reasoning_content": null
+            },
+            "logprobs": null,
+            "finish_reason": null
+          }
+        ],
+        "usage": null
+      },
+      "delay_ms": 0
+    },
+    {
+      "chunk": {
+        "id": "e4bae4f0-5ae9-4c4d-a880-a41bc2d636dd",
+        "object": "chat.completion.chunk",
+        "created": 1788509517,
+        "model": "deepseek-v4-flash",
+        "system_fingerprint": "a26a7955944dc5c60445bff77fac9c8e",
+        "choices": [
+          {
+            "index": 0,
+            "delta": {
+              "content": "纠缠",
+              "reasoning_content": null
+            },
+            "logprobs": null,
+            "finish_reason": null
+          }
+        ],
+        "usage": null
+      },
+      "delay_ms": 66
+    },
+    {
+      "chunk": {
+        "id": "e4bae4f0-5ae9-4c4d-a880-a41bc2d636dd",
+        "object": "chat.completion.chunk",
+        "created": 1788509517,
+        "model": "deepseek-v4-flash",
+        "system_fingerprint": "a26a7955944dc5c60445bff77fac9c8e",
+        "choices": [
+          {
+            "index": 0,
+            "delta": {
+              "content": "并不",
+              "reasoning_content": null
+            },
+            "logprobs": null,
+            "finish_reason": null
+          }
+        ],
+        "usage": null
+      },
+      "delay_ms": 0
+    },
+    {
+      "chunk": {
+        "id": "e4bae4f0-5ae9-4c4d-a880-a41bc2d636dd",
+        "object": "chat.completion.chunk",
+        "created": 1788509517,
+        "model": "deepseek-v4-flash",
+        "system_fingerprint": "a26a7955944dc5c60445bff77fac9c8e",
+        "choices": [
+          {
+            "index": 0,
+            "delta": {
+              "content": "允许",
+              "reasoning_content": null
+            },
+            "logprobs": null,
+            "finish_reason": null
+          }
+        ],
+        "usage": null
+      },
+      "delay_ms": 5
+    },
+    {
+      "chunk": {
+        "id": "e4bae4f0-5ae9-4c4d-a880-a41bc2d636dd",
+        "object": "chat.completion.chunk",
+        "created": 1788509517,
+        "model": "deepseek-v4-flash",
+        "system_fingerprint": "a26a7955944dc5c60445bff77fac9c8e",
+        "choices": [
+          {
+            "index": 0,
+            "delta": {
+              "content": "传递",
+              "reasoning_content": null
+            },
+            "logprobs": null,
+            "finish_reason": null
+          }
+        ],
+        "usage": null
+      },
+      "delay_ms": 0
+    },
+    {
+      "chunk": {
+        "id": "e4bae4f0-5ae9-4c4d-a880-a41bc2d636dd",
+        "object": "chat.completion.chunk",
+        "created": 1788509517,
+        "model": "deepseek-v4-flash",
+        "system_fingerprint": "a26a7955944dc5c60445bff77fac9c8e",
+        "choices": [
+          {
+            "index": 0,
+            "delta": {
+              "content": "信息",
+              "reasoning_content": null
+            },
+            "logprobs": null,
+            "finish_reason": null
+          }
+        ],
+        "usage": null
+      },
+      "delay_ms": 27
+    },
+    {
+      "chunk": {
+        "id": "e4bae4f0-5ae9-4c4d-a880-a41bc2d636dd",
+        "object": "chat.completion.chunk",
+        "created": 1788509517,
+        "model": "deepseek-v4-flash",
+        "system_fingerprint": "a26a7955944dc5c60445bff77fac9c8e",
+        "choices": [
+          {
+            "index": 0,
+            "delta": {
+              "content": "或",
+              "reasoning_content": null
+            },
+            "logprobs": null,
+            "finish_reason": null
+          }
+        ],
+        "usage": null
+      },
+      "delay_ms": 0
+    },
+    {
+      "chunk": {
+        "id": "e4bae4f0-5ae9-4c4d-a880-a41bc2d636dd",
+        "object": "chat.completion.chunk",
+        "created": 1788509517,
+        "model": "deepseek-v4-flash",
+        "system_fingerprint": "a26a7955944dc5c60445bff77fac9c8e",
+        "choices": [
+          {
+            "index": 0,
+            "delta": {
+              "content": "因果",
+              "reasoning_content": null
+            },
+            "logprobs": null,
+            "finish_reason": null
+          }
+        ],
+        "usage": null
+      },
+      "delay_ms": 0
+    },
+    {
+      "chunk": {
+        "id": "e4bae4f0-5ae9-4c4d-a880-a41bc2d636dd",
+        "object": "chat.completion.chunk",
+        "created": 1788509517,
+        "model": "deepseek-v4-flash",
+        "system_fingerprint": "a26a7955944dc5c60445bff77fac9c8e",
+        "choices": [
+          {
+            "index": 0,
+            "delta": {
+              "content": "影响",
+              "reasoning_content": null
+            },
+            "logprobs": null,
+            "finish_reason": null
+          }
+        ],
+        "usage": null
+      },
+      "delay_ms": 0
+    },
+    {
+      "chunk": {
+        "id": "e4bae4f0-5ae9-4c4d-a880-a41bc2d636dd",
+        "object": "chat.completion.chunk",
+        "created": 1788509517,
+        "model": "deepseek-v4-flash",
+        "system_fingerprint": "a26a7955944dc5c60445bff77fac9c8e",
+        "choices": [
+          {
+            "index": 0,
+            "delta": {
+              "content": "，",
+              "reasoning_content": null
+            },
+            "logprobs": null,
+            "finish_reason": null
+          }
+        ],
+        "usage": null
+      },
+      "delay_ms": 34
+    },
+    {
+      "chunk": {
+        "id": "e4bae4f0-5ae9-4c4d-a880-a41bc2d636dd",
+        "object": "chat.completion.chunk",
+        "created": 1788509517,
+        "model": "deepseek-v4-flash",
+        "system_fingerprint": "a26a7955944dc5c60445bff77fac9c8e",
+        "choices": [
+          {
+            "index": 0,
+            "delta": {
+              "content": "且",
+              "reasoning_content": null
+            },
+            "logprobs": null,
+            "finish_reason": null
+          }
+        ],
+        "usage": null
+      },
+      "delay_ms": 0
+    },
+    {
+      "chunk": {
+        "id": "e4bae4f0-5ae9-4c4d-a880-a41bc2d636dd",
+        "object": "chat.completion.chunk",
+        "created": 1788509517,
+        "model": "deepseek-v4-flash",
+        "system_fingerprint": "a26a7955944dc5c60445bff77fac9c8e",
+        "choices": [
+          {
+            "index": 0,
+            "delta": {
+              "content": "不是",
+              "reasoning_content": null
+            },
+            "logprobs": null,
+            "finish_reason": null
+          }
+        ],
+        "usage": null
+      },
+      "delay_ms": 0
+    },
+    {
+      "chunk": {
+        "id": "e4bae4f0-5ae9-4c4d-a880-a41bc2d636dd",
+        "object": "chat.completion.chunk",
+        "created": 1788509517,
+        "model": "deepseek-v4-flash",
+        "system_fingerprint": "a26a7955944dc5c60445bff77fac9c8e",
+        "choices": [
+          {
+            "index": 0,
+            "delta": {
+              "content": "经典",
+              "reasoning_content": null
+            },
+            "logprobs": null,
+            "finish_reason": null
+          }
+        ],
+        "usage": null
+      },
+      "delay_ms": 0
+    },
+    {
+      "chunk": {
+        "id": "e4bae4f0-5ae9-4c4d-a880-a41bc2d636dd",
+        "object": "chat.completion.chunk",
+        "created": 1788509517,
+        "model": "deepseek-v4-flash",
+        "system_fingerprint": "a26a7955944dc5c60445bff77fac9c8e",
+        "choices": [
+          {
+            "index": 0,
+            "delta": {
+              "content": "意义上的",
+              "reasoning_content": null
+            },
+            "logprobs": null,
+            "finish_reason": null
+          }
+        ],
+        "usage": null
+      },
+      "delay_ms": 0
+    },
+    {
+      "chunk": {
+        "id": "e4bae4f0-5ae9-4c4d-a880-a41bc2d636dd",
+        "object": "chat.completion.chunk",
+        "created": 1788509517,
+        "model": "deepseek-v4-flash",
+        "system_fingerprint": "a26a7955944dc5c60445bff77fac9c8e",
+        "choices": [
+          {
+            "index": 0,
+            "delta": {
+              "content": "“",
+              "reasoning_content": null
+            },
+            "logprobs": null,
+            "finish_reason": null
+          }
+        ],
+        "usage": null
+      },
+      "delay_ms": 28
+    },
+    {
+      "chunk": {
+        "id": "e4bae4f0-5ae9-4c4d-a880-a41bc2d636dd",
+        "object": "chat.completion.chunk",
+        "created": 1788509517,
+        "model": "deepseek-v4-flash",
+        "system_fingerprint": "a26a7955944dc5c60445bff77fac9c8e",
+        "choices": [
+          {
+            "index": 0,
+            "delta": {
+              "content": "决定",
+              "reasoning_content": null
+            },
+            "logprobs": null,
+            "finish_reason": null
+          }
+        ],
+        "usage": null
+      },
+      "delay_ms": 0
+    },
+    {
+      "chunk": {
+        "id": "e4bae4f0-5ae9-4c4d-a880-a41bc2d636dd",
+        "object": "chat.completion.chunk",
+        "created": 1788509517,
+        "model": "deepseek-v4-flash",
+        "system_fingerprint": "a26a7955944dc5c60445bff77fac9c8e",
+        "choices": [
+          {
+            "index": 0,
+            "delta": {
+              "content": "”。",
+              "reasoning_content": null
+            },
+            "logprobs": null,
+            "finish_reason": null
+          }
+        ],
+        "usage": null
+      },
+      "delay_ms": 16
+    },
+    {
+      "chunk": {
+        "id": "e4bae4f0-5ae9-4c4d-a880-a41bc2d636dd",
+        "object": "chat.completion.chunk",
+        "created": 1788509517,
+        "model": "deepseek-v4-flash",
+        "system_fingerprint": "a26a7955944dc5c60445bff77fac9c8e",
+        "choices": [
+          {
+            "index": 0,
+            "delta": {
+              "content": "缺少",
+              "reasoning_content": null
+            },
+            "logprobs": null,
+            "finish_reason": null
+          }
+        ],
+        "usage": null
+      },
+      "delay_ms": 0
+    },
+    {
+      "chunk": {
+        "id": "e4bae4f0-5ae9-4c4d-a880-a41bc2d636dd",
+        "object": "chat.completion.chunk",
+        "created": 1788509517,
+        "model": "deepseek-v4-flash",
+        "system_fingerprint": "a26a7955944dc5c60445bff77fac9c8e",
+        "choices": [
+          {
+            "index": 0,
+            "delta": {
+              "content": "对",
+              "reasoning_content": null
+            },
+            "logprobs": null,
+            "finish_reason": null
+          }
+        ],
+        "usage": null
+      },
+      "delay_ms": 17
+    },
+    {
+      "chunk": {
+        "id": "e4bae4f0-5ae9-4c4d-a880-a41bc2d636dd",
+        "object": "chat.completion.chunk",
+        "created": 1788509517,
+        "model": "deepseek-v4-flash",
+        "system_fingerprint": "a26a7955944dc5c60445bff77fac9c8e",
+        "choices": [
+          {
+            "index": 0,
+            "delta": {
+              "content": "测量",
+              "reasoning_content": null
+            },
+            "logprobs": null,
+            "finish_reason": null
+          }
+        ],
+        "usage": null
+      },
+      "delay_ms": 18
+    },
+    {
+      "chunk": {
+        "id": "e4bae4f0-5ae9-4c4d-a880-a41bc2d636dd",
+        "object": "chat.completion.chunk",
+        "created": 1788509517,
+        "model": "deepseek-v4-flash",
+        "system_fingerprint": "a26a7955944dc5c60445bff77fac9c8e",
+        "choices": [
+          {
+            "index": 0,
+            "delta": {
+              "content": "结果",
+              "reasoning_content": null
+            },
+            "logprobs": null,
+            "finish_reason": null
+          }
+        ],
+        "usage": null
+      },
+      "delay_ms": 27
+    },
+    {
+      "chunk": {
+        "id": "e4bae4f0-5ae9-4c4d-a880-a41bc2d636dd",
+        "object": "chat.completion.chunk",
+        "created": 1788509517,
+        "model": "deepseek-v4-flash",
+        "system_fingerprint": "a26a7955944dc5c60445bff77fac9c8e",
+        "choices": [
+          {
+            "index": 0,
+            "delta": {
+              "content": "相关",
+              "reasoning_content": null
+            },
+            "logprobs": null,
+            "finish_reason": null
+          }
+        ],
+        "usage": null
+      },
+      "delay_ms": 30
+    },
+    {
+      "chunk": {
+        "id": "e4bae4f0-5ae9-4c4d-a880-a41bc2d636dd",
+        "object": "chat.completion.chunk",
+        "created": 1788509517,
+        "model": "deepseek-v4-flash",
+        "system_fingerprint": "a26a7955944dc5c60445bff77fac9c8e",
+        "choices": [
+          {
+            "index": 0,
+            "delta": {
+              "content": "性和",
+              "reasoning_content": null
+            },
+            "logprobs": null,
+            "finish_reason": null
+          }
+        ],
+        "usage": null
+      },
+      "delay_ms": 0
+    },
+    {
+      "chunk": {
+        "id": "e4bae4f0-5ae9-4c4d-a880-a41bc2d636dd",
+        "object": "chat.completion.chunk",
+        "created": 1788509517,
+        "model": "deepseek-v4-flash",
+        "system_fingerprint": "a26a7955944dc5c60445bff77fac9c8e",
+        "choices": [
+          {
+            "index": 0,
+            "delta": {
+              "content": "整体",
+              "reasoning_content": null
+            },
+            "logprobs": null,
+            "finish_reason": null
+          }
+        ],
+        "usage": null
+      },
+      "delay_ms": 0
+    },
+    {
+      "chunk": {
+        "id": "e4bae4f0-5ae9-4c4d-a880-a41bc2d636dd",
+        "object": "chat.completion.chunk",
+        "created": 1788509517,
+        "model": "deepseek-v4-flash",
+        "system_fingerprint": "a26a7955944dc5c60445bff77fac9c8e",
+        "choices": [
+          {
+            "index": 0,
+            "delta": {
+              "content": "态",
+              "reasoning_content": null
+            },
+            "logprobs": null,
+            "finish_reason": null
+          }
+        ],
+        "usage": null
+      },
+      "delay_ms": 18
+    },
+    {
+      "chunk": {
+        "id": "e4bae4f0-5ae9-4c4d-a880-a41bc2d636dd",
+        "object": "chat.completion.chunk",
+        "created": 1788509517,
+        "model": "deepseek-v4-flash",
+        "system_fingerprint": "a26a7955944dc5c60445bff77fac9c8e",
+        "choices": [
+          {
+            "index": 0,
+            "delta": {
+              "content": "性质的",
+              "reasoning_content": null
+            },
+            "logprobs": null,
+            "finish_reason": null
+          }
+        ],
+        "usage": null
+      },
+      "delay_ms": 22
+    },
+    {
+      "chunk": {
+        "id": "e4bae4f0-5ae9-4c4d-a880-a41bc2d636dd",
+        "object": "chat.completion.chunk",
+        "created": 1788509517,
+        "model": "deepseek-v4-flash",
+        "system_fingerprint": "a26a7955944dc5c60445bff77fac9c8e",
+        "choices": [
+          {
+            "index": 0,
+            "delta": {
+              "content": "说明",
+              "reasoning_content": null
+            },
+            "logprobs": null,
+            "finish_reason": null
+          }
+        ],
+        "usage": null
+      },
+      "delay_ms": 17
+    },
+    {
+      "chunk": {
+        "id": "e4bae4f0-5ae9-4c4d-a880-a41bc2d636dd",
+        "object": "chat.completion.chunk",
+        "created": 1788509517,
+        "model": "deepseek-v4-flash",
+        "system_fingerprint": "a26a7955944dc5c60445bff77fac9c8e",
+        "choices": [
+          {
+            "index": 0,
+            "delta": {
+              "content": "。",
+              "reasoning_content": null
+            },
+            "logprobs": null,
+            "finish_reason": null
+          }
+        ],
+        "usage": null
+      },
+      "delay_ms": 0
+    },
+    {
+      "chunk": {
+        "id": "e4bae4f0-5ae9-4c4d-a880-a41bc2d636dd",
+        "object": "chat.completion.chunk",
+        "created": 1788509517,
+        "model": "deepseek-v4-flash",
+        "system_fingerprint": "a26a7955944dc5c60445bff77fac9c8e",
+        "choices": [
+          {
+            "index": 0,
+            "delta": {
+              "content": "尽管",
+              "reasoning_content": null
+            },
+            "logprobs": null,
+            "finish_reason": null
+          }
+        ],
+        "usage": null
+      },
+      "delay_ms": 0
+    },
+    {
+      "chunk": {
+        "id": "e4bae4f0-5ae9-4c4d-a880-a41bc2d636dd",
+        "object": "chat.completion.chunk",
+        "created": 1788509517,
+        "model": "deepseek-v4-flash",
+        "system_fingerprint": "a26a7955944dc5c60445bff77fac9c8e",
+        "choices": [
+          {
+            "index": 0,
+            "delta": {
+              "content": "大意",
+              "reasoning_content": null
+            },
+            "logprobs": null,
+            "finish_reason": null
+          }
+        ],
+        "usage": null
+      },
+      "delay_ms": 22
+    },
+    {
+      "chunk": {
+        "id": "e4bae4f0-5ae9-4c4d-a880-a41bc2d636dd",
+        "object": "chat.completion.chunk",
+        "created": 1788509517,
+        "model": "deepseek-v4-flash",
+        "system_fingerprint": "a26a7955944dc5c60445bff77fac9c8e",
+        "choices": [
+          {
+            "index": 0,
+            "delta": {
+              "content": "接近",
+              "reasoning_content": null
+            },
+            "logprobs": null,
+            "finish_reason": null
+          }
+        ],
+        "usage": null
+      },
+      "delay_ms": 12
+    },
+    {
+      "chunk": {
+        "id": "e4bae4f0-5ae9-4c4d-a880-a41bc2d636dd",
+        "object": "chat.completion.chunk",
+        "created": 1788509517,
+        "model": "deepseek-v4-flash",
+        "system_fingerprint": "a26a7955944dc5c60445bff77fac9c8e",
+        "choices": [
+          {
+            "index": 0,
+            "delta": {
+              "content": "，",
+              "reasoning_content": null
+            },
+            "logprobs": null,
+            "finish_reason": null
+          }
+        ],
+        "usage": null
+      },
+      "delay_ms": 22
+    },
+    {
+      "chunk": {
+        "id": "e4bae4f0-5ae9-4c4d-a880-a41bc2d636dd",
+        "object": "chat.completion.chunk",
+        "created": 1788509517,
+        "model": "deepseek-v4-flash",
+        "system_fingerprint": "a26a7955944dc5c60445bff77fac9c8e",
+        "choices": [
+          {
+            "index": 0,
+            "delta": {
+              "content": "但",
+              "reasoning_content": null
+            },
+            "logprobs": null,
+            "finish_reason": null
+          }
+        ],
+        "usage": null
+      },
+      "delay_ms": 0
+    },
+    {
+      "chunk": {
+        "id": "e4bae4f0-5ae9-4c4d-a880-a41bc2d636dd",
+        "object": "chat.completion.chunk",
+        "created": 1788509517,
+        "model": "deepseek-v4-flash",
+        "system_fingerprint": "a26a7955944dc5c60445bff77fac9c8e",
+        "choices": [
+          {
+            "index": 0,
+            "delta": {
+              "content": "表述",
+              "reasoning_content": null
+            },
+            "logprobs": null,
+            "finish_reason": null
+          }
+        ],
+        "usage": null
+      },
+      "delay_ms": 0
+    },
+    {
+      "chunk": {
+        "id": "e4bae4f0-5ae9-4c4d-a880-a41bc2d636dd",
+        "object": "chat.completion.chunk",
+        "created": 1788509517,
+        "model": "deepseek-v4-flash",
+        "system_fingerprint": "a26a7955944dc5c60445bff77fac9c8e",
+        "choices": [
+          {
+            "index": 0,
+            "delta": {
+              "content": "比",
+              "reasoning_content": null
+            },
+            "logprobs": null,
+            "finish_reason": null
+          }
+        ],
+        "usage": null
+      },
+      "delay_ms": 0
+    },
+    {
+      "chunk": {
+        "id": "e4bae4f0-5ae9-4c4d-a880-a41bc2d636dd",
+        "object": "chat.completion.chunk",
+        "created": 1788509517,
+        "model": "deepseek-v4-flash",
+        "system_fingerprint": "a26a7955944dc5c60445bff77fac9c8e",
+        "choices": [
+          {
+            "index": 0,
+            "delta": {
+              "content": "回答",
+              "reasoning_content": null
+            },
+            "logprobs": null,
+            "finish_reason": null
+          }
+        ],
+        "usage": null
+      },
+      "delay_ms": 16
+    },
+    {
+      "chunk": {
+        "id": "e4bae4f0-5ae9-4c4d-a880-a41bc2d636dd",
+        "object": "chat.completion.chunk",
+        "created": 1788509517,
+        "model": "deepseek-v4-flash",
+        "system_fingerprint": "a26a7955944dc5c60445bff77fac9c8e",
+        "choices": [
+          {
+            "index": 0,
+            "delta": {
+              "content": "1",
+              "reasoning_content": null
+            },
+            "logprobs": null,
+            "finish_reason": null
+          }
+        ],
+        "usage": null
+      },
+      "delay_ms": 0
+    },
+    {
+      "chunk": {
+        "id": "e4bae4f0-5ae9-4c4d-a880-a41bc2d636dd",
+        "object": "chat.completion.chunk",
+        "created": 1788509517,
+        "model": "deepseek-v4-flash",
+        "system_fingerprint": "a26a7955944dc5c60445bff77fac9c8e",
+        "choices": [
+          {
+            "index": 0,
+            "delta": {
+              "content": "更",
+              "reasoning_content": null
+            },
+            "logprobs": null,
+            "finish_reason": null
+          }
+        ],
+        "usage": null
+      },
+      "delay_ms": 0
+    },
+    {
+      "chunk": {
+        "id": "e4bae4f0-5ae9-4c4d-a880-a41bc2d636dd",
+        "object": "chat.completion.chunk",
+        "created": 1788509517,
+        "model": "deepseek-v4-flash",
+        "system_fingerprint": "a26a7955944dc5c60445bff77fac9c8e",
+        "choices": [
+          {
+            "index": 0,
+            "delta": {
+              "content": "易",
+              "reasoning_content": null
+            },
+            "logprobs": null,
+            "finish_reason": null
+          }
+        ],
+        "usage": null
+      },
+      "delay_ms": 0
+    },
+    {
+      "chunk": {
+        "id": "e4bae4f0-5ae9-4c4d-a880-a41bc2d636dd",
+        "object": "chat.completion.chunk",
+        "created": 1788509517,
+        "model": "deepseek-v4-flash",
+        "system_fingerprint": "a26a7955944dc5c60445bff77fac9c8e",
+        "choices": [
+          {
+            "index": 0,
+            "delta": {
+              "content": "误导",
+              "reasoning_content": null
+            },
+            "logprobs": null,
+            "finish_reason": null
+          }
+        ],
+        "usage": null
+      },
+      "delay_ms": 19
+    },
+    {
+      "chunk": {
+        "id": "e4bae4f0-5ae9-4c4d-a880-a41bc2d636dd",
+        "object": "chat.completion.chunk",
+        "created": 1788509517,
+        "model": "deepseek-v4-flash",
+        "system_fingerprint": "a26a7955944dc5c60445bff77fac9c8e",
+        "choices": [
+          {
+            "index": 0,
+            "delta": {
+              "content": "，",
+              "reasoning_content": null
+            },
+            "logprobs": null,
+            "finish_reason": null
+          }
+        ],
+        "usage": null
+      },
+      "delay_ms": 0
+    },
+    {
+      "chunk": {
+        "id": "e4bae4f0-5ae9-4c4d-a880-a41bc2d636dd",
+        "object": "chat.completion.chunk",
+        "created": 1788509517,
+        "model": "deepseek-v4-flash",
+        "system_fingerprint": "a26a7955944dc5c60445bff77fac9c8e",
+        "choices": [
+          {
+            "index": 0,
+            "delta": {
+              "content": "可信",
+              "reasoning_content": null
+            },
+            "logprobs": null,
+            "finish_reason": null
+          }
+        ],
+        "usage": null
+      },
+      "delay_ms": 0
+    },
+    {
+      "chunk": {
+        "id": "e4bae4f0-5ae9-4c4d-a880-a41bc2d636dd",
+        "object": "chat.completion.chunk",
+        "created": 1788509517,
+        "model": "deepseek-v4-flash",
+        "system_fingerprint": "a26a7955944dc5c60445bff77fac9c8e",
+        "choices": [
+          {
+            "index": 0,
+            "delta": {
+              "content": "度",
+              "reasoning_content": null
+            },
+            "logprobs": null,
+            "finish_reason": null
+          }
+        ],
+        "usage": null
+      },
+      "delay_ms": 19
+    },
+    {
+      "chunk": {
+        "id": "e4bae4f0-5ae9-4c4d-a880-a41bc2d636dd",
+        "object": "chat.completion.chunk",
+        "created": 1788509517,
+        "model": "deepseek-v4-flash",
+        "system_fingerprint": "a26a7955944dc5c60445bff77fac9c8e",
+        "choices": [
+          {
+            "index": 0,
+            "delta": {
+              "content": "偏低",
+              "reasoning_content": null
+            },
+            "logprobs": null,
+            "finish_reason": null
+          }
+        ],
+        "usage": null
+      },
+      "delay_ms": 0
+    },
+    {
+      "chunk": {
+        "id": "e4bae4f0-5ae9-4c4d-a880-a41bc2d636dd",
+        "object": "chat.completion.chunk",
+        "created": 1788509517,
+        "model": "deepseek-v4-flash",
+        "system_fingerprint": "a26a7955944dc5c60445bff77fac9c8e",
+        "choices": [
+          {
+            "index": 0,
+            "delta": {
+              "content": "。",
+              "reasoning_content": null
+            },
+            "logprobs": null,
+            "finish_reason": null
+          }
+        ],
+        "usage": null
+      },
+      "delay_ms": 20
+    },
+    {
+      "chunk": {
+        "id": "e4bae4f0-5ae9-4c4d-a880-a41bc2d636dd",
+        "object": "chat.completion.chunk",
+        "created": 1788509517,
+        "model": "deepseek-v4-flash",
+        "system_fingerprint": "a26a7955944dc5c60445bff77fac9c8e",
+        "choices": [
+          {
+            "index": 0,
+            "delta": {
+              "content": "",
+              "reasoning_content": null
+            },
+            "logprobs": null,
+            "finish_reason": "stop"
+          }
+        ],
+        "usage": {
+          "prompt_tokens": 259,
+          "completion_tokens": 335,
+          "total_tokens": 594,
+          "prompt_tokens_details": {
+            "cached_tokens": 128
+          },
+          "completion_tokens_details": {
+            "reasoning_tokens": 158
+          },
+          "prompt_cache_hit_tokens": 128,
+          "prompt_cache_miss_tokens": 131
+        }
+      },
+      "delay_ms": 4
+    }
+  ]
+}
