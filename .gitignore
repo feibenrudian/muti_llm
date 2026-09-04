@@ -35,3 +35,6 @@ run/
 .DS_Store
 .idea/
 .vscode/
+
+# ZCode 会话文件
+.zcode/
