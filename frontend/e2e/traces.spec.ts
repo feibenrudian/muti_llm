@@ -45,7 +45,7 @@ test("UE-27-1 列表筛选：status=failed 只显示失败记录", async ({ page
   await expect(page.getByText("没有匹配的记录")).toBeVisible();
 });
 
-test("UE-27-2 详情时间线：原始请求 → 成员×2 → 裁判 → 最终答案", async ({ page, request }) => {
+test("UE-27-2 详情时间线：原始请求 → 裁判 → 成员×2 → 最终答案", async ({ page, request }) => {
   const providerId = await seedProvider(request, "E2E-详情");
   const m1 = await seedModel(request, providerId, "detail-m1");
   const m2 = await seedModel(request, providerId, "detail-m2");
@@ -62,6 +62,14 @@ test("UE-27-2 详情时间线：原始请求 → 成员×2 → 裁判 → 最终
   await expect(page.getByText(/成员调用 \d/)).toHaveCount(2);
   await expect(page.getByText("裁判调用")).toBeVisible();
   await expect(page.getByText(/Ⓝ 最终响应/)).toBeVisible();
+  // 裁判聚合卡固定置于原始请求之后、成员卡片之前
+  await expect(page.locator("main section h2")).toHaveText([
+    "① 原始请求",
+    "裁判调用",
+    "成员调用 1",
+    "成员调用 2",
+    "Ⓝ 最终响应（success）",
+  ]);
   // 快速定位：模型多时点锚点直达目标成员卡片，无需长页滚动
   await page.getByRole("button", { name: /成员2 · / }).click();
   await expect(page.getByText("成员调用 2")).toBeInViewport();

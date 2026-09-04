@@ -11,20 +11,22 @@ export type TimelineEntry =
   | { kind: "final" };
 
 /**
- * 时间线：原始请求 → 各成员/透传调用 → 裁判聚合 → 最终响应。
+ * 时间线：原始请求 → 裁判聚合 → 各成员/透传调用 → 最终响应。
  * 原始裁判与各次换裁判重跑（role=judge/judge_rerun）合成一组并列保留，
- * 组位置取首个裁判行出现处（成员调用始终在前）。
+ * 卡片固定置于原始请求之后（对比裁判版本时无需滚过全部成员卡片）。
  */
 export function toTimeline(detail: TraceDetail): TimelineEntry[] {
   const entries: TimelineEntry[] = [{ kind: "request" }];
   const judgeCalls: TraceCall[] = [];
   for (const call of detail.calls) {
     if (call.role === "judge" || call.role === "judge_rerun") {
-      if (judgeCalls.length === 0) entries.push({ kind: "judge", calls: judgeCalls });
       judgeCalls.push(call);
     } else {
       entries.push({ kind: "call", call });
     }
+  }
+  if (judgeCalls.length > 0) {
+    entries.splice(1, 0, { kind: "judge", calls: judgeCalls });
   }
   entries.push({ kind: "final" });
   return entries;

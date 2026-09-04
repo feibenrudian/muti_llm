@@ -37,7 +37,7 @@ const detail: TraceDetail = {
   ],
 };
 
-test("toTimeline：请求 → 成员调用 → 裁判 → 最终响应（UT-27-1）", () => {
+test("toTimeline：请求 → 裁判 → 成员调用 → 最终响应（UT-27-1）", () => {
   const timeline = toTimeline(detail);
   expect(timeline).toHaveLength(5);
   expect(timeline[0].kind).toBe("request");
@@ -47,12 +47,12 @@ test("toTimeline：请求 → 成员调用 → 裁判 → 最终响应（UT-27-1
     "m-a",
     "m-b",
   ]);
-  const judge = timeline[3];
+  const judge = timeline[1];
   expect(judge.kind === "judge" && judge.calls).toHaveLength(1);
   expect(judge.kind === "judge" && judge.calls[0].upstream_model_id).toBe("m-a");
 });
 
-test("toTimeline：多次换裁判重跑合成一组并列保留（UT-30-1）", () => {
+test("toTimeline：多次换裁判重跑合成一组并列保留，置于原始请求之后（UT-30-1）", () => {
   const rerunDetail: TraceDetail = {
     ...detail,
     calls: [
@@ -62,9 +62,9 @@ test("toTimeline：多次换裁判重跑合成一组并列保留（UT-30-1）", 
     ],
   };
   const timeline = toTimeline(rerunDetail);
-  // 请求 + 成员×2 + 裁判组 + 最终响应：重跑版本只并组、不新增卡片
-  expect(timeline.map((entry) => entry.kind)).toEqual(["request", "call", "call", "judge", "final"]);
-  const judge = timeline[3];
+  // 请求 + 裁判组 + 成员×2 + 最终响应：重跑版本只并组、不新增卡片
+  expect(timeline.map((entry) => entry.kind)).toEqual(["request", "judge", "call", "call", "final"]);
+  const judge = timeline[1];
   expect(judge.kind === "judge" && judge.calls.map((c) => c.role)).toEqual([
     "judge",
     "judge_rerun",

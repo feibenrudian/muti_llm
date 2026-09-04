@@ -450,7 +450,7 @@ make seed          # 起服务+灌入演示数据(指向快照回放服务器), 
 | UE-29-1 | UE | Playwright全量 | 全部 UE 用例在"单进程+静态托管"模式下重跑通过（webServer 即生产形态） |
 
 #### T30 Trace 详情：换裁判模型重新聚合（增量需求）
-产出：`POST /api/admin/traces/{id}/rejudge`（同步，body: judge_model_id）与 `POST .../rejudge/stream`（SSE：meta 入参 → delta 增量 → done 终态+token）——`app/rejudge_svc.py` 的 `prepare_rejudge` 统一校验并复用 trace 已存成员答案、按 Pipeline 当前模板重渲染裁判 Prompt（复用 `council.py` 的 `render_judge_prompt`/`build_call_request`/`merge_params`），只重调裁判不重调成员；流式端点结束后经后台任务落库（断开记 client_cancelled）；输出以 `role="judge_rerun"` 追加进 `model_call_logs`（无表结构变更），成败均落行；**不回写 RequestLog**。1.2 未规划 `rejudge_svc.py` 位置：属 Trace 域写路径服务，与 logging_svc 平级，故独立成模块。前端 `toTimeline` 将 judge/judge_rerun 行合成裁判组；裁判卡片以**下拉菜单**切换裁判模型（选项=本次成员+裁判模型）：有结果直接展示，无结果即发起流式重跑（SSE 实时增量、多模型并行、失败可重试）。
+产出：`POST /api/admin/traces/{id}/rejudge`（同步，body: judge_model_id）与 `POST .../rejudge/stream`（SSE：meta 入参 → delta 增量 → done 终态+token）——`app/rejudge_svc.py` 的 `prepare_rejudge` 统一校验并复用 trace 已存成员答案、按 Pipeline 当前模板重渲染裁判 Prompt（复用 `council.py` 的 `render_judge_prompt`/`build_call_request`/`merge_params`），只重调裁判不重调成员；流式端点结束后经后台任务落库（断开记 client_cancelled）；输出以 `role="judge_rerun"` 追加进 `model_call_logs`（无表结构变更），成败均落行；**不回写 RequestLog**。1.2 未规划 `rejudge_svc.py` 位置：属 Trace 域写路径服务，与 logging_svc 平级，故独立成模块。前端 `toTimeline` 将 judge/judge_rerun 行合成裁判组（卡片固定置于原始请求之后、成员卡片之前）；裁判卡片以**下拉菜单**切换裁判模型（选项=本次成员+裁判模型）：有结果直接展示，无结果即发起流式重跑（SSE 实时增量、多模型并行、失败可重试）。
 | 编号 | 类型 | 用例 | 断言要点 |
 | --- | --- | --- | --- |
 | AE-30-1 | AE | 重跑成功 | 换模型重跑 → judge_rerun 行追加、载荷与原裁判逐字节一致（快照复用）、可多次重跑全部保留、RequestLog 全字段不变 |
