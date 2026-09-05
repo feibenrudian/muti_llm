@@ -45,7 +45,7 @@ test("UE-27-1 列表筛选：status=failed 只显示失败记录", async ({ page
   await expect(page.getByText("没有匹配的记录")).toBeVisible();
 });
 
-test("UE-27-2 详情时间线：原始请求 → 裁判 → 成员×2 → 最终答案", async ({ page, request }) => {
+test("UE-27-2 详情时间线：原始请求 → 裁判 → 成员tab切换 → 最终答案", async ({ page, request }) => {
   const providerId = await seedProvider(request, "E2E-详情");
   const m1 = await seedModel(request, providerId, "detail-m1");
   const m2 = await seedModel(request, providerId, "detail-m2");
@@ -59,24 +59,40 @@ test("UE-27-2 详情时间线：原始请求 → 裁判 → 成员×2 → 最终
 
   await expect(page.getByText("① 原始请求")).toBeVisible();
   await expect(page.getByText("Pipeline：council-detail")).toBeVisible();
-  await expect(page.getByText(/成员调用 \d/)).toHaveCount(2);
-  await expect(page.getByText("裁判调用")).toBeVisible();
-  await expect(page.getByText(/Ⓝ 最终响应/)).toBeVisible();
-  // 裁判聚合卡固定置于原始请求之后、成员卡片之前
+  // 成员调用合并为一张 tab 卡片（裁判聚合卡固定置于原始请求之后、成员卡片之前）
   await expect(page.locator("main section h2")).toHaveText([
     "① 原始请求",
     "裁判调用",
-    "成员调用 1",
-    "成员调用 2",
+    "成员调用（2 个）",
     "Ⓝ 最终响应（success）",
   ]);
-  // 快速定位：模型多时点锚点直达目标成员卡片，无需长页滚动
-  await page.getByRole("button", { name: /成员2 · / }).click();
-  await expect(page.getByText("成员调用 2")).toBeInViewport();
-  // 成员调用的入参与输出均默认折叠，模型多时保持页面紧凑，按需展开
+
+  const memberCard = page.locator("section").filter({ has: page.getByRole("tablist") });
+  const memberTabs = memberCard.getByRole("tab");
+  await expect(memberTabs).toHaveCount(2);
+  await expect(memberTabs.first()).toHaveAttribute("aria-selected", "true");
+
+  // 快速定位：成员组只占一个导航项，点击直达成员卡片
+  await page.getByRole("button", { name: "成员 · 2 个" }).click();
+  await expect(page.getByText("成员调用（2 个）")).toBeInViewport();
+
+  // 非选中成员不渲染：入参/输出折叠块只有当前成员一份，且默认折叠保持紧凑
   const outputDetails = page.locator('details:has(summary:text-is("输出"))');
-  await expect(outputDetails).toHaveCount(2); // 裁判输出改为直出展示，折叠块仅成员
-  await expect(outputDetails.first()).not.toHaveAttribute("open");
+  await expect(outputDetails).toHaveCount(1); // 裁判输出直出展示，折叠块仅成员
+  await expect(outputDetails).not.toHaveAttribute("open");
+
+  // 切 tab 即换成员模型：入参 temperature 随成员切换（0.7 → 0.9 → 0.7），无需长页滚动
+  const inputDetails = memberCard
+    .locator("details")
+    .filter({ hasText: "入参（实际发出的完整请求）" });
+  await inputDetails.locator("summary").click();
+  await expect(inputDetails.locator("pre")).toContainText('"temperature": 0.7');
+  await memberTabs.nth(1).click();
+  await expect(memberTabs.nth(1)).toHaveAttribute("aria-selected", "true");
+  await expect(inputDetails.locator("pre")).toContainText('"temperature": 0.9');
+  await memberTabs.nth(0).click();
+  await expect(inputDetails.locator("pre")).toContainText('"temperature": 0.7');
+
   // 裁判入参（第二次调用）含组装 Prompt（展开后可见成员答案标注）；输出直接可见且即最终答案
   const judgeCard = page.locator("section", { hasText: "裁判调用" });
   const finalInput = judgeCard.locator("details").filter({ hasText: "入参（第二次调用" });

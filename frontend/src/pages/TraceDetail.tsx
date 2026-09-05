@@ -35,6 +35,64 @@ function CallDetails({ call }: { call: TraceCall }) {
   );
 }
 
+/** 状态小圆点的配色（tab 上概览各成员成败，沿用 statusTone 的语义）。 */
+const statusDot: Record<"success" | "warn" | "danger" | "muted", string> = {
+  success: "bg-emerald-500",
+  warn: "bg-amber-500",
+  danger: "bg-red-500",
+  muted: "bg-slate-300",
+};
+
+/**
+ * 成员调用组：全部成员模型的调用信息合并为一张卡片，tab 切换查看，
+ * 内容多时无需长页滚动（单成员时不渲染 tab 栏）。
+ */
+function MemberCallsCard({ calls }: { calls: TraceCall[] }) {
+  const [active, setActive] = useState(0);
+  // 刷新后 calls 长度可能变化，越界时回落到最后一个成员
+  const index = Math.min(active, calls.length - 1);
+  const call = calls[index];
+  return (
+    <Card
+      title={calls.length > 1 ? `成员调用（${calls.length} 个）` : "成员调用"}
+      actions={
+        <>
+          <span className="font-mono text-xs text-slate-500">{call.upstream_model_id}</span>
+          <Badge tone={statusTone(call.status)}>{call.status}</Badge>
+          <span className="text-xs text-slate-400">
+            {formatDuration(call.duration_ms)} · {call.prompt_tokens}/{call.completion_tokens} tokens
+          </span>
+        </>
+      }
+    >
+      {calls.length > 1 ? (
+        <div role="tablist" aria-label="成员模型" className="mb-3 flex flex-wrap gap-x-4 gap-y-1 border-b border-slate-200">
+          {calls.map((c, i) => (
+            <button
+              key={c.id}
+              type="button"
+              role="tab"
+              aria-selected={i === index}
+              onClick={() => setActive(i)}
+              className={`-mb-px inline-flex max-w-72 items-center gap-1.5 border-b-2 pb-1.5 text-xs transition-colors ${
+                i === index
+                  ? "border-slate-900 font-medium text-slate-900"
+                  : "border-transparent text-slate-500 hover:text-slate-800"
+              }`}
+            >
+              <span aria-hidden className={`size-1.5 shrink-0 rounded-full ${statusDot[statusTone(c.status)]}`} />
+              <span className="truncate">
+                成员{i + 1} · {c.upstream_model_id}
+              </span>
+            </button>
+          ))}
+        </div>
+      ) : null}
+      <CallDetails call={call} />
+    </Card>
+  );
+}
+
 /** 两段式裁判第一次调用（评论）的展示状态。 */
 interface JudgeCritique {
   status: "streaming" | "success" | "failed" | "cancelled";
@@ -351,32 +409,32 @@ export default function TraceDetail() {
   const memberModelIds = Array.from(
     new Set(data.calls.filter((call) => call.role === "member").map((call) => call.model_id)),
   );
-
-  // 成员按时间线顺序编号，卡片标题与顶部快速定位一一对应
-  let memberCount = 0;
-  const memberNo = new Map<number, number>();
-  for (const [index, entry] of timeline.entries()) {
-    if (entry.kind === "call" && entry.call.role === "member") memberNo.set(index, (memberCount += 1));
-  }
+  const memberCalls = data.calls.filter((call) => call.role === "member");
+  // 成员组合成一张 tab 卡片，放在首个成员条目处（原始请求 → 裁判 → 成员 → 最终响应）
+  const memberEntryIndex = timeline.findIndex(
+    (entry) => entry.kind === "call" && entry.call.role === "member",
+  );
 
   const anchorOf = (index: number) => `trace-entry-${index}`;
-  const navItems = timeline.map((entry, index) => {
-    if (entry.kind === "request") return { anchor: anchorOf(index), label: "原始请求" };
-    if (entry.kind === "final") return { anchor: anchorOf(index), label: "最终响应" };
+  const navItems = timeline.flatMap((entry, index) => {
+    if (entry.kind === "request") return [{ anchor: anchorOf(index), label: "原始请求" }];
+    if (entry.kind === "final") return [{ anchor: anchorOf(index), label: "最终响应" }];
     if (entry.kind === "judge") {
       const count = judgeVersionCount(entry.calls);
       const first = entry.calls.find((call) => call.role !== "judge_critique");
-      return {
-        anchor: anchorOf(index),
-        label: count > 1 ? `裁判 · ${count} 版` : `裁判 · ${first?.upstream_model_id ?? ""}`,
-      };
+      return [
+        {
+          anchor: anchorOf(index),
+          label: count > 1 ? `裁判 · ${count} 版` : `裁判 · ${first?.upstream_model_id ?? ""}`,
+        },
+      ];
     }
-    const model = entry.call.upstream_model_id;
-    const label =
-      entry.call.role === "passthrough"
-        ? `透传 · ${model}`
-        : `成员${memberNo.get(index)} · ${model}`;
-    return { anchor: anchorOf(index), label };
+    if (entry.call.role === "member") {
+      return index === memberEntryIndex
+        ? [{ anchor: anchorOf(index), label: `成员 · ${memberCalls.length} 个` }]
+        : [];
+    }
+    return [{ anchor: anchorOf(index), label: `透传 · ${entry.call.upstream_model_id}` }];
   });
 
   const scrollTo = (anchor: string) =>
@@ -396,7 +454,7 @@ export default function TraceDetail() {
         </Button>
       </div>
 
-      {/* 模型多时页面很长，吸顶锚点直达目标调用，入参默认折叠保持紧凑 */}
+      {/* 展开长内容时页面仍可能变长，吸顶锚点直达各区块；成员已并为一张 tab 卡，只占一个导航项 */}
       <div className="sticky top-0 z-10 flex flex-wrap items-center gap-1.5 border-b border-slate-200 bg-slate-50/95 py-2 text-xs backdrop-blur">
         <span className="text-slate-400">快速定位</span>
         {navItems.map((item) => (
@@ -456,11 +514,18 @@ export default function TraceDetail() {
             );
           }
           const call = entry.call;
-          const label = call.role === "passthrough" ? "上游调用（透传）" : `成员调用 ${memberNo.get(index)}`;
+          if (call.role === "member") {
+            if (index !== memberEntryIndex) return null;
+            return (
+              <div key={`entry-${index}`} id={anchorOf(index)} className="scroll-mt-12">
+                <MemberCallsCard calls={memberCalls} />
+              </div>
+            );
+          }
           return (
             <div key={`entry-${index}`} id={anchorOf(index)} className="scroll-mt-12">
               <Card
-                title={label}
+                title="上游调用（透传）"
                 actions={
                   <>
                     <span className="font-mono text-xs text-slate-500">{call.upstream_model_id}</span>
