@@ -216,7 +216,7 @@ async def test_concurrency_cap_enforced() -> None:
 
 
 async def test_param_merge_priority() -> None:
-    """UT-14-7 参数合并：模型默认 < 成员覆盖 < 请求参数（三层）。"""
+    """UT-14-7 参数合并：成员=模型默认 < 成员覆盖（请求参数不透传给成员，只作用于裁判）。"""
     ctx = make_ctx(
         [
             ({"temperature": 0.1, "max_tokens": 100}, {"temperature": 0.5}),
@@ -238,14 +238,14 @@ async def test_param_merge_priority() -> None:
 
     await run_members(ctx, adapter_factory=factory)
 
-    # 成员1：默认0.1 被覆盖0.5 被请求0.9 覆盖 → 0.9；max_tokens 保留默认 100
-    assert captured["P1"].temperature == 0.9
+    # 成员1：默认0.1 被覆盖0.5 → 0.5；请求 0.9 不作用于成员；max_tokens 保留默认 100
+    assert captured["P1"].temperature == 0.5
     assert captured["P1"].max_tokens == 100
-    # 成员2：默认0.2 被请求0.9 覆盖 → 0.9
-    assert captured["P2"].temperature == 0.9
+    # 成员2：无覆盖 → 默认0.2，请求 0.9 同样不影响
+    assert captured["P2"].temperature == 0.2
     # payload 同样反映合并结果
     outcomes = await run_members(ctx, adapter_factory=factory)
-    assert outcomes[0].request_payload["temperature"] == 0.9
+    assert outcomes[0].request_payload["temperature"] == 0.5
     assert outcomes[0].request_payload["max_tokens"] == 100
 
 

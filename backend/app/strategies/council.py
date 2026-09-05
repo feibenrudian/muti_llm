@@ -108,7 +108,9 @@ def build_final_messages(
     ]
 
 
-# ---- 参数合并与请求构造（三层优先级：模型默认 < 成员覆盖 < 请求参数） ----------------
+# ---- 参数合并与请求构造 --------------------------------------------------------------
+# 成员：模型默认 < 成员覆盖——客户端请求参数不作用于成员，只透传给裁判；
+# 裁判：模型默认 < 请求参数。
 
 
 def merge_params(*layers: dict[str, Any] | None) -> dict[str, Any]:
@@ -194,9 +196,7 @@ async def run_members(
     semaphore = asyncio.Semaphore(max(1, int(ctx.pipeline.max_concurrency or 10)))
 
     async def run_one(spec: MemberSpec) -> CallOutcome:
-        merged = merge_params(
-            spec.model.default_params, spec.member.param_overrides, ctx.user_params
-        )
+        merged = merge_params(spec.model.default_params, spec.member.param_overrides)
         request, payload = build_call_request(
             spec.model.upstream_model_id, ctx.body["messages"], merged, stream=True
         )

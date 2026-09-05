@@ -58,6 +58,14 @@ def council_critique_scenarios(model: str) -> list[tuple[str, dict]]:
                 "temperature": 0.7,
             },
         ),
+        # AE-16-5：请求参数仅作用裁判——成员按覆盖 0.9 实发（答案=param_merge_09），裁判带请求 temp 0.7
+        (
+            "council_critique_single_b_07",
+            {
+                **STREAM_BODY(model=model, messages=critique_messages([(model, ans_b)])),
+                "temperature": 0.7,
+            },
+        ),
     ]
 
 
@@ -77,6 +85,7 @@ def council_final_scenarios(model: str) -> list[tuple[str, dict]]:
     ans_b = snapshot_content("param_merge_09")
     crit_two = snapshot_content("council_critique")
     crit_single = snapshot_content("council_critique_single_07")
+    crit_single_b = snapshot_content("council_critique_single_b_07")
 
     def final_messages(answers: list[tuple[str, str]], critique: str, template: str) -> list[dict]:
         critique_prompt = render_judge_prompt(DEFAULT_CRITIQUE_TEMPLATE, question, answers)
@@ -98,6 +107,16 @@ def council_final_scenarios(model: str) -> list[tuple[str, dict]]:
                 **STREAM_BODY(
                     model=model,
                     messages=final_messages([(model, ans_a)], crit_single, DEFAULT_JUDGE_TEMPLATE),
+                ),
+                "temperature": 0.7,
+            },
+        ),
+        (
+            "council_judge_single_b_07",
+            {
+                **STREAM_BODY(
+                    model=model,
+                    messages=final_messages([(model, ans_b)], crit_single_b, DEFAULT_JUDGE_TEMPLATE),
                 ),
                 "temperature": 0.7,
             },

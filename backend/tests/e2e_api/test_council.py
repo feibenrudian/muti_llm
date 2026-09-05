@@ -255,12 +255,12 @@ async def test_custom_template_shapes_final_instruction(
     assert not final_messages[2]["content"].endswith(snapshot_content("council_critique"))
 
 
-async def test_request_params_override_member_overrides(
+async def test_request_params_only_reach_judge(
     asgi_client: httpx.AsyncClient, service_key: str, srs_live_seeded: str
 ) -> None:
-    """AE-16-5 请求参数透传：请求 temp 覆盖成员覆盖(0.9→0.7)，命中 0.7 成员与单答案裁判快照。"""
+    """AE-16-5 请求参数仅作用裁判：请求 temp=0.7、成员覆盖 0.9 → 成员实发 0.9，裁判实发 0.7。"""
     ids = await seed_council(asgi_client, srs_live_seeded)
-    # 单成员 pipeline：成员覆盖 temp=0.9，请求传 0.7 → 实发 0.7
+    # 单成员 pipeline：成员覆盖 temp=0.9，请求传 0.7 → 成员按覆盖实发 0.9（命中 param_merge_09）
     resp = await asgi_client.post(
         "/api/admin/pipelines",
         json={
@@ -282,18 +282,25 @@ async def test_request_params_override_member_overrides(
         headers=auth_headers(service_key),
     )
     assert resp.status_code == 200, resp.text
-    # 裁判收到单答案 + 请求级 temperature=0.7 → 命中 council_judge_single_07
+    # 裁判收到单答案(param_merge_09 全文) + 请求级 temperature=0.7 → 命中 *_single_b_07
     assert resp.json()["choices"][0]["message"]["content"] == snapshot_content(
-        "council_judge_single_07"
+        "council_judge_single_b_07"
     )
 
-    # SRS 录像确认成员实发 temperature=0.7（请求优先于成员覆盖 0.9）
+    # SRS 录像确认：成员实发 0.9（覆盖生效，请求 0.7 不作用于成员）；裁判两次调用实发 0.7
     recordings = [
         r["body"]
         for r in await srs_recordings(srs_live_seeded)
         if not r["body"]["messages"][0]["content"].startswith("你将看到用户的问题")
     ]
-    assert recordings[0]["temperature"] == 0.7
+    assert len(recordings) == 1
+    assert recordings[0]["temperature"] == 0.9
+    judge_bodies = [
+        r["body"]
+        for r in await srs_recordings(srs_live_seeded)
+        if r["body"]["messages"][0]["content"].startswith("你将看到用户的问题")
+    ]
+    assert [b["temperature"] for b in judge_bodies] == [0.7, 0.7]
 
 
 # ---- AE-17 流式 --------------------------------------------------------------------

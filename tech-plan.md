@@ -309,7 +309,7 @@ make seed          # 起服务+灌入演示数据(指向快照回放服务器), 
 | UT-13-2 | UT | 结果结构 | StrategyResult 含 final_content/usage汇总/degraded 标记/成员明细列表 |
 
 #### T14 参数合并与成员并发执行器
-产出：council 内部执行器：成员任务并发(受 pipeline.max_concurrency 限流)、单成员超时、部分失败容错(默认≥1成功即继续，可配置严格模式)、成员级参数覆盖合并顺序：模型默认 < Pipeline 覆盖 < 请求参数。
+产出：council 内部执行器：成员任务并发(受 pipeline.max_concurrency 限流)、单成员超时、部分失败容错(默认≥1成功即继续，可配置严格模式)、成员级参数合并：模型默认 < Pipeline 覆盖（客户端请求参数不作用于成员，仅作用于裁判）。
 | 编号 | 类型 | 用例 | 断言要点 |
 | --- | --- | --- | --- |
 | UT-14-1 | UT | 并发生效 | 3个打桩成员各延迟200ms → 总耗时 <500ms（串行必>600ms） |
@@ -318,7 +318,7 @@ make seed          # 起服务+灌入演示数据(指向快照回放服务器), 
 | UT-14-4 | UT | 严格模式 | 容错=strict 时任一失败即整体失败 |
 | UT-14-5 | UT | 单成员超时 | 成员超时0.3s、打桩延迟1s → 该成员标记 timeout，其余正常 |
 | UT-14-6 | UT | 并发上限 | max_concurrency=2、4成员各延迟100ms → 用打桩计数器断言同时在飞≤2 |
-| UT-14-7 | UT | 参数合并 | 默认<覆盖<请求 三层合并结果正确（打桩捕获实际入参） |
+| UT-14-7 | UT | 参数合并 | 成员=默认<覆盖 两层合并正确，请求参数不透传给成员（打桩捕获实际入参） |
 | UT-14-8 | UT | 上游流式调用（D8） | 成员 payload stream=true 且带 stream_options.include_usage；member_timeout 为成员 TTFT 预算 |
 
 #### T15 裁判 Prompt 组装
@@ -337,7 +337,7 @@ make seed          # 起服务+灌入演示数据(指向快照回放服务器), 
 | AE-16-2 | AE | usage 汇总 | 响应 usage = 3次调用(2成员+裁判)快照 usage 之和（期望值从快照文件读取，精确断言） |
 | AE-16-3 | AE | 裁判收到正确Prompt | SRS 录像：judge 请求的 messages 含两个成员各自的快照答案全文与模型名标注 |
 | AE-16-4 | AE | Trace 完整 | DB: 1 request_logs(success) + 3 model_call_logs(2 member + 1 judge)，judge 记录的 request_payload 含组装 Prompt 全文，role 字段正确 |
-| AE-16-5 | AE | 请求参数透传 | 请求 temperature=0.9 → 录像显示两个成员与裁判的 temperature 均为 0.9（未覆盖时） |
+| AE-16-5 | AE | 请求参数仅作用裁判 | 请求 temp=0.7、成员覆盖 0.9 → 录像显示成员实发 0.9、裁判两次调用实发 0.7 |
 
 #### T17 council 流式（裁判阶段 SSE）
 产出：成员阶段照旧非流式并发；裁判以流式调用，增量片段实时下发；请求中的 `stream:true` 走此路径。
