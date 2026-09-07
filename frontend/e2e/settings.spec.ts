@@ -48,7 +48,7 @@ test("UE-28-3 接入信息：显示 /v1 地址与掩码 Key，复制得到完整
   // 虚拟模型接入地址
   const info = await (await request.get("/api/admin/settings/service-key")).json();
   expect(info.available).toBe(true);
-  await expect(page.getByText("http://localhost:5173/v1")).toBeVisible();
+  await expect(page.getByText("http://127.0.0.1:9803/v1")).toBeVisible();
 
   // 掩码展示：sk-local-***尾4，不含完整明文
   await expect(page.getByText(new RegExp(`^${info.masked.slice(0, 10)}\\*\\*\\*`))).toBeVisible();

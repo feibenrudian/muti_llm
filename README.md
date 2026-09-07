@@ -19,7 +19,7 @@ make record         # 真实调用 DeepSeek 录制/刷新测试快照（需 back
 
 ```bash
 make dev-backend    # uvicorn --reload :8000（API 文档 http://127.0.0.1:8000/docs）
-make dev-frontend   # vite dev server（/api 代理到 :9800，见 vite.config.ts）
+make dev-frontend   # vite dev server :8001（/api 代理到 :8000，见 vite.config.ts）
 ```
 
 ### 生产部署（单进程 + SQLite）
