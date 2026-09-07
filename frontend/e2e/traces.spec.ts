@@ -68,7 +68,7 @@ test("UE-27-2 详情时间线：原始请求 → 裁判 → 成员tab切换 → 
   ]);
 
   // 页面级 tab：成员组只占一个 tab，点击切到成员卡片（隐藏面板中的元素不参与 role 查询，先切换再断言）
-  await page.getByRole("tab", { name: "成员 · 2 个" }).click();
+  await page.getByRole("tab", { name: "成员模型输出" }).click();
   await expect(page.getByText("成员调用（2 个）")).toBeVisible();
 
   const memberCard = page.locator("section").filter({ has: page.getByRole("tablist", { name: "成员模型" }) });

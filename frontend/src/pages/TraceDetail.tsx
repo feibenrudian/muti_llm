@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { useParams } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { api, streamRejudge, type ModelRow, type TraceCall } from "../lib/api";
-import { formatDateTime, formatDuration, judgeVersionCount, statusTone, toTimeline } from "../lib/trace";
+import { formatDateTime, formatDuration, statusTone, toTimeline } from "../lib/trace";
 import { Badge, Button, Card, EmptyState } from "../components/ui";
 
 // 上游 ID 与展示名相同时不重复拼接（与 Pipelines 页同一规则）
@@ -499,11 +499,9 @@ export default function TraceDetail() {
       return;
     }
     if (entry.kind === "judge") {
-      const count = judgeVersionCount(entry.calls);
-      const first = entry.calls.find((call) => call.role !== "judge_critique");
       tabs.push({
         key: "judge",
-        label: count > 1 ? `裁判 · ${count} 版` : `裁判 · ${first?.upstream_model_id ?? ""}`,
+        label: "裁判模型输出",
         content: <JudgeCard traceId={id!} judges={entry.calls} memberModelIds={memberModelIds} />,
       });
       return;
@@ -513,7 +511,7 @@ export default function TraceDetail() {
       if (index === memberEntryIndex) {
         tabs.push({
           key: "members",
-          label: `成员 · ${memberCalls.length} 个`,
+          label: "成员模型输出",
           content: <MemberCallsCard calls={memberCalls} />,
         });
       }
