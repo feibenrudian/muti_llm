@@ -99,3 +99,20 @@ async def test_probe(anthropic_mock: str) -> None:
     recordings = await recorded_requests(anthropic_mock)
     probe = [r for r in recordings if r["body"].get("path") == "/v1/models"][-1]
     assert probe["headers"].get("x-api-key") == "sk-ant-test"
+
+
+async def test_thinking_delta_maps_to_reasoning_event(anthropic_mock: str) -> None:
+    """UT-07-5 思考增量映射：thinking_delta → reasoning 事件，不进正文；text 块正常聚合。"""
+    resp = await httpx.AsyncClient().post(
+        f"{anthropic_mock}/_test/config",
+        json={"sse_events": build_sse_events(["你好"], thinking=["先想想", "再想想"])},
+    )
+    assert resp.status_code == 200
+
+    adapter = make_adapter(anthropic_mock)
+    events = [event async for event in adapter.stream_events_timed(make_request())]
+    assert "".join(e.reasoning for e in events if e.reasoning) == "先想想再想想"
+    assert "".join(e.text for e in events) == "你好"
+
+    result = await adapter.complete(make_request())
+    assert result.content == "你好"  # 思考内容绝不混入正文

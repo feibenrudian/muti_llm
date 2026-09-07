@@ -1,11 +1,17 @@
-"""UT-06-1..5：OpenAI 兼容适配器（经真实 HTTP 访问挂载真实快照库的 SRS）。"""
+"""UT-06-1..13：OpenAI 兼容适配器（经真实 HTTP 访问挂载真实快照库的 SRS）。"""
+
+from collections.abc import Generator
+from pathlib import Path
+from typing import Any
 
 import httpx
 import pytest
 
-from app.adapters.base import AdapterError, LlmRequest, NormalizedMessage
+from app.adapters.base import AdapterError, LlmRequest, NormalizedMessage, StreamEvent
 from app.adapters.openai_compat import OpenAICompatAdapter
 from tests.helpers import snapshot_content, snapshot_stream_text, snapshot_usage
+from tests.snapshot_server.fixtures import _run_srs
+from tests.snapshot_server.store import Snapshot, SnapshotStore
 
 QUANTUM = "用一句话解释量子纠缠"
 POEM = "写一首关于秋天的四行短诗，每行不超过10个字"
@@ -116,3 +122,87 @@ async def test_probe(srs_live_seeded: str) -> None:
     with pytest.raises(AdapterError) as excinfo:
         await adapter.probe()
     assert excinfo.value.kind == "auth"
+
+
+# ---- 思考型上游（reasoning_content）：合成快照回放，正文与思考分离 ----
+# 请求体须与适配器实际发送的逐字段一致，否则 request_hash 失配（SRS 回放纪律）
+THINKING_REQUEST: dict[str, Any] = {
+    "model": "mock-thinking",
+    "messages": [{"role": "user", "content": "想一想再回答"}],
+    "stream": True,
+    "stream_options": {"include_usage": True},
+}
+
+
+def _thinking_chunk(delta: dict[str, Any], *, delay_ms: int) -> dict[str, Any]:
+    return {
+        "chunk": {
+            "id": "chatcmpl-thinking",
+            "object": "chat.completion.chunk",
+            "created": 1,
+            "model": "mock-thinking",
+            "choices": [{"index": 0, "delta": delta, "finish_reason": None}],
+        },
+        "delay_ms": delay_ms,
+    }
+
+
+# 思考增量每 100ms 一个、共 600ms（超过用例注入的 0.3s 超时），随后才出正文
+THINKING_CHUNKS: list[dict[str, Any]] = [
+    _thinking_chunk({"reasoning_content": f"思{i}"}, delay_ms=100) for i in range(6)
+] + [
+    _thinking_chunk({"content": "答案A"}, delay_ms=100),
+    _thinking_chunk({"content": "完毕B"}, delay_ms=0),
+    {
+        "chunk": {
+            "id": "chatcmpl-thinking",
+            "object": "chat.completion.chunk",
+            "created": 1,
+            "model": "mock-thinking",
+            "choices": [],
+            "usage": {"prompt_tokens": 3, "completion_tokens": 5},
+        },
+        "delay_ms": 0,
+    },
+]
+
+
+@pytest.fixture
+def srs_thinking(tmp_path: Path) -> Generator[str, None, None]:
+    """线程起挂载"思考流"合成快照的 SRS（写入 tmp 目录，不动真实录制库）。"""
+    root = tmp_path / "snapshots"
+    snap = Snapshot(
+        scenario="thinking_stream", request=THINKING_REQUEST, stream_chunks=THINKING_CHUNKS
+    )
+    SnapshotStore(root).save(snap)
+    yield from _run_srs(root)
+
+
+async def test_reasoning_phase_no_false_timeout(srs_thinking: str) -> None:
+    """UT-06-12 思考阶段不误杀：reasoning 增量持续 0.6s（> timeout 0.3s）→ 不超时、正文纯净。"""
+    adapter = make_adapter(srs_thinking, timeout_seconds=0.3)
+    result = await adapter.complete(
+        LlmRequest(
+            model="mock-thinking",
+            messages=[NormalizedMessage(role="user", content="想一想再回答")],
+        )
+    )
+    assert result.content == "答案A完毕B"  # 思考内容不进正文
+    assert result.usage.prompt_tokens == 3
+    assert result.usage.completion_tokens == 5
+
+
+async def test_reasoning_events_surface(srs_thinking: str) -> None:
+    """UT-06-13 思考增量暴露为 reasoning 事件：text 为空，reasoning 拼接完整、只含 content 正文。"""
+    adapter = make_adapter(srs_thinking)
+    events: list[StreamEvent] = [
+        event
+        async for event in adapter.stream_events_timed(
+            LlmRequest(
+                model="mock-thinking",
+                messages=[NormalizedMessage(role="user", content="想一想再回答")],
+            )
+        )
+    ]
+    assert "".join(e.reasoning for e in events if e.reasoning) == "思0思1思2思3思4思5"
+    assert "".join(e.text for e in events) == "答案A完毕B"

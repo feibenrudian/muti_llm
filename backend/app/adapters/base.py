@@ -4,6 +4,8 @@
 
 超时语义（决策 D8）：上游一律流式调用，timeout_seconds 约束的是
 "等待首个事件"与"事件间空闲"的时间，而非总时长——复杂问题只要持续产出就不会超时。
+思考模型（DeepSeek/Qwen/Anthropic thinking）的 reasoning 增量也算"持续产出"：
+思考阶段哪怕再长，只要增量在流就不会被判超时（否则思考型上游会被整体误杀）。
 """
 
 from __future__ import annotations
@@ -43,10 +45,15 @@ class LlmUsage:
 
 @dataclass
 class StreamEvent:
-    """流式事件：文本增量，或（流结束时）一次 usage 汇总。"""
+    """流式事件：文本增量、思考增量（reasoning），或（流结束时）一次 usage 汇总。
+
+    reasoning 与 text 分离：思考内容绝不混入最终回答（complete/stream 只取 text），
+    但同样计为"流上的活跃事件"，用于重置 TTFT/空闲超时计时器。
+    """
 
     text: str = ""
     usage: LlmUsage | None = None
+    reasoning: str = ""
 
 
 @dataclass

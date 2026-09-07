@@ -28,8 +28,12 @@ DEFAULT_NON_STREAM: dict[str, Any] = {
 }
 
 
-def build_sse_events(deltas: Sequence[str]) -> list[str]:
-    """按增量文本生成合法的 Anthropic SSE 事件行序列。"""
+def build_sse_events(deltas: Sequence[str], *, thinking: Sequence[str] = ()) -> list[str]:
+    """按增量文本生成合法的 Anthropic SSE 事件行序列。
+
+    thinking 非空时先输出 thinking 内容块（thinking_delta 增量），再输出文本块。
+    signature 为空串：ThinkingBlock 必填该字段，但空值不影响流式累积。
+    """
     lines = [
         (
             "message_start",
@@ -44,28 +48,55 @@ def build_sse_events(deltas: Sequence[str]) -> list[str]:
                 },
             },
         ),
+    ]
+    index = 0
+    if thinking:
+        lines.append(
+            (
+                "content_block_start",
+                {
+                    "type": "content_block_start",
+                    "index": index,
+                    "content_block": {"type": "thinking", "thinking": "", "signature": ""},
+                },
+            )
+        )
+        for text in thinking:
+            lines.append(
+                (
+                    "content_block_delta",
+                    {
+                        "type": "content_block_delta",
+                        "index": index,
+                        "delta": {"type": "thinking_delta", "thinking": text},
+                    },
+                )
+            )
+        lines.append(("content_block_stop", {"type": "content_block_stop", "index": index}))
+        index += 1
+    lines.append(
         (
             "content_block_start",
             {
                 "type": "content_block_start",
-                "index": 0,
+                "index": index,
                 "content_block": {"type": "text", "text": ""},
             },
-        ),
-    ]
+        )
+    )
     for text in deltas:
         lines.append(
             (
                 "content_block_delta",
                 {
                     "type": "content_block_delta",
-                    "index": 0,
+                    "index": index,
                     "delta": {"type": "text_delta", "text": text},
                 },
             )
         )
     lines += [
-        ("content_block_stop", {"type": "content_block_stop", "index": 0}),
+        ("content_block_stop", {"type": "content_block_stop", "index": index}),
         (
             "message_delta",
             {

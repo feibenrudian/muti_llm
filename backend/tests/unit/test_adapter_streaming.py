@@ -21,12 +21,15 @@ REQ = LlmRequest(model="m", messages=[NormalizedMessage(role="user", content="hi
 
 
 def scripted_adapter(
-    script: list[tuple[str, float]],
+    script: list[tuple[str, float] | tuple[str, float, str]],
     *,
     usage: LlmUsage | None = None,
     max_retries: int = 0,
 ) -> BaseAdapter:
-    """按脚本 (text, delay) 逐事件产出；usage 事件（若有）附在流末尾。"""
+    """按脚本逐事件产出；条目为 (text, delay) 或 (text, delay, kind)，kind=text|reasoning。
+
+    usage 事件（若有）附在流末尾。
+    """
 
     class Scripted(BaseAdapter):
         def __init__(self) -> None:
@@ -40,10 +43,15 @@ def scripted_adapter(
             raise NotImplementedError
 
         async def _gen(self) -> AsyncIterator[StreamEvent]:
-            for text, delay in script:
+            for entry in script:
+                text, delay = entry[0], entry[1]
+                kind = entry[2] if len(entry) > 2 else "text"
                 if delay:
                     await asyncio.sleep(delay)
-                yield StreamEvent(text=text)
+                if kind == "reasoning":
+                    yield StreamEvent(reasoning=text)
+                else:
+                    yield StreamEvent(text=text)
             if usage is not None:
                 yield StreamEvent(usage=usage)
 
@@ -85,3 +93,22 @@ async def test_idle_timeout_mid_stream_no_retry() -> None:
     assert excinfo.value.kind == "timeout"
     assert excinfo.value.retryable is False
     assert adapter.attempts == 1
+
+
+async def test_reasoning_phase_keeps_stream_alive() -> None:
+    """UT-06-10 思考阶段不算超时：reasoning 事件持续到达（总时长 > timeout）→ 成功且不进正文。"""
+    adapter = scripted_adapter(
+        [(f"思{i}", 0.1, "reasoning") for i in range(6)] + [("答案", 0.1)],
+        usage=LlmUsage(prompt_tokens=1, completion_tokens=2),
+    )
+    adapter.timeout_seconds = 0.3
+    result = await adapter.complete(REQ)
+    assert result.content == "答案"  # reasoning 绝不混入正文
+    assert result.usage == LlmUsage(prompt_tokens=1, completion_tokens=2)
+
+
+async def test_reasoning_stream_yields_no_text() -> None:
+    """UT-06-11 纯思考流：stream() 对 reasoning 事件不产出任何文本片段。"""
+    adapter = scripted_adapter([("思考中", 0.0, "reasoning"), ("正文", 0.0)])
+    deltas = [d async for d in adapter.stream(REQ)]
+    assert deltas == ["正文"]

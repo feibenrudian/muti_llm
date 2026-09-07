@@ -102,10 +102,19 @@ class AnthropicAdapter(BaseAdapter):
     async def _stream_events(self, request: LlmRequest) -> AsyncIterator[StreamEvent]:
         kwargs = _build_kwargs(request)
         try:
+            # 迭代原始事件而非 text_stream：thinking_delta 也要产出事件（见 base.StreamEvent），
+            # 否则扩展思考阶段会被基座误判为 TTFT 超时
             async with self._client.messages.stream(**kwargs) as stream:
-                async for text in stream.text_stream:
-                    if text:
-                        yield StreamEvent(text=text)
+                async for event in stream:
+                    if event.type != "content_block_delta":
+                        continue
+                    delta = event.delta
+                    if delta.type == "text_delta":
+                        if delta.text:
+                            yield StreamEvent(text=delta.text)
+                    elif delta.type == "thinking_delta":
+                        if delta.thinking:
+                            yield StreamEvent(reasoning=delta.thinking)
                 final = await stream.get_final_message()
         except anthropic.APIError as exc:
             raise map_anthropic_error(exc) from None

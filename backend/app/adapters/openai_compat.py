@@ -121,9 +121,13 @@ class OpenAICompatAdapter(BaseAdapter):
                     )
                 if not chunk.choices:
                     continue
-                delta = chunk.choices[0].delta.content
-                if delta:
-                    yield StreamEvent(text=delta)
+                delta = chunk.choices[0].delta
+                # 思考模型增量在 reasoning_content（SDK 未声明该字段，getattr 兜底）
+                reasoning = getattr(delta, "reasoning_content", None)
+                if reasoning:
+                    yield StreamEvent(reasoning=reasoning)
+                if delta.content:
+                    yield StreamEvent(text=delta.content)
         except openai.APIError as exc:
             raise map_openai_error(exc) from None
         finally:
