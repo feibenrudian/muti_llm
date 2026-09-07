@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { useParams } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { api, streamRejudge, type ModelRow, type TraceCall } from "../lib/api";
@@ -433,6 +433,7 @@ function JudgeCard({
 
 export default function TraceDetail() {
   const { id } = useParams();
+  const [activeTab, setActiveTab] = useState(0);
   const { data, isPending, isError, error, refetch } = useQuery({
     queryKey: ["trace", id],
     queryFn: () => api.traces.get(id!),
@@ -454,30 +455,93 @@ export default function TraceDetail() {
     (entry) => entry.kind === "call" && entry.call.role === "member",
   );
 
-  const anchorOf = (index: number) => `trace-entry-${index}`;
-  const navItems = timeline.flatMap((entry, index) => {
-    if (entry.kind === "request") return [{ anchor: anchorOf(index), label: "原始请求" }];
-    if (entry.kind === "final") return [{ anchor: anchorOf(index), label: "最终响应" }];
+  // 页面级 tab 与时间线同序；面板只隐藏不卸载，保住卡片内部状态（裁判流式重跑、成员 tab 选择）
+  const tabs: { key: string; label: string; content: ReactNode }[] = [];
+  timeline.forEach((entry, index) => {
+    if (entry.kind === "request") {
+      tabs.push({
+        key: "request",
+        label: "原始请求",
+        content: (
+          <Card title="① 原始请求">
+            <div className="grid grid-cols-3 gap-2 text-sm">
+              <p>
+                <span className="text-slate-400">model 字段：</span>
+                <span className="font-mono">{request.client_model_field}</span>
+              </p>
+              <p>
+                <span className="text-slate-400">Pipeline：</span>
+                {request.pipeline_name || "（透传）"}
+              </p>
+              <p>
+                <span className="text-slate-400">参数：</span>
+                <span className="font-mono text-xs">{JSON.stringify(request.request_params)}</span>
+              </p>
+            </div>
+            <pre className="mt-2 max-h-56 overflow-auto rounded bg-slate-50 p-2 text-xs">
+              {JSON.stringify(request.request_messages, null, 2)}
+            </pre>
+          </Card>
+        ),
+      });
+      return;
+    }
+    if (entry.kind === "final") {
+      tabs.push({
+        key: "final",
+        label: "最终响应",
+        content: (
+          <Card title={`Ⓝ 最终响应（${request.status}）`}>
+            <p className="whitespace-pre-wrap text-sm">{request.response_content || "（空）"}</p>
+          </Card>
+        ),
+      });
+      return;
+    }
     if (entry.kind === "judge") {
       const count = judgeVersionCount(entry.calls);
       const first = entry.calls.find((call) => call.role !== "judge_critique");
-      return [
-        {
-          anchor: anchorOf(index),
-          label: count > 1 ? `裁判 · ${count} 版` : `裁判 · ${first?.upstream_model_id ?? ""}`,
-        },
-      ];
+      tabs.push({
+        key: "judge",
+        label: count > 1 ? `裁判 · ${count} 版` : `裁判 · ${first?.upstream_model_id ?? ""}`,
+        content: <JudgeCard traceId={id!} judges={entry.calls} memberModelIds={memberModelIds} />,
+      });
+      return;
     }
-    if (entry.call.role === "member") {
-      return index === memberEntryIndex
-        ? [{ anchor: anchorOf(index), label: `成员 · ${memberCalls.length} 个` }]
-        : [];
+    const call = entry.call;
+    if (call.role === "member") {
+      if (index === memberEntryIndex) {
+        tabs.push({
+          key: "members",
+          label: `成员 · ${memberCalls.length} 个`,
+          content: <MemberCallsCard calls={memberCalls} />,
+        });
+      }
+      return;
     }
-    return [{ anchor: anchorOf(index), label: `透传 · ${entry.call.upstream_model_id}` }];
+    tabs.push({
+      key: `passthrough-${index}`,
+      label: `透传 · ${call.upstream_model_id}`,
+      content: (
+        <Card
+          title="上游调用（透传）"
+          actions={
+            <>
+              <span className="font-mono text-xs text-slate-500">{call.upstream_model_id}</span>
+              <Badge tone={statusTone(call.status)}>{call.status}</Badge>
+              <span className="text-xs text-slate-400">
+                {formatDuration(call.duration_ms)} · {call.prompt_tokens}/{call.completion_tokens} tokens
+              </span>
+            </>
+          }
+        >
+          <CallDetails call={call} />
+        </Card>
+      ),
+    });
   });
 
-  const scrollTo = (anchor: string) =>
-    document.getElementById(anchor)?.scrollIntoView({ behavior: "smooth", block: "start" });
+  const current = Math.min(activeTab, tabs.length - 1);
 
   return (
     <div className="space-y-4">
@@ -493,93 +557,31 @@ export default function TraceDetail() {
         </Button>
       </div>
 
-      {/* 展开长内容时页面仍可能变长，吸顶锚点直达各区块；成员已并为一张 tab 卡，只占一个导航项 */}
-      <div className="sticky top-0 z-10 flex flex-wrap items-center gap-1.5 border-b border-slate-200 bg-slate-50/95 py-2 text-xs backdrop-blur">
-        <span className="text-slate-400">快速定位</span>
-        {navItems.map((item) => (
+      <div role="tablist" aria-label="详情区块" className="flex flex-wrap gap-x-4 gap-y-1 border-b border-slate-200">
+        {tabs.map((tab, i) => (
           <button
-            key={item.anchor}
+            key={tab.key}
             type="button"
-            title={item.label}
-            onClick={() => scrollTo(item.anchor)}
-            className="max-w-56 truncate rounded-full border border-slate-200 bg-white px-2.5 py-1 text-slate-600 transition-colors hover:border-slate-400 hover:text-slate-900"
+            role="tab"
+            aria-selected={i === current}
+            onClick={() => setActiveTab(i)}
+            className={`-mb-px inline-flex max-w-72 items-center gap-1.5 border-b-2 pb-1.5 text-sm transition-colors ${
+              i === current
+                ? "border-slate-900 font-medium text-slate-900"
+                : "border-transparent text-slate-500 hover:text-slate-800"
+            }`}
           >
-            {item.label}
+            <span className="truncate">{tab.label}</span>
           </button>
         ))}
       </div>
 
-      <div className="space-y-3">
-        {timeline.map((entry, index) => {
-          if (entry.kind === "request") {
-            return (
-              <div key={`entry-${index}`} id={anchorOf(index)} className="scroll-mt-12">
-                <Card title="① 原始请求">
-                  <div className="grid grid-cols-3 gap-2 text-sm">
-                    <p>
-                      <span className="text-slate-400">model 字段：</span>
-                      <span className="font-mono">{request.client_model_field}</span>
-                    </p>
-                    <p>
-                      <span className="text-slate-400">Pipeline：</span>
-                      {request.pipeline_name || "（透传）"}
-                    </p>
-                    <p>
-                      <span className="text-slate-400">参数：</span>
-                      <span className="font-mono text-xs">{JSON.stringify(request.request_params)}</span>
-                    </p>
-                  </div>
-                  <pre className="mt-2 max-h-56 overflow-auto rounded bg-slate-50 p-2 text-xs">
-                    {JSON.stringify(request.request_messages, null, 2)}
-                  </pre>
-                </Card>
-              </div>
-            );
-          }
-          if (entry.kind === "final") {
-            return (
-              <div key={`entry-${index}`} id={anchorOf(index)} className="scroll-mt-12">
-                <Card title={`Ⓝ 最终响应（${request.status}）`}>
-                  <p className="whitespace-pre-wrap text-sm">{request.response_content || "（空）"}</p>
-                </Card>
-              </div>
-            );
-          }
-          if (entry.kind === "judge") {
-            return (
-              <div key={`entry-${index}`} id={anchorOf(index)} className="scroll-mt-12">
-                <JudgeCard traceId={id!} judges={entry.calls} memberModelIds={memberModelIds} />
-              </div>
-            );
-          }
-          const call = entry.call;
-          if (call.role === "member") {
-            if (index !== memberEntryIndex) return null;
-            return (
-              <div key={`entry-${index}`} id={anchorOf(index)} className="scroll-mt-12">
-                <MemberCallsCard calls={memberCalls} />
-              </div>
-            );
-          }
-          return (
-            <div key={`entry-${index}`} id={anchorOf(index)} className="scroll-mt-12">
-              <Card
-                title="上游调用（透传）"
-                actions={
-                  <>
-                    <span className="font-mono text-xs text-slate-500">{call.upstream_model_id}</span>
-                    <Badge tone={statusTone(call.status)}>{call.status}</Badge>
-                    <span className="text-xs text-slate-400">
-                      {formatDuration(call.duration_ms)} · {call.prompt_tokens}/{call.completion_tokens} tokens
-                    </span>
-                  </>
-                }
-              >
-                <CallDetails call={call} />
-              </Card>
-            </div>
-          );
-        })}
+      <div>
+        {tabs.map((tab, i) => (
+          <div key={tab.key} role="tabpanel" hidden={i !== current}>
+            {tab.content}
+          </div>
+        ))}
       </div>
     </div>
   );

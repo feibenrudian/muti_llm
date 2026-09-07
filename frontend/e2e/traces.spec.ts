@@ -67,14 +67,14 @@ test("UE-27-2 详情时间线：原始请求 → 裁判 → 成员tab切换 → 
     "Ⓝ 最终响应（success）",
   ]);
 
+  // 页面级 tab：成员组只占一个 tab，点击切到成员卡片（隐藏面板中的元素不参与 role 查询，先切换再断言）
+  await page.getByRole("tab", { name: "成员 · 2 个" }).click();
+  await expect(page.getByText("成员调用（2 个）")).toBeVisible();
+
   const memberCard = page.locator("section").filter({ has: page.getByRole("tablist", { name: "成员模型" }) });
   const memberTabs = memberCard.getByRole("tab");
   await expect(memberTabs).toHaveCount(2);
   await expect(memberTabs.first()).toHaveAttribute("aria-selected", "true");
-
-  // 快速定位：成员组只占一个导航项，点击直达成员卡片
-  await page.getByRole("button", { name: "成员 · 2 个" }).click();
-  await expect(page.getByText("成员调用（2 个）")).toBeInViewport();
 
   // 非选中成员不渲染：入参/输出折叠块只有当前成员一份，且默认折叠保持紧凑
   const outputDetails = page.locator('details:has(summary:text-is("输出"))');
@@ -94,10 +94,12 @@ test("UE-27-2 详情时间线：原始请求 → 裁判 → 成员tab切换 → 
   await expect(inputDetails.locator("pre")).toContainText('"temperature": 0.7');
 
   // 裁判入参（第二次调用）含组装 Prompt（展开后可见成员答案标注）；输出直接可见且即最终答案
+  await page.getByRole("tab", { name: /裁判/ }).click();
   const judgeCard = page.locator("section", { hasText: "裁判调用" });
   const finalInput = judgeCard.locator("details").filter({ hasText: "入参（第二次调用" });
   await finalInput.locator("summary").click();
   await expect(finalInput.locator("pre")).toContainText("【回答 1】");
+  await page.getByRole("tab", { name: "最终响应" }).click();
   const finalText = await page
     .locator("section", { hasText: "最终响应" })
     .locator("p")
@@ -118,6 +120,7 @@ test("UE-27-3 失败详情：成员卡片展示错误信息", async ({ page, req
   await page.goto(`/traces/${failed.trace_id}`);
   await expect(page.getByText("failed", { exact: true }).first()).toBeVisible();
   // 成员卡片展示上游错误信息（注入的失败），且无裁判卡片
+  await page.getByRole("tab", { name: /成员/ }).click();
   await expect(page.getByText(/injected failure|上游/).first()).toBeVisible();
   await expect(page.getByText("裁判调用")).toHaveCount(0);
 });
@@ -132,6 +135,7 @@ test("UE-30-1 换裁判重跑：tab 切换不主动生成，点生成按钮流�
   expect(result.status_code).toBe(200);
 
   await page.goto(`/traces/${result.trace_id}`);
+  await page.getByRole("tab", { name: /裁判/ }).click();
   const judgeCard = page
     .locator("section")
     .filter({ has: page.getByRole("tablist", { name: "裁判模型" }) });
@@ -184,6 +188,7 @@ test("UE-31-1 两段式裁判：裁判卡展示评论（第一次调用），换
   expect(result.status_code).toBe(200);
 
   await page.goto(`/traces/${result.trace_id}`);
+  await page.getByRole("tab", { name: /裁判/ }).click();
   const judgeCard = page.locator("section").filter({ has: page.getByLabel("裁判模型") });
 
   // 原始版本：评论块（第一次调用）内含入参与评论输出；主输出 = 第二次调用的最终答案
