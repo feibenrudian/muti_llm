@@ -1,8 +1,8 @@
 # 迭代共识集成（ICE）策略集成技术方案与任务拆分（T32–T37）
 
-| 文档版本 | v1.0 |
+| 文档版本 | v1.1 |
 | --- | --- |
-| 日期 | 2026-09-04 |
+| 日期 | 2026-09-07 |
 | 上游文档 | [requirements.md](../requirements.md)、[tech-plan.md](../tech-plan.md)（编号、DoD、测试纪律全部继承） |
 | 背景材料 | [迭代共识集成（ICE）技术方案文档.md](./迭代共识集成（ICE）技术方案文档.md)（ICE 算法机制与公开基准的**背景阅读**，不作为实施依据） |
 | 状态 | 初稿（待评审） |
@@ -27,7 +27,7 @@
 | FR-8 | "本期注册并实现唯一策略 council" 改为"注册 council 与 ice 两种策略" |
 | FR-10 | Pipeline 字段增加 `strategy_params`（按策略校验的 JSON 参数） |
 | FR-13 | Trace 详情页成员卡片带轮次标签、裁判卡片支持多轮评论 |
-| 6. NFR-1 | 补充：ICE 端到端延迟 ≈ Σ各轮 max(成员延迟) + Σ裁判延迟，见本文 §9 预算 |
+| 6. NFR-1 | 成员超时默认值由 60s 订正为 120s（与既有代码 orm/schemas 一致，原文档滞后）；补充：ICE 端到端延迟 ≈ Σ各轮 max(成员延迟) + Σ裁判延迟，见本文 §9 预算 |
 
 ---
 
@@ -37,7 +37,7 @@
 
 **目标（v1）**
 
-- G-ICE-1：注册第二种策略 `ice`：Pipeline 配置 `strategy=ice` 即可用，对外仍是 OpenAI 兼容虚拟模型（如 `ice-v1`），网关主流程零改动。
+- G-ICE-1：注册第二种策略 `ice`：Pipeline 配置 `strategy=ice` 即可用，对外仍是 OpenAI 兼容虚拟模型（如 `ice-v1`）；网关非流式主流程零改动，流式仅新增迭代分派分支（D15），council 路径逐字节不变。
 - G-ICE-2：迭代语义——成员并发出第 0 轮答案 → 仲裁者评论并判断共识（结构化 JSON）→ 未共识则成员基于评论改进、仲裁者再评 → 循环直至共识/停滞/轮数上限 → 仲裁者同会话终局裁决产出最终答案。
 - G-ICE-3：完整 Trace：每个成员的每一轮、每轮仲裁评论、终局裁决全部落库（带轮次），Web UI 可视。
 - G-ICE-4：流式请求下最终答案 SSE 转发，迭代期间发送 SSE 注释行保活（OpenAI SDK 忽略、字节可保活）。
@@ -110,11 +110,11 @@ ICE 是 council 的**多轮泛化**，最大化复用现有机制：
 
 ```
 pipelines:       + strategy_params(json, default {})     # 按策略校验的参数
-model_call_logs: + round(integer, nullable)              # ICE 轮次（0 起）；council/透传行为 NULL
+model_call_logs: + round(integer, nullable)              # ICE 迭代轮次（0 起）；终局裁决行、council/透传行均为 NULL
 ```
 
 - ORM 同步修改 + `db.py` 新增 `_ensure_schema()`：启动时 `PRAGMA table_info` 检测缺列 → `ALTER TABLE … ADD COLUMN`（幂等）。新建库由 create_all 直接建全。
-- `CallOutcome` 增加 `round_no: int | None`，进 `to_log_kwargs()`；`logging_svc.record_call()` 增加 `round_no` 参数（默认 None）；Trace 详情 API 的 call 行增加 `round` 字段。
+- `CallOutcome` 增加 `round_no: int | None`，进 `to_log_kwargs()`；`logging_svc.record_call()` 增加 `round_no` 参数（默认 None）；Trace 详情 API 的 call 行增加 `round` 字段（内部传参名 `round_no` 与 DB 列/API 字段名 `round` 为同一语义，勿再引入第三个名字）。
 
 ### 3.2 ICE 策略参数（`strategy_params`）
 
@@ -154,18 +154,22 @@ async def run(self, ctx) -> StrategyResult:
         return self._critique_failed_at_round0(...)               # 容错矩阵：等同 council 今日语义
     verdict = parse_verdict(critique.response_content)            # 宽松 JSON 解析（§4.4）
 
-    round_no, conf_history = 0, [verdict.confidence]
+    # 停滞序列只收解析成功的轮次：解析失败的 confidence=0.0 占位值不进序列（§4.3/§4.4）
+    round_no, conf_history = 0, [verdict.confidence] if verdict.parsed else []
     while not self._should_finish(verdict, round_no, conf_history, params):
         round_no += 1
-        refined = await self._run_refine_round(ctx, ok, verdict.critique, round_no)
-        outcomes += refined                                       # 失败成员沿用上轮答案（§5），失败行照落
-        critique = await self._run_round_critique(ctx, ok, session, round_no)
+        refined = await self._run_refine_round(ctx, ok, verdict.critique, round_no)  # 与 ok 同序，每成员恰好一行
+        outcomes += refined
+        ok = [new if new.status == "success" else old             # 失败成员沿用上轮答案（§5），失败行照落
+              for old, new in zip(ok, refined)]
+        critique = await self._run_round_critique(ctx, ok, session, round_no)        # 评论各成员最新答案
         outcomes.append(critique)
         if critique.status != "success":
             degraded = True                                       # 迭代期评论失败：跳过剩余轮，直接终局（D11）
             break
         verdict = parse_verdict(critique.response_content)
-        conf_history.append(verdict.confidence)
+        if verdict.parsed:
+            conf_history.append(verdict.confidence)
     else:
         degraded = False
 
@@ -173,8 +177,12 @@ async def run(self, ctx) -> StrategyResult:
     outcomes.append(final)
     return StrategyResult(final_content=final.response_content,
                           usage=sum_usage(outcomes), degraded=degraded,
-                          members=outcomes)                        # 轮次经 CallOutcome.round_no 落 Trace
+                          calls=outcomes)                         # 轮次经 CallOutcome.round_no 落 Trace
 ```
+
+- **成员最新答案表**：`ok` 初始为第 0 轮成功成员，此后每轮用 refine 结果按位更新（成功换新的、失败留旧的），第 k 轮评论与终局裁决始终面对各成员**最新成功轮**答案——与 §5 容错矩阵一致。
+- **客户端请求参数**（`ctx.user_params`）作用于全部 R+1 次裁判调用（每轮评论 + 终局裁决），成员各轮不用——FR-9"客户端参数仅作用于裁判"的自然推广。该约定进请求体、影响快照 hash，T37 录制脚本必须一致。
+- **StrategyResult 泛化**：现有 `members/critique/judge` 单值字段放不下 ICE 的 N 条轮评论 + 终局，统一改为 `calls: list[CallOutcome]`（T32 实施，council 适配后对外行为不变）。
 
 ### 4.2 提示词模板（全文，均为内置常量）
 
@@ -226,7 +234,7 @@ async def run(self, ctx) -> StrategyResult:
 - **终局条件**（`_should_finish`，任一满足即进入终局裁决）：
   1. `consensus == true` 且 `confidence >= confidence_threshold`；
   2. 当前已是第 `max_rounds - 1` 轮（轮数耗尽）；
-  3. 停滞（`stagnation=true` 时）：连续两轮未终局且 `confidence[k] <= confidence[k-1]`（不升）。
+  3. 停滞（`stagnation=true` 时）：连续两轮未终局且 `confidence[k] <= confidence[k-1]`（不升）；confidence 序列只含 JSON 解析成功的轮次，解析失败的 0.0 占位值不参与比较（避免假停滞提前终局，§4.4）。
 - 停滞检测**不依赖 embedding**，来源即仲裁者 JSON 的 confidence 序列，回放确定。
 - 轮次编号全程 **0 起**（成员轮、评论轮、Trace round 同源），文档与 UI 统一口径。
 
@@ -234,7 +242,7 @@ async def run(self, ctx) -> StrategyResult:
 
 1. 剥 Markdown 代码围栏；截取首个平衡的 `{…}` 片段；`json.loads`。
 2. 字段缺省容错：`consensus` 非 bool 或缺失 → false；`confidence` 非法 → 0.0；`critique` 缺失 → 原始全文。
-3. 完全解析失败 → `consensus=false, confidence=0.0, critique=原文`，照常进入下一轮——**宁可多迭代一轮，绝不误判共识提前停**（成本有 max_rounds 硬顶，质量风险无上限）。
+3. 完全解析失败 → `consensus=false, confidence=0.0, critique=原文`，照常进入下一轮——**宁可多迭代一轮，绝不误判共识提前停**（成本有 max_rounds 硬顶，质量风险无上限）。`parse_verdict` 返回需带 `parsed` 标志，解析失败轮次不进停滞检测的 confidence 序列（防止占位 0.0 触发假停滞）。
 
 ---
 
@@ -243,7 +251,7 @@ async def run(self, ctx) -> StrategyResult:
 | 场景 | 行为 | 与 council 关系 |
 | --- | --- | --- |
 | 成员第 0 轮失败/超时 | 跳过该成员，≥1 成功即继续；`member_failure=strict` 时任一失败即整体失败 | 同 council（复用 `run_members`） |
-| 成员第 k≥1 轮失败/超时 | **沿用该成员第 k-1 轮答案**进入本轮评论，失败调用行照落 Trace（round=k, status=failed）；下一轮该成员继续参与（可恢复） | 新增（ ICE 特有） |
+| 成员第 k≥1 轮失败/超时 | **沿用该成员第 k-1 轮答案**进入本轮评论，失败调用行照落 Trace（round=k, status=failed）；下一轮该成员继续参与（可恢复） | 新增（ICE 特有） |
 | 成员全部轮失败（第 k≥1 轮全失败） | 沿用全部上轮答案继续，不 502 | 新增 |
 | 全部成员第 0 轮失败 | `AllMembersFailed` → 502 附各成员摘要 | 同 council |
 | 仲裁者**第 0 轮**评论失败 | 非流式：默认降级返回首个成功成员答案 + `degraded:true`；`judge_failure=strict` → 502。流式：发生在开流前，按失败返回 | 同 council（AE-18-2/18-3 语义） |
@@ -265,7 +273,7 @@ stream=true 时序：
                  ├─ 终局裁决：SSE data chunk 流式转发（首 role 事件 → content 增量 → finish → [DONE]）
 ```
 
-- 注释行格式：`: ice round {k}/{N}\n\n`，k=已完成的成员轮序号（1 起）、N=`max_rounds`。SSE 规范注释，OpenAI 官方 SDK 解析器忽略；`progress_comments=false` 时完全不发。
+- 注释行格式：`: ice round {k}/{N}\n\n`，k=已完成的成员轮序号（1 起）、N=`max_rounds`。SSE 规范注释，OpenAI 官方 SDK 解析器忽略；`progress_comments=false` 时完全不发。**注释行仅从进入第 1 轮迭代起发射**：第 0 轮（成员并发 + 评论）全部在开流前完成，该阶段客户端静默时长与 council 相同，无保活覆盖。
 - 网关分派：策略 `prepare_stream` 返回的 StreamPlan 若**不带迭代状态**（council、ICE 第 0 轮即共识）→ 走现有 `event_stream` 路径，逐字节不变；**带迭代状态**（ICE 需继续轮次）→ 走新增迭代路径（注释行 + 轮次执行 + 终局流式）。council 回归用例保证零行为变化。
 - 取消传播：断开时取消在飞轮次任务，后台任务落已完成轮次行 + `client_cancelled`（沿用现有 background persist 机制，扩展到迭代期）。
 - 非流式请求无进度通道，整段等待（延迟预算见 §9）。
@@ -304,7 +312,7 @@ stream=true 时序：
 
 ### T32 数据模型与策略参数框架
 
-产出：`orm.py` 增 `pipelines.strategy_params`、`model_call_logs.round`；`db.py` `_ensure_schema()` 轻量补列；`schemas.py` Pipeline Create/Update/Out 增字段；`strategies/base.py` 增 `validate_params` 类方法钩子（默认实现：council 拒绝非空参数）；`admin/pipelines` 创建/更新调用钩子（非法 422）；`admin/meta` 增 `GET /api/admin/meta/strategies`；`CallOutcome.round_no` → `to_log_kwargs` → `logging_svc.record_call` → Trace API `round` 字段全链贯通。
+产出：`orm.py` 增 `pipelines.strategy_params`、`model_call_logs.round`；`db.py` `_ensure_schema()` 轻量补列；`schemas.py` Pipeline Create/Update/Out 增字段；`strategies/base.py` 增 `validate_params` 类方法钩子（默认实现：council 拒绝非空参数）；`StrategyResult` 的 `members`/`critique`/`judge` 单值字段泛化为统一 `calls: list[CallOutcome]`（ICE 的 N 条轮评论 + 终局无法塞入单值字段；council 适配后对外行为不变）；`admin/pipelines` 创建/更新调用钩子（非法 422）；`admin/meta` 增 `GET /api/admin/meta/strategies`；`CallOutcome.round_no` → `to_log_kwargs` → `logging_svc.record_call` → Trace API `round` 字段全链贯通。
 | 编号 | 类型 | 用例 | 断言要点 |
 | --- | --- | --- | --- |
 | UT-32-1 | UT | ICE 参数校验 | 默认值自动填充（max_rounds=3 等）；max_rounds=6 / threshold=1.5 / 类型错 → ValueError；council 传非空参数 → 拒绝 |
@@ -323,7 +331,7 @@ stream=true 时序：
 | UT-33-2 | UT | 迭代后共识 | 第 0 轮 false → refine 轮成员消息 = 原始+assistant(旧答案)+user(改进指令，{{critique}} 已渲染) → 第 1 轮 true → 终局 |
 | UT-33-3 | UT | 匿名性 | 仲裁评论输入为【回答 N】且不带模型名（复用 render_judge_prompt 断言） |
 | UT-33-4 | UT | 仲裁者会话延续 | 第 k 轮评论请求含第 k-1 轮 JSON 为 assistant 轮；user 轮只含最新答案、不重复原对话 |
-| UT-33-5 | UT | 轮数耗尽 | 恒 false → 恰好 max_rounds 轮成员 + 等量评论 + 1 终局，degraded=false |
+| UT-33-5 | UT | 轮数耗尽 | `stagnation=false`（或 confidence 逐轮递增但低于阈值，规避停滞条件）下恒 false → 恰好 max_rounds 轮成员 + 等量评论 + 1 终局，degraded=false |
 | UT-33-6 | UT | 停滞检测 | conf 序列 [0.5, 0.5]（或下降）两轮未终局 → 提前终局，调用数少于 max_rounds 满轮 |
 | UT-33-7 | UT | JSON 宽松解析 | 围栏/前后杂文可解析；完全非 JSON → consensus=false、critique=原文、继续迭代 |
 | UT-33-8 | UT | 成员迭代轮失败 | 第 1 轮一成员失败 → 该成员沿用第 0 轮答案进评论、失败行保留(round=1)；第 1 轮全失败 → 沿用全部上轮答案不 502 |
@@ -332,7 +340,7 @@ stream=true 时序：
 
 ### T34 非流式端到端 + Trace + 换裁判重跑适配（AE 快照）
 
-产出：网关零改动验证（策略注册即路由）；`rejudge_svc` 适配 ICE trace（answers = 各成员**最新成功轮**答案；重跑仍为单次两段式，不做多轮迭代——重跑目的是快速对比裁判模型质量，多轮重跑成本高且 UI 配对复杂）；Trace 落库断言；SRS `fail_at_calls` 注入扩展（`snapshot_server/app.py`）。
+产出：网关零改动验证（策略注册即路由）；`rejudge_svc` 适配 ICE trace（answers = 各成员**最新成功轮**答案；重跑仍为单次两段式，不做多轮迭代——重跑目的是快速对比裁判模型质量，多轮重跑成本高且 UI 配对复杂；**重跑评论段使用 council 自由文本 `DEFAULT_CRITIQUE_TEMPLATE`**——给人看评论质量不需要共识 JSON，也避免 UI 折叠块展示裸 JSON，终局段仍用 `pipeline.judge_prompt_template`）；Trace 落库断言；SRS `fail_at_calls` 注入扩展（`snapshot_server/app.py`）。
 | 编号 | 类型 | 用例 | 断言要点 |
 | --- | --- | --- | --- |
 | UT-34-1 | UT | SRS 按序号注入 | `fail_at_calls: {"m-b": [2]}` → 该模型第 1 次调用成功、第 2 次 500、第 3 次起恢复；reset 清空 |
@@ -340,7 +348,7 @@ stream=true 时序：
 | AE-34-3 | AE | 多轮 Trace | `ice_refine_consensus` → calls 顺序与角色：member(round0)×2 → judge_critique(round0) → member(round1)×2 → judge_critique(round1) → judge；round 字段正确；payload 全文入库 |
 | AE-34-4 | AE | 轮数耗尽 | `ice_max_rounds` → 行数符合 max_rounds；status=success 非 degraded |
 | AE-34-5 | AE | 容错注入 | 全成员失败 → 502 附摘要；第 0 轮评论失败 → 200 degraded:true content=首个成功成员答案；第 1 轮成员失败（fail_at_calls）→ 该行 failed 且终局正常 |
-| AE-34-6 | AE | 换裁判重跑 | ICE trace rejudge → 录像断言裁判输入=各成员最新成功轮答案；judge_critique+judge_rerun 成对追加；原始 RequestLog 不变 |
+| AE-34-6 | AE | 换裁判重跑 | ICE trace rejudge → 录像断言裁判输入=各成员最新成功轮答案、评论段为 `DEFAULT_CRITIQUE_TEMPLATE` 渲染的自由文本（非共识 JSON）；judge_critique+judge_rerun 成对追加；原始 RequestLog 不变 |
 
 ### T35 流式：进度注释 + 能力分派 + 取消（AE）
 
