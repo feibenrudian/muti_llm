@@ -3,7 +3,7 @@ import { useParams } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { api, streamRejudge, type ModelRow, type TraceCall } from "../lib/api";
 import { formatDateTime, formatDuration, judgeVersionCount, statusTone, toTimeline } from "../lib/trace";
-import { Badge, Button, Card, EmptyState, Select } from "../components/ui";
+import { Badge, Button, Card, EmptyState } from "../components/ui";
 
 // 上游 ID 与展示名相同时不重复拼接（与 Pipelines 页同一规则）
 const modelOptionLabel = (model: ModelRow) =>
@@ -174,9 +174,9 @@ function seedVersions(judges: TraceCall[]): Map<number, JudgeVersion> {
 }
 
 /**
- * 裁判聚合卡：下拉选择裁判模型（原始裁判 + 本次请求的成员模型）。
- * 选中无结果的模型立即发起两段式流式重跑（评论 → 最终答案，多模型可并行互不干扰）；
- * 选中已有结果的模型直接展示。
+ * 裁判聚合卡：tab 切换裁判模型（原始裁判 + 本次请求的成员模型），第一个 tab 为原始裁判。
+ * 无结果的模型展示空态 + "生成"按钮，点击才发起两段式流式重跑（评论 → 最终答案，多模型可并行互不干扰）；
+ * 已有结果的模型直接展示，失败/中断的可点"重新生成"。
  */
 function JudgeCard({
   traceId,
@@ -293,15 +293,11 @@ function JudgeCard({
   };
 
   const selectModel = (modelId: number) => {
+    // tab 切换只看不触发：无结果的模型展示空态，由"生成"按钮显式发起
     setSelectedModelId(modelId);
-    const existing = versionsRef.current.get(modelId);
-    // 已有成功结果或正在生成：直接展示；失败/中断的尝试不算结果，重新发起
-    if (!existing || (existing.status !== "success" && existing.status !== "streaming")) {
-      startStream(modelId);
-    }
   };
 
-  // 下拉范围限定：原始裁判 + 本次请求的成员模型（+历史上已成功重跑过的模型），避免全量模型列表过长
+  // tab 范围限定：原始裁判 + 本次请求的成员模型（+历史上已成功重跑过的模型），避免全量模型列表过长
   const optionIds = useMemo(() => {
     const ids: number[] = [originalModelId];
     for (const id of memberModelIds) {
@@ -321,85 +317,116 @@ function JudgeCard({
   };
 
   const selected = versions.get(selectedModelId);
-  if (!selected) return null;
   // 标题按"已有答案的版本"计数：失败的尝试不占版本号
   const answerCount = Array.from(versions.values()).filter((v) => v.status === "success").length;
-  const badgeText =
-    selected.status === "streaming"
+  const badgeText = !selected
+    ? null
+    : selected.status === "streaming"
       ? `生成中（已接收 ${selected.receivedTokens} tokens）`
       : selected.status;
-  const badgeTone = selected.status === "streaming" ? "warn" : statusTone(selected.status);
-  const critique = selected.critique;
-  const streamingCritique = selected.status === "streaming" && critique?.status === "streaming";
+  const badgeTone = !selected
+    ? "muted"
+    : selected.status === "streaming"
+      ? "warn"
+      : statusTone(selected.status);
+  const critique = selected?.critique ?? null;
+  const streamingCritique = selected?.status === "streaming" && critique?.status === "streaming";
+  const tabTone = (id: number): keyof typeof statusDot => {
+    const v = versions.get(id);
+    if (!v) return "muted";
+    return v.status === "streaming" ? "warn" : statusTone(v.status);
+  };
 
   return (
     <Card
       title={answerCount > 1 ? `裁判聚合（${answerCount} 个版本）` : "裁判调用"}
       actions={
-        <>
-          <div className="w-64">
-            <Select
-              aria-label="裁判模型"
-              value={String(selectedModelId)}
-              onChange={(e) => selectModel(Number(e.target.value))}
-            >
-              {optionIds.map((id) => (
-                <option key={id} value={id}>
-                  {modelLabel(id)}
-                </option>
-              ))}
-            </Select>
-          </div>
-          <Badge tone={badgeTone}>{badgeText}</Badge>
-          {selected.status === "streaming" ? null : (
-            <span className="text-xs text-slate-400">
-              {formatDuration(selected.durationMs)} · {selected.promptTokens}/{selected.completionTokens} tokens
-            </span>
-          )}
-        </>
+        selected ? (
+          <>
+            <Badge tone={badgeTone}>{badgeText}</Badge>
+            {selected.status === "streaming" ? null : (
+              <span className="text-xs text-slate-400">
+                {formatDuration(selected.durationMs)} · {selected.promptTokens}/{selected.completionTokens} tokens
+              </span>
+            )}
+          </>
+        ) : undefined
       }
     >
-      <div className="space-y-2">
-        {critique ? (
-          <details open={critique.status === "streaming"}>
-            <summary className="cursor-pointer text-xs text-slate-500">
-              第一次调用 · 评论{critique.status === "streaming" ? "（生成中…）" : ""}
-            </summary>
-            <div className="mt-1 space-y-1">
-              <details>
-                <summary className="cursor-pointer text-xs text-slate-500">入参（实际发出的完整请求）</summary>
-                <pre className="mt-1 max-h-72 overflow-auto rounded bg-slate-50 p-2 text-xs">
-                  {critique.payload ? JSON.stringify(critique.payload, null, 2) : "等待生成…"}
-                </pre>
-              </details>
-              {/* 评论失败时错误统一在主输出区展示，这里不重复渲染 */}
-              {critique.status === "failed" ? null : (
-                <p className="whitespace-pre-wrap rounded bg-slate-50 p-2 text-xs text-slate-600">
-                  {critique.content || "等待评论…"}
-                </p>
-              )}
-            </div>
-          </details>
-        ) : null}
-        <details>
-          <summary className="cursor-pointer text-xs text-slate-500">入参（第二次调用 · 实际发出的完整请求）</summary>
-          <pre className="mt-1 max-h-72 overflow-auto rounded bg-slate-50 p-2 text-xs">
-            {selected.payload ? JSON.stringify(selected.payload, null, 2) : "等待生成…"}
-          </pre>
-        </details>
-        {selected.status === "failed" ? (
-          <p className="rounded bg-red-50 p-2 text-sm text-red-600">{selected.error || "调用失败"}</p>
-        ) : (
-          <p className="whitespace-pre-wrap rounded bg-slate-50 p-2 text-sm">
-            {selected.content ||
-              (selected.status === "streaming"
-                ? streamingCritique
-                  ? "正在生成评论（第一次调用）…"
-                  : "等待输出…"
-                : "（空）")}
-          </p>
-        )}
+      <div role="tablist" aria-label="裁判模型" className="mb-3 flex flex-wrap gap-x-4 gap-y-1 border-b border-slate-200">
+        {optionIds.map((id) => (
+          <button
+            key={id}
+            type="button"
+            role="tab"
+            aria-selected={id === selectedModelId}
+            onClick={() => selectModel(id)}
+            className={`-mb-px inline-flex max-w-72 items-center gap-1.5 border-b-2 pb-1.5 text-xs transition-colors ${
+              id === selectedModelId
+                ? "border-slate-900 font-medium text-slate-900"
+                : "border-transparent text-slate-500 hover:text-slate-800"
+            }`}
+          >
+            <span aria-hidden className={`size-1.5 shrink-0 rounded-full ${statusDot[tabTone(id)]}`} />
+            <span className="truncate">{modelLabel(id)}</span>
+          </button>
+        ))}
       </div>
+      {!selected ? (
+        <div className="flex flex-col items-center gap-3 py-10 text-sm text-slate-400">
+          <p>该模型尚未生成裁判结果</p>
+          <Button onClick={() => startStream(selectedModelId)}>生成</Button>
+        </div>
+      ) : (
+        <div className="space-y-2">
+          {critique ? (
+            <details open={critique.status === "streaming"}>
+              <summary className="cursor-pointer text-xs text-slate-500">
+                第一次调用 · 评论{critique.status === "streaming" ? "（生成中…）" : ""}
+              </summary>
+              <div className="mt-1 space-y-1">
+                <details>
+                  <summary className="cursor-pointer text-xs text-slate-500">入参（实际发出的完整请求）</summary>
+                  <pre className="mt-1 max-h-72 overflow-auto rounded bg-slate-50 p-2 text-xs">
+                    {critique.payload ? JSON.stringify(critique.payload, null, 2) : "等待生成…"}
+                  </pre>
+                </details>
+                {/* 评论失败时错误统一在主输出区展示，这里不重复渲染 */}
+                {critique.status === "failed" ? null : (
+                  <p className="whitespace-pre-wrap rounded bg-slate-50 p-2 text-xs text-slate-600">
+                    {critique.content || "等待评论…"}
+                  </p>
+                )}
+              </div>
+            </details>
+          ) : null}
+          <details>
+            <summary className="cursor-pointer text-xs text-slate-500">入参（第二次调用 · 实际发出的完整请求）</summary>
+            <pre className="mt-1 max-h-72 overflow-auto rounded bg-slate-50 p-2 text-xs">
+              {selected.payload ? JSON.stringify(selected.payload, null, 2) : "等待生成…"}
+            </pre>
+          </details>
+          {selected.status === "failed" ? (
+            <p className="rounded bg-red-50 p-2 text-sm text-red-600">{selected.error || "调用失败"}</p>
+          ) : (
+            <p className="whitespace-pre-wrap rounded bg-slate-50 p-2 text-sm">
+              {selected.content ||
+                (selected.status === "streaming"
+                  ? streamingCritique
+                    ? "正在生成评论（第一次调用）…"
+                    : "等待输出…"
+                  : "（空）")}
+            </p>
+          )}
+          {selected.status === "failed" || selected.status === "cancelled" ? (
+            <div>
+              <Button variant="secondary" onClick={() => startStream(selectedModelId)}>
+                重新生成
+              </Button>
+            </div>
+          ) : null}
+        </div>
+      )}
     </Card>
   );
 }

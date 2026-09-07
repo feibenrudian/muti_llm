@@ -67,7 +67,7 @@ test("UE-27-2 详情时间线：原始请求 → 裁判 → 成员tab切换 → 
     "Ⓝ 最终响应（success）",
   ]);
 
-  const memberCard = page.locator("section").filter({ has: page.getByRole("tablist") });
+  const memberCard = page.locator("section").filter({ has: page.getByRole("tablist", { name: "成员模型" }) });
   const memberTabs = memberCard.getByRole("tab");
   await expect(memberTabs).toHaveCount(2);
   await expect(memberTabs.first()).toHaveAttribute("aria-selected", "true");
@@ -122,7 +122,7 @@ test("UE-27-3 失败详情：成员卡片展示错误信息", async ({ page, req
   await expect(page.getByText("裁判调用")).toHaveCount(0);
 });
 
-test("UE-30-1 换裁判重跑：下拉选模型即时流式输出，可在版本间切换", async ({ page, request }) => {
+test("UE-30-1 换裁判重跑：tab 切换不主动生成，点生成按钮流式输出，可在版本间切换", async ({ page, request }) => {
   const providerId = await seedProvider(request, "E2E-重跑");
   const m1 = await seedModel(request, providerId, "rj-m1");
   const m2 = await seedModel(request, providerId, "rj-m2");
@@ -132,37 +132,45 @@ test("UE-30-1 换裁判重跑：下拉选模型即时流式输出，可在版本
   expect(result.status_code).toBe(200);
 
   await page.goto(`/traces/${result.trace_id}`);
-  const judgeCard = page.locator("section").filter({ has: page.getByLabel("裁判模型") });
-  const modelSelect = judgeCard.getByLabel("裁判模型");
+  const judgeCard = page
+    .locator("section")
+    .filter({ has: page.getByRole("tablist", { name: "裁判模型" }) });
+  const tabs = judgeCard.getByRole("tab");
   // 输出区 = 第二次调用最终答案（p.text-sm）；评论块为 p.text-xs
   const output = judgeCard.locator("p.text-sm");
   const originalText = (await output.innerText()).replace(/\s+/g, " ").trim();
 
-  // 下拉默认当前裁判模型；选项仅限本次请求的成员 + 裁判模型
-  await expect(modelSelect).toHaveValue(String(m1));
-  await expect(modelSelect.locator("option")).toHaveCount(2);
+  // tab 默认选中原始裁判（第一个 tab）；tab 仅限本次请求的裁判 + 成员模型
+  await expect(tabs).toHaveCount(2);
+  await expect(tabs.first()).toHaveAttribute("aria-selected", "true");
+  await expect(tabs.first()).toContainText("rj-m1");
 
-  // 首次换模型（m2 是成员但从未当过裁判）：注入失败 → 流式重跑失败，输出区显示错误
+  // 切到从未当过裁判的 m2：只显示空态 + 生成按钮，不发起调用
+  await tabs.nth(1).click();
+  await expect(tabs.nth(1)).toHaveAttribute("aria-selected", "true");
+  await expect(judgeCard.getByText("该模型尚未生成裁判结果")).toBeVisible();
+
+  // 注入失败后点生成：流式重跑失败，输出区显示错误
   await injectSrs(request, { fail_times: { "deepseek-v4-flash": 20 } });
-  await modelSelect.selectOption(String(m2));
-  // 评论失败：评论块与主输出区都展示错误
+  await judgeCard.getByRole("button", { name: "生成", exact: true }).click();
   await expect(judgeCard.getByText(/injected failure|上游|超时/).first()).toBeVisible();
 
   // 切回原始裁判：立即显示原始答案（不重新调用）
   await injectSrs(request, { reset: true });
-  await modelSelect.selectOption(String(m1));
+  await tabs.nth(0).click();
   await expect(output).toContainText(originalText.slice(0, 30));
 
-  // 再次选择 m2：失败尝试不算已生成结果 → 重新发起并成功，输出实时更新
-  await modelSelect.selectOption(String(m2));
+  // m2 的失败尝试：展示错误 + 重新生成按钮，点击重新发起并成功，输出实时更新
+  await tabs.nth(1).click();
+  await judgeCard.getByRole("button", { name: "重新生成" }).click();
   await expect(page.getByText("裁判聚合（2 个版本）")).toBeVisible();
   await expect(output).toContainText(originalText.slice(0, 30)); // 同一快照回放，内容与原始答案一致
-  await expect(modelSelect).toHaveValue(String(m2));
+  await expect(tabs.nth(1)).toHaveAttribute("aria-selected", "true");
 
   // 在两个版本间自由切换，各自输出立即呈现
-  await modelSelect.selectOption(String(m1));
+  await tabs.nth(0).click();
   await expect(output).toContainText(originalText.slice(0, 30));
-  await modelSelect.selectOption(String(m2));
+  await tabs.nth(1).click();
   await expect(output).toContainText(originalText.slice(0, 30));
 });
 
@@ -187,8 +195,9 @@ test("UE-31-1 两段式裁判：裁判卡展示评论（第一次调用），换
   await expect(critiqueBlock.locator("p")).toContainText("可信度");
   await expect(judgeCard.locator("p.text-sm")).toContainText("量子纠缠");
 
-  // 换裁判重跑：新裁判的两段式输出（评论 + 最终答案）同样完整呈现
-  await judgeCard.getByLabel("裁判模型").selectOption(String(m2));
+  // 换裁判重跑：切 tab 后点生成，新裁判的两段式输出（评论 + 最终答案）同样完整呈现
+  await judgeCard.getByRole("tab").nth(1).click();
+  await judgeCard.getByRole("button", { name: "生成", exact: true }).click();
   await expect(page.getByText("裁判聚合（2 个版本）")).toBeVisible({ timeout: 30_000 });
   await expect(critiqueBlock.locator("p")).toContainText("【回答 1】");
   await expect(judgeCard.locator("p.text-sm")).toContainText("量子纠缠");
