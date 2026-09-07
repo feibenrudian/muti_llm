@@ -111,6 +111,8 @@ interface JudgeVersion {
   durationMs: number;
   promptTokens: number;
   completionTokens: number;
+  /** 流式期间已接收的增量 chunk 数（OpenAI 兼容流式下 1 chunk ≈ 1 token）。 */
+  receivedTokens: number;
 }
 
 const critiqueFromCall = (call: TraceCall): JudgeCritique => ({
@@ -139,6 +141,7 @@ const versionFromCall = (call: TraceCall): JudgeVersion => ({
   durationMs: call.duration_ms,
   promptTokens: call.prompt_tokens,
   completionTokens: call.completion_tokens,
+  receivedTokens: 0,
 });
 
 /**
@@ -228,6 +231,7 @@ function JudgeCard({
       durationMs: 0,
       promptTokens: 0,
       completionTokens: 0,
+      receivedTokens: 0,
     });
     versionsRef.current = next;
     setVersions(next);
@@ -246,12 +250,17 @@ function JudgeCard({
         if (event.phase === "critique") {
           setVersion(modelId, (v) => ({
             ...v,
+            receivedTokens: v.receivedTokens + 1,
             critique: v.critique
               ? { ...v.critique, content: v.critique.content + event.text }
               : { status: "streaming", content: event.text, error: "", payload: null },
           }));
         } else {
-          setVersion(modelId, (v) => ({ ...v, content: v.content + event.text }));
+          setVersion(modelId, (v) => ({
+            ...v,
+            content: v.content + event.text,
+            receivedTokens: v.receivedTokens + 1,
+          }));
         }
       } else {
         setVersion(modelId, (v) => ({
@@ -315,7 +324,10 @@ function JudgeCard({
   if (!selected) return null;
   // 标题按"已有答案的版本"计数：失败的尝试不占版本号
   const answerCount = Array.from(versions.values()).filter((v) => v.status === "success").length;
-  const badgeText = selected.status === "streaming" ? "生成中" : selected.status;
+  const badgeText =
+    selected.status === "streaming"
+      ? `生成中（已接收 ${selected.receivedTokens} tokens）`
+      : selected.status;
   const badgeTone = selected.status === "streaming" ? "warn" : statusTone(selected.status);
   const critique = selected.critique;
   const streamingCritique = selected.status === "streaming" && critique?.status === "streaming";
