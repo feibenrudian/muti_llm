@@ -2,8 +2,9 @@
 
 replay（默认）：请求规范化 hash → 查快照 → 原样回放（非流式返回全文；流式按录制节奏重放）。
 record：未命中快照时透传真实上游（DeepSeek），把响应/chunk 序列落盘为新快照。
-注入控制（优先于快照）：fail_times 连续失败 N 次后恢复；timeout_ms 模拟挂死；
-delay_scale 缩放 chunk 间隔。
+注入控制（优先于快照）：fail_times 连续失败 N 次后恢复；fail_at_calls 按 1 起调用序号
+精确失败（两类注入独立判定，任一命中即 500；序号计数含被 fail_times 拦截的调用）；
+timeout_ms 模拟挂死；delay_scale 缩放 chunk 间隔。
 请求录像：/_test/requests 返回收到的全部请求原文，是断言"上游实际收到什么"的唯一手段。
 """
 
@@ -33,6 +34,9 @@ class SrsState:
     record_api_key: str | None = None
     record_client: httpx.AsyncClient | None = None  # 测试注入用（MockTransport）
     fail_times: dict[str, int] = field(default_factory=dict)
+    # 按序号注入：fail_at_calls[model] 中的序号（1 起）命中该模型第 n 次调用即失败
+    fail_at_calls: dict[str, list[int]] = field(default_factory=dict)
+    call_counts: dict[str, int] = field(default_factory=dict)
     timeout_ms: dict[str, int] = field(default_factory=dict)
     delay_scale: float = 1.0
     # reset 的恢复基准：保持构造时（如 runner 提速）的缩放，而非硬编码 1.0
@@ -163,6 +167,9 @@ def create_app(
         model = str(body.get("model", ""))
         state.recordings.append({"model": model, "body": body, "ts": time.time()})
 
+        state.call_counts[model] = state.call_counts.get(model, 0) + 1
+        call_no = state.call_counts[model]
+
         remaining = state.fail_times.get(model, 0)
         if remaining > 0:
             state.fail_times[model] = remaining - 1
@@ -171,6 +178,17 @@ def create_app(
                 content={
                     "error": {
                         "message": f"srs injected failure for model {model!r}",
+                        "type": "injected_failure",
+                    }
+                },
+            )
+
+        if call_no in state.fail_at_calls.get(model, ()):
+            return JSONResponse(
+                status_code=500,
+                content={
+                    "error": {
+                        "message": (f"srs injected failure for model {model!r} at call #{call_no}"),
                         "type": "injected_failure",
                     }
                 },
@@ -256,12 +274,18 @@ def create_app(
         body = await request.json()
         if body.get("reset"):
             state.fail_times.clear()
+            state.fail_at_calls.clear()
+            state.call_counts.clear()
             state.timeout_ms.clear()
             state.delay_scale = state.initial_delay_scale
             state.models_auth_fail = False
             state.recordings.clear()
         if "fail_times" in body:
             state.fail_times.update(body["fail_times"])
+        if "fail_at_calls" in body:
+            state.fail_at_calls.update(
+                {str(k): [int(n) for n in v] for k, v in body["fail_at_calls"].items()}
+            )
         if "timeout_ms" in body:
             state.timeout_ms.update(body["timeout_ms"])
         if "delay_scale" in body:
@@ -272,6 +296,7 @@ def create_app(
             {
                 "mode": state.mode,
                 "fail_times": state.fail_times,
+                "fail_at_calls": state.fail_at_calls,
                 "timeout_ms": state.timeout_ms,
                 "delay_scale": state.delay_scale,
                 "models_auth_fail": state.models_auth_fail,

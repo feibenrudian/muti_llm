@@ -51,6 +51,11 @@ def _sse(obj: dict[str, Any]) -> str:
     return f"data: {json.dumps(obj, ensure_ascii=False)}\n\n"
 
 
+def ice_progress_comment(k: int, total: int) -> str:
+    """ICE 迭代期 SSE 注释行（`:` 开头为 SSE 规范注释，OpenAI SDK 忽略，不占 data 序列）。"""
+    return f": ice round {k}/{total}\n\n"
+
+
 @router.get("/v1/models")
 async def list_models(request: Request) -> Response:
     from app.orm import LlmModel as M
@@ -263,12 +268,7 @@ async def _run_pipeline(
         return openai_error(502, f"策略执行失败: {exc}", err_type="upstream_error"), trace.id
 
     start = time.perf_counter()
-    all_calls = list(result.members)
-    if result.critique is not None:
-        all_calls.append(result.critique)
-    if result.judge is not None:
-        all_calls.append(result.judge)
-    await _record_outcomes(session, trace.id, all_calls)
+    await _record_outcomes(session, trace.id, result.calls)
     status = "degraded" if result.degraded else "success"
     await finish_request(
         session,
@@ -322,6 +322,10 @@ async def _pipeline_stream(
     await _record_outcomes(session, trace.id, plan.pre_outcomes)
     await session.commit()
 
+    if plan.iteration is not None:
+        # ICE 迭代路径（D15）：注释行保活 → 逐轮执行 → 终局流式转发
+        return await _pipeline_stream_iterative(app, background, trace, ctx, plan)
+
     session_factory = app.state.session_factory
     response_id = f"chatcmpl-{uuid.uuid4().hex[:24]}"
     chunk = make_chunker(response_id, int(time.time()), ctx.body["model"])
@@ -369,6 +373,94 @@ async def _pipeline_stream(
                 total_duration_ms=outcome.duration_ms,
                 total_prompt_tokens=plan.base_usage.prompt_tokens,
                 total_completion_tokens=plan.base_usage.completion_tokens,
+            )
+            await s.commit()
+
+    background.add_task(persist)
+    return StreamingResponse(event_stream(), media_type="text/event-stream"), trace.id
+
+
+async def _pipeline_stream_iterative(
+    app: Any,
+    background: BackgroundTasks,
+    trace: Any,
+    ctx: Any,
+    plan: Any,
+) -> tuple[Response, int]:
+    """ICE 迭代流式路径（D15）：注释行保活 → 逐轮执行（策略迭代状态）→ 终局裁决 SSE 转发。
+
+    取消传播：客户端断开时 CancelledError 传入迭代生成器取消在飞轮次任务；
+    已完成轮次行由 background persist 照常落库，trace 落 client_cancelled。
+    """
+    from app.strategies.base import CallOutcome, StrategyExecutionError
+
+    session_factory = app.state.session_factory
+    chunk = make_chunker(f"chatcmpl-{uuid.uuid4().hex[:24]}", int(time.time()), ctx.body["model"])
+    outcome = StreamOutcome()
+    start = time.perf_counter()
+    iteration = plan.iteration
+    iter_outcomes: list = []
+    final_plan: Any = None
+
+    async def event_stream():
+        nonlocal final_plan
+        outcome.status = "client_cancelled"  # 未到终态即结束 → 视为取消
+        try:
+            # 首条注释行仅在进入第 1 轮迭代时发射（第 0 轮已在开流前完成）
+            if iteration.progress_comments:
+                yield ice_progress_comment(iteration.completed_rounds, iteration.total_rounds)
+            async for step in iteration.run():
+                iter_outcomes.extend(step.members)
+                if step.critique is not None:
+                    iter_outcomes.append(step.critique)
+                if step.members and iteration.progress_comments:
+                    yield ice_progress_comment(step.round_no + 1, iteration.total_rounds)
+            final_plan = iteration.final_plan
+            yield _sse(chunk({"role": "assistant"}))
+            async for delta in final_plan.adapter.stream(final_plan.request):
+                outcome.parts.append(delta)
+                yield _sse(chunk({"content": delta}))
+            yield _sse(chunk({}, finish_reason="stop"))
+            yield "data: [DONE]\n\n"
+            outcome.status = "success"
+        except (AdapterError, StrategyExecutionError) as exc:
+            # 终局流式中途失败 / 迭代期 strict 评论失败 → 终止流，按失败落库
+            outcome.status = "failed"
+            outcome.error = str(exc)
+        finally:
+            outcome.duration_ms = int((time.perf_counter() - start) * 1000)
+
+    async def persist() -> None:
+        content = "".join(outcome.parts)
+        prompt_tokens = plan.base_usage.prompt_tokens
+        completion_tokens = plan.base_usage.completion_tokens
+        for o in iter_outcomes:
+            prompt_tokens += o.usage.prompt_tokens
+            completion_tokens += o.usage.completion_tokens
+        async with session_factory() as s:
+            if iter_outcomes:
+                await _record_outcomes(s, trace.id, iter_outcomes)
+            if final_plan is not None:  # 终局已开始才落 judge 行（迭代期取消则无此行）
+                judge = CallOutcome(
+                    role="judge",
+                    model_id=final_plan.model_id,
+                    upstream_model_id=final_plan.upstream_model_id,
+                    provider_name=final_plan.provider_name,
+                    request_payload=final_plan.payload or {},
+                    response_content=content if outcome.status != "failed" else "",
+                    status=outcome.status,
+                    error_message=outcome.error,
+                    duration_ms=outcome.duration_ms,
+                )
+                await _record_outcomes(s, trace.id, [judge])
+            await finish_request(
+                s,
+                trace.id,
+                status=outcome.status,
+                response_content=content,
+                total_duration_ms=outcome.duration_ms,
+                total_prompt_tokens=prompt_tokens,
+                total_completion_tokens=completion_tokens,
             )
             await s.commit()
 

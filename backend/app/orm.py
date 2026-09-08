@@ -78,6 +78,8 @@ class Pipeline(Base):
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     name: Mapped[str] = mapped_column(String(100), unique=True)  # 对外虚拟模型名
     strategy: Mapped[str] = mapped_column(String(30), default="council")
+    # 按策略校验的 JSON 参数（ICE D13；council 恒为 {}）
+    strategy_params: Mapped[dict] = mapped_column(JSON, default=dict)
     judge_model_id: Mapped[int] = mapped_column(ForeignKey("models.id"))
     judge_prompt_template: Mapped[str] = mapped_column(Text, default="")
     member_timeout_seconds: Mapped[int] = mapped_column(Integer, default=120)
@@ -131,6 +133,8 @@ class ModelCallLog(Base):
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     request_id: Mapped[int] = mapped_column(ForeignKey("request_logs.id"))
     role: Mapped[str] = mapped_column(String(20))  # member | judge_critique | judge | judge_rerun | passthrough
+    # ICE 迭代轮次（0 起，D14）；终局裁决行、council/透传行均为 NULL
+    round: Mapped[int | None] = mapped_column(Integer, nullable=True, default=None)
     model_id: Mapped[int] = mapped_column(Integer, default=0)
     upstream_model_id: Mapped[str] = mapped_column(String(200), default="")
     provider_name: Mapped[str] = mapped_column(String(100), default="")

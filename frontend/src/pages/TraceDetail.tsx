@@ -2,7 +2,14 @@ import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { useParams } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { api, streamRejudge, type ModelRow, type TraceCall } from "../lib/api";
-import { formatDateTime, formatDuration, statusTone, toTimeline } from "../lib/trace";
+import {
+  formatDateTime,
+  formatDuration,
+  seedVersions,
+  statusTone,
+  toTimeline,
+  type JudgeVersion,
+} from "../lib/trace";
 import { Badge, Button, Card, EmptyState } from "../components/ui";
 
 // 上游 ID 与展示名相同时不重复拼接（与 Pipelines 页同一规则）
@@ -45,9 +52,9 @@ const statusDot: Record<"success" | "warn" | "danger" | "muted", string> = {
 
 /**
  * 成员调用组：全部成员模型的调用信息合并为一张卡片，tab 切换查看，
- * 内容多时无需长页滚动（单成员时不渲染 tab 栏）。
+ * 内容多时无需长页滚动（单成员时不渲染 tab 栏）。ICE 按 round 拆成多张卡片并带轮次标签。
  */
-function MemberCallsCard({ calls }: { calls: TraceCall[] }) {
+function MemberCallsCard({ calls, round }: { calls: TraceCall[]; round?: number | null }) {
   const [active, setActive] = useState(0);
   // 刷新后 calls 长度可能变化，越界时回落到最后一个成员
   const index = Math.min(active, calls.length - 1);
@@ -57,6 +64,7 @@ function MemberCallsCard({ calls }: { calls: TraceCall[] }) {
       title={calls.length > 1 ? `成员调用（${calls.length} 个）` : "成员调用"}
       actions={
         <>
+          {round !== null && round !== undefined ? <Badge tone="muted">第 {round} 轮</Badge> : null}
           <span className="font-mono text-xs text-slate-500">{call.upstream_model_id}</span>
           <Badge tone={statusTone(call.status)}>{call.status}</Badge>
           <span className="text-xs text-slate-400">
@@ -91,86 +99,6 @@ function MemberCallsCard({ calls }: { calls: TraceCall[] }) {
       <CallDetails call={call} />
     </Card>
   );
-}
-
-/** 两段式裁判第一次调用（评论）的展示状态。 */
-interface JudgeCritique {
-  status: "streaming" | "success" | "failed" | "cancelled";
-  content: string;
-  error: string;
-  payload: TraceCall["request_payload"] | null;
-}
-
-/** 一个裁判版本的展示状态：已落库的行、或进行中/刚结束的流式重跑（content=第二次调用的最终答案）。 */
-interface JudgeVersion {
-  status: "streaming" | "success" | "failed" | "cancelled";
-  content: string;
-  error: string;
-  payload: TraceCall["request_payload"] | null;
-  critique: JudgeCritique | null;
-  durationMs: number;
-  promptTokens: number;
-  completionTokens: number;
-  /** 流式期间已接收的增量 chunk 数（OpenAI 兼容流式下 1 chunk ≈ 1 token）。 */
-  receivedTokens: number;
-}
-
-const critiqueFromCall = (call: TraceCall): JudgeCritique => ({
-  status:
-    call.status === "success"
-      ? "success"
-      : call.status === "client_cancelled"
-        ? "cancelled"
-        : "failed",
-  content: call.response_content,
-  error: call.error_message,
-  payload: call.request_payload,
-});
-
-const versionFromCall = (call: TraceCall): JudgeVersion => ({
-  status:
-    call.status === "success"
-      ? "success"
-      : call.status === "client_cancelled"
-        ? "cancelled"
-        : "failed",
-  content: call.response_content,
-  error: call.error_message,
-  payload: call.request_payload,
-  critique: null,
-  durationMs: call.duration_ms,
-  promptTokens: call.prompt_tokens,
-  completionTokens: call.completion_tokens,
-  receivedTokens: 0,
-});
-
-/**
- * 从已落库的裁判行建索引：原始裁判总是入表；重跑仅成功版本入表（失败的视为未生成，可重新发起）。
- * 评论行按"同模型第 k 个评论 ↔ 第 k 个最终行"配对——并行重跑落库交错也能正确对应。
- */
-function seedVersions(judges: TraceCall[]): Map<number, JudgeVersion> {
-  const critiqueQueues = new Map<number, TraceCall[]>();
-  for (const call of judges) {
-    if (call.role !== "judge_critique") continue;
-    const queue = critiqueQueues.get(call.model_id) ?? [];
-    queue.push(call);
-    critiqueQueues.set(call.model_id, queue);
-  }
-
-  const versions = new Map<number, JudgeVersion>();
-  const paired = new Map<number, number>();
-  for (const call of judges) {
-    if (call.role !== "judge" && call.role !== "judge_rerun") continue;
-    const index = paired.get(call.model_id) ?? 0;
-    paired.set(call.model_id, index + 1);
-    if (call.role === "judge_rerun" && call.status !== "success") continue;
-    const version = versionFromCall(call);
-    version.critique = critiqueQueues.get(call.model_id)?.[index]
-      ? critiqueFromCall(critiqueQueues.get(call.model_id)![index])
-      : null;
-    versions.set(call.model_id, version);
-  }
-  return versions;
 }
 
 /**
@@ -227,7 +155,7 @@ function JudgeCard({
       content: "",
       error: "",
       payload: null,
-      critique: null,
+      critiques: [],
       durationMs: 0,
       promptTokens: 0,
       completionTokens: 0,
@@ -241,7 +169,9 @@ function JudgeCard({
         if (event.phase === "critique") {
           setVersion(modelId, (v) => ({
             ...v,
-            critique: { status: "streaming", content: "", error: "", payload: event.payload },
+            critiques: [
+              { status: "streaming", content: "", error: "", payload: event.payload, round: null },
+            ],
           }));
         } else {
           setVersion(modelId, (v) => ({ ...v, payload: event.payload }));
@@ -251,9 +181,9 @@ function JudgeCard({
           setVersion(modelId, (v) => ({
             ...v,
             receivedTokens: v.receivedTokens + 1,
-            critique: v.critique
-              ? { ...v.critique, content: v.critique.content + event.text }
-              : { status: "streaming", content: event.text, error: "", payload: null },
+            critiques: v.critiques.length
+              ? [{ ...v.critiques[0], content: v.critiques[0].content + event.text }]
+              : [{ status: "streaming", content: event.text, error: "", payload: null, round: null }],
           }));
         } else {
           setVersion(modelId, (v) => ({
@@ -271,14 +201,16 @@ function JudgeCard({
           durationMs: event.duration_ms,
           promptTokens: event.prompt_tokens,
           completionTokens: event.completion_tokens,
-          critique: v.critique
-            ? {
-                ...v.critique,
-                status: event.critique ? "success" : "failed",
-                content: event.critique || v.critique.content,
-                error: event.critique ? "" : event.error,
-              }
-            : null,
+          critiques: v.critiques.length
+            ? [
+                {
+                  ...v.critiques[0],
+                  status: event.critique ? "success" : "failed",
+                  content: event.critique || v.critiques[0].content,
+                  error: event.critique ? "" : event.error,
+                },
+              ]
+            : [],
         }));
       }
     })
@@ -329,8 +261,9 @@ function JudgeCard({
     : selected.status === "streaming"
       ? "warn"
       : statusTone(selected.status);
-  const critique = selected?.critique ?? null;
-  const streamingCritique = selected?.status === "streaming" && critique?.status === "streaming";
+  const critiques = selected?.critiques ?? [];
+  const streamingCritique =
+    selected?.status === "streaming" && critiques.some((c) => c.status === "streaming");
   const tabTone = (id: number): keyof typeof statusDot => {
     const v = versions.get(id);
     if (!v) return "muted";
@@ -379,27 +312,28 @@ function JudgeCard({
         </div>
       ) : (
         <div className="space-y-2">
-          {critique ? (
-            <details open={critique.status === "streaming"}>
+          {critiques.map((c, i) => (
+            <details key={i} open={c.status === "streaming"}>
               <summary className="cursor-pointer text-xs text-slate-500">
-                第一次调用 · 评论{critique.status === "streaming" ? "（生成中…）" : ""}
+                {c.round !== null ? `第 ${c.round} 轮 · 评论` : "第一次调用 · 评论"}
+                {c.status === "streaming" ? "（生成中…）" : ""}
               </summary>
               <div className="mt-1 space-y-1">
                 <details>
                   <summary className="cursor-pointer text-xs text-slate-500">入参（实际发出的完整请求）</summary>
                   <pre className="mt-1 max-h-72 overflow-auto rounded bg-slate-50 p-2 text-xs">
-                    {critique.payload ? JSON.stringify(critique.payload, null, 2) : "等待生成…"}
+                    {c.payload ? JSON.stringify(c.payload, null, 2) : "等待生成…"}
                   </pre>
                 </details>
                 {/* 评论失败时错误统一在主输出区展示，这里不重复渲染 */}
-                {critique.status === "failed" ? null : (
+                {c.status === "failed" ? null : (
                   <p className="whitespace-pre-wrap rounded bg-slate-50 p-2 text-xs text-slate-600">
-                    {critique.content || "等待评论…"}
+                    {c.content || "等待评论…"}
                   </p>
                 )}
               </div>
             </details>
-          ) : null}
+          ))}
           <details>
             <summary className="cursor-pointer text-xs text-slate-500">入参（第二次调用 · 实际发出的完整请求）</summary>
             <pre className="mt-1 max-h-72 overflow-auto rounded bg-slate-50 p-2 text-xs">
@@ -503,6 +437,15 @@ export default function TraceDetail() {
         key: "judge",
         label: "裁判模型输出",
         content: <JudgeCard traceId={id!} judges={entry.calls} memberModelIds={memberModelIds} />,
+      });
+      return;
+    }
+    if (entry.kind === "member_group") {
+      // ICE：每轮一张成员卡（round=null 的组不带轮次标记）
+      tabs.push({
+        key: entry.round === null ? "members" : `members-r${entry.round}`,
+        label: entry.round === null ? "成员模型输出" : `成员模型输出 · 第 ${entry.round} 轮`,
+        content: <MemberCallsCard calls={entry.calls} round={entry.round} />,
       });
       return;
     }

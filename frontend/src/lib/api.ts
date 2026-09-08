@@ -44,6 +44,7 @@ export interface Pipeline {
   id: number;
   name: string;
   strategy: string;
+  strategy_params: Record<string, unknown>;
   judge_model_id: number;
   judge_prompt_template: string;
   member_timeout_seconds: number;
@@ -87,6 +88,8 @@ export interface TraceCall {
   status: string;
   error_message: string;
   duration_ms: number;
+  /** ICE 成员/评论轮次（0 起）；终局与非 ICE 行为 null。 */
+  round: number | null;
   prompt_tokens: number;
   completion_tokens: number;
   created_at: string;
@@ -296,6 +299,7 @@ export const api = {
   },
   meta: {
     judgeTemplate: () => req<{ template: string }>("/api/admin/meta/judge-template"),
+    strategies: () => req<string[]>("/api/admin/meta/strategies"),
   },
   playground: {
     run: (body: { pipeline_name: string; message: string }) =>

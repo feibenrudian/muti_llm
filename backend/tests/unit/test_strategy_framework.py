@@ -30,7 +30,7 @@ def test_registry_lookup() -> None:
 
 
 def test_result_structure() -> None:
-    """UT-13-2 结果结构：final_content/usage 汇总/degraded/成员明细。"""
+    """UT-13-2 结果结构：final_content/usage 汇总/degraded/调用明细（calls 按发生顺序）。"""
     from app.adapters.base import LlmUsage
     from app.strategies.base import CallOutcome
 
@@ -47,11 +47,10 @@ def test_result_structure() -> None:
         final_content="final",
         usage=LlmUsage(prompt_tokens=3, completion_tokens=2),
         degraded=False,
-        members=[outcome],
-        judge=None,
+        calls=[outcome],
     )
     assert result.final_content == "final"
     assert result.usage.total_tokens == 5
     assert result.degraded is False
-    assert [m.upstream_model_id for m in result.members] == ["m-a"]
-    assert result.members[0].usage.prompt_tokens == 3
+    assert [c.upstream_model_id for c in result.calls] == ["m-a"]
+    assert result.calls[0].usage.prompt_tokens == 3

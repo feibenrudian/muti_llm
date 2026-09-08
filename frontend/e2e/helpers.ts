@@ -52,3 +52,28 @@ export async function injectSrs(request: APIRequestContext, config: object): Pro
   const resp = await request.post("http://127.0.0.1:9801/_test/config", { data: config });
   if (!resp.ok()) throw new Error(`srs inject failed: ${resp.status()}`);
 }
+
+// 成员温度覆盖 0.7/0.9 与 ICE 录制场景一致（上游请求体含 temperature，逐字节匹配才命中快照）
+export async function seedIcePipeline(
+  request: APIRequestContext,
+  m1: number,
+  m2: number,
+  name: string,
+): Promise<number> {
+  const resp = await request.post("/api/admin/pipelines", {
+    data: {
+      name,
+      strategy: "ice",
+      judge_model_id: m1,
+      members: [
+        { model_id: m1, param_overrides: { temperature: 0.7 } },
+        { model_id: m2, param_overrides: { temperature: 0.9 } },
+      ],
+    },
+  });
+  return (await resp.json()).id;
+}
+
+/** ICE 两轮共识场景的录制问题（对应快照 ice_refine_consensus_*）。 */
+export const ICE_REFINE_QUESTION =
+  "《静夜思》「床前明月光」中的「床」指的是什么？请给出你的判断并简要说明理由。";

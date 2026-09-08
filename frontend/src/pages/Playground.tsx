@@ -79,6 +79,9 @@ export default function Playground() {
                           ? "透传"
                           : "成员"}
                   </Badge>
+                  {call.round !== null && call.round !== undefined ? (
+                    <Badge tone="muted">第 {call.round} 轮</Badge>
+                  ) : null}
                   <span className="font-mono text-xs">{call.upstream_model_id}</span>
                   <Badge tone={statusTone(call.status)}>{call.status}</Badge>
                   <span className="text-xs text-slate-400">

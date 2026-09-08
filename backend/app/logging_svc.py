@@ -59,6 +59,7 @@ async def record_call(
     duration_ms: int = 0,
     prompt_tokens: int = 0,
     completion_tokens: int = 0,
+    round_no: int | None = None,
 ) -> ModelCallLog:
     log = ModelCallLog(
         request_id=request_id,
@@ -73,6 +74,7 @@ async def record_call(
         duration_ms=duration_ms,
         prompt_tokens=prompt_tokens,
         completion_tokens=completion_tokens,
+        round=round_no,
     )
     session.add(log)
     await session.flush()

@@ -83,6 +83,7 @@ class PipelineMemberIn(BaseModel):
 class PipelineCreate(BaseModel):
     name: str = Field(pattern=r"^[a-z0-9-_]+$", min_length=1, max_length=100)
     strategy: str = "council"
+    strategy_params: dict[str, Any] = Field(default_factory=dict)
     judge_model_id: int
     judge_prompt_template: str = ""
     member_timeout_seconds: int = Field(default=120, ge=1, le=600)
@@ -95,6 +96,7 @@ class PipelineCreate(BaseModel):
 class PipelineUpdate(BaseModel):
     name: str | None = Field(default=None, pattern=r"^[a-z0-9-_]+$", min_length=1, max_length=100)
     strategy: str | None = None
+    strategy_params: dict[str, Any] | None = None
     judge_model_id: int | None = None
     judge_prompt_template: str | None = None
     member_timeout_seconds: int | None = Field(default=None, ge=1, le=600)
@@ -119,6 +121,7 @@ class PipelineOut(BaseModel):
     id: int
     name: str
     strategy: str
+    strategy_params: dict[str, Any]
     judge_model_id: int
     judge_prompt_template: str
     member_timeout_seconds: int

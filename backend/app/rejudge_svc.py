@@ -68,10 +68,20 @@ async def prepare_rejudge(
         raise RejudgeRejected(409, "trace 尚未完成，不能重跑裁判")
 
     calls = await list_model_calls(session, trace.id)
+    # 每个成员只取最新成功轮答案（ICE 多轮；council 每成员仅一行，行为不变）
+    latest: dict[int, ModelCallLog] = {}
+    member_order: list[int] = []
+    for c in calls:
+        if c.role != "member" or c.status != "success":
+            continue
+        prev = latest.get(c.model_id)
+        if prev is None:
+            member_order.append(c.model_id)
+            latest[c.model_id] = c
+        elif (c.round or -1) > (prev.round or -1):
+            latest[c.model_id] = c
     answers = [
-        (c.upstream_model_id, c.response_content)
-        for c in calls
-        if c.role == "member" and c.status == "success"
+        (latest[mid].upstream_model_id, latest[mid].response_content) for mid in member_order
     ]
     if not trace.pipeline_name or not answers:
         raise RejudgeRejected(409, "该 trace 无可聚合的成员答案（透传请求或成员全部失败）")

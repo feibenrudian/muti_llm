@@ -6,6 +6,7 @@
 
 from __future__ import annotations
 
+import json
 import os
 import threading
 import time
@@ -90,7 +91,9 @@ def council_final_scenarios(model: str) -> list[tuple[str, dict]]:
     def final_messages(answers: list[tuple[str, str]], critique: str, template: str) -> list[dict]:
         critique_prompt = render_judge_prompt(DEFAULT_CRITIQUE_TEMPLATE, question, answers)
         instruction = render_final_instruction(template, question, answers, critique)
-        return build_final_messages([{"role": "user", "content": critique_prompt}], critique, instruction)
+        return build_final_messages(
+            [{"role": "user", "content": critique_prompt}], critique, instruction
+        )
 
     # 上游一律流式后，客户端流式/非流式共用同一裁判请求体（一个快照服务两种客户端形态）
     return [
@@ -98,7 +101,9 @@ def council_final_scenarios(model: str) -> list[tuple[str, dict]]:
             "council_judge",
             STREAM_BODY(
                 model=model,
-                messages=final_messages([(model, ans_a), (model, ans_b)], crit_two, DEFAULT_JUDGE_TEMPLATE),
+                messages=final_messages(
+                    [(model, ans_a), (model, ans_b)], crit_two, DEFAULT_JUDGE_TEMPLATE
+                ),
             ),
         ),
         (
@@ -116,7 +121,9 @@ def council_final_scenarios(model: str) -> list[tuple[str, dict]]:
             {
                 **STREAM_BODY(
                     model=model,
-                    messages=final_messages([(model, ans_b)], crit_single_b, DEFAULT_JUDGE_TEMPLATE),
+                    messages=final_messages(
+                        [(model, ans_b)], crit_single_b, DEFAULT_JUDGE_TEMPLATE
+                    ),
                 ),
                 "temperature": 0.7,
             },
@@ -146,6 +153,148 @@ def snapshot_content(scenario: str) -> str:
             for c in data["stream_chunks"]
         )
     return data["non_stream_response"]["choices"][0]["message"]["content"]
+
+
+# ---- ICE 场景（T34）：多轮依赖链，录制器真实走完链路（逐字节复用 ice.py 渲染函数） ------
+
+# 题目选择（§7.2 重录注意：链形态由真实 LLM 的 consensus 决定，不符则改题重录）：
+# r0_consensus 要两模型大概率一致（简单事实题）；refine 要首轮分歧、改进后收敛；
+# max_rounds 用 threshold=1.0 使共识不可达、轮数必然耗尽。
+ICE_R0_QUESTION = "水的化学式是什么？请只回答化学式本身。"
+ICE_REFINE_QUESTION = "《静夜思》「床前明月光」中的「床」指的是什么？请给出你的判断并简要说明理由。"
+ICE_MAXR_QUESTION = "豆腐脑甜的正宗还是咸的正宗？请给出你的判断并说明理由。"
+ICE_MEMBER_TEMPS = (0.7, 0.9)  # 与 AE 种子的成员 param_overrides 一致
+
+
+def _ice_member_body(model: str, messages: list[dict], temperature: float) -> dict:
+    return {**STREAM_BODY(model=model, messages=messages), "temperature": temperature}
+
+
+def ice_chain_requests(
+    send,
+    model: str,
+    scenario: str,
+    question: str,
+    strategy_params: dict,
+) -> list[str]:
+    """按 IceStrategy.run 的链路逐步构造请求并发送（send 返回 (status, 全文)）。
+
+    与运行时逐字节一致的保证：渲染函数/解析器/终局条件全部 import 自 ice.py。
+    成员调用失败（注入）时沿用上轮答案继续，与 §5 容错矩阵一致。
+    返回各成员最新成功轮答案（供 rejudge 尾部场景复用）。
+    """
+    from app.strategies.council import (
+        DEFAULT_JUDGE_TEMPLATE,
+        render_final_instruction,
+        render_judge_prompt,
+    )
+    from app.strategies.ice import (
+        ICE_CRITIQUE_TEMPLATE,
+        ICE_REFINE_TEMPLATE,
+        ICE_ROUND_CRITIQUE_TEMPLATE,
+        IceStrategy,
+        parse_verdict,
+    )
+
+    params = IceStrategy.validate_params(strategy_params)
+    messages = [{"role": "user", "content": question}]
+    answers: list[str] = [""] * len(ICE_MEMBER_TEMPS)
+
+    def member_round(round_no: int, critique: str | None) -> None:
+        for i, temp in enumerate(ICE_MEMBER_TEMPS):
+            if critique is None:
+                member_messages = messages
+            else:
+                refine_prompt = render_judge_prompt(
+                    ICE_REFINE_TEMPLATE, messages, [], critique=critique
+                )
+                member_messages = [
+                    *messages,
+                    {"role": "assistant", "content": answers[i]},
+                    {"role": "user", "content": refine_prompt},
+                ]
+            status, content = send(
+                f"{scenario}_m{i}_r{round_no}",
+                _ice_member_body(model, member_messages, temp),
+            )
+            if status == 200:
+                answers[i] = content
+            elif round_no == 0:
+                raise AssertionError(f"{scenario} member m{i} r0 failed: {content[:200]}")
+
+    member_round(0, None)
+    session: list[dict] = []  # 仲裁者会话（D10）
+    verdict = None
+    round_no = 0
+    conf_history: list[float] = []
+    critique_text = ""
+    while True:
+        template = ICE_CRITIQUE_TEMPLATE if not session else ICE_ROUND_CRITIQUE_TEMPLATE
+        prompt = render_judge_prompt(template, messages, [(model, a) for a in answers])
+        user_message = {"role": "user", "content": prompt}
+        status, content = send(
+            f"{scenario}_critique_r{round_no}",
+            STREAM_BODY(model=model, messages=[*session, user_message]),
+        )
+        assert status == 200, f"{scenario} critique r{round_no} failed: {content[:200]}"
+        session.extend((user_message, {"role": "assistant", "content": content}))
+        critique_text = content
+        verdict = parse_verdict(content)
+        print(
+            f"[{scenario}] critique r{round_no}: consensus={verdict.consensus} "
+            f"confidence={verdict.confidence} parsed={verdict.parsed}"
+        )
+        if round_no == 0:
+            conf_history = [verdict.confidence] if verdict.parsed else []
+        elif verdict.parsed:
+            conf_history.append(verdict.confidence)
+        if IceStrategy._should_finish(verdict, round_no, conf_history, params):
+            break
+        round_no += 1
+        member_round(round_no, verdict.critique)
+
+    instruction = render_final_instruction(
+        DEFAULT_JUDGE_TEMPLATE, messages, [(model, a) for a in answers], critique_text
+    )
+    status, _ = send(
+        f"{scenario}_final",
+        STREAM_BODY(model=model, messages=[*session, {"role": "user", "content": instruction}]),
+    )
+    assert status == 200, f"{scenario} final failed"
+    return answers
+
+
+def ice_rejudge_requests(
+    send, model: str, scenario: str, question: str, answers: list[str]
+) -> None:
+    """ICE trace 换裁判重跑的两段请求：council 自由文本评论模板 + pipeline 终局模板。"""
+    from app.strategies.council import (
+        DEFAULT_CRITIQUE_TEMPLATE,
+        DEFAULT_JUDGE_TEMPLATE,
+        build_final_messages,
+        render_final_instruction,
+        render_judge_prompt,
+    )
+
+    question_messages = [{"role": "user", "content": question}]
+    answer_pairs = [(model, a) for a in answers]
+    prompts = render_judge_prompt(DEFAULT_CRITIQUE_TEMPLATE, question_messages, answer_pairs)
+    critique_messages = [{"role": "user", "content": prompts}]
+    status, critique = send(
+        f"{scenario}_rejudge_critique", STREAM_BODY(model=model, messages=critique_messages)
+    )
+    assert status == 200
+    instruction = render_final_instruction(
+        DEFAULT_JUDGE_TEMPLATE, question_messages, answer_pairs, critique
+    )
+    status, _ = send(
+        f"{scenario}_rejudge_judge",
+        STREAM_BODY(
+            model=model,
+            messages=build_final_messages(critique_messages, critique, instruction),
+        ),
+    )
+    assert status == 200
 
 
 def base_scenarios(model: str) -> list[tuple[str, dict]]:
@@ -198,6 +347,15 @@ def base_scenarios(model: str) -> list[tuple[str, dict]]:
     return base
 
 
+def ice_scenario_plan() -> list[tuple[str, str, dict]]:
+    """§7.2 非流式 ICE 场景：(scenario, question, strategy_params)。"""
+    return [
+        ("ice_r0_consensus", ICE_R0_QUESTION, {}),
+        ("ice_refine_consensus", ICE_REFINE_QUESTION, {}),
+        ("ice_max_rounds", ICE_MAXR_QUESTION, {"max_rounds": 2, "confidence_threshold": 1.0}),
+    ]
+
+
 def main() -> None:
     load_dotenv(ENV_FILE)
     api_key = os.environ.get("RECORD_API_KEY", "")
@@ -231,6 +389,31 @@ def main() -> None:
     recorded = replayed = 0
     try:
         with httpx.Client(timeout=180.0) as client:
+            url = f"http://127.0.0.1:{port}/v1/chat/completions"
+
+            def send_stream(name: str, body: dict) -> tuple[int, str]:
+                """流式请求 SRS，返回 (status, delta 拼接全文)；统计录制/回放。"""
+                nonlocal recorded, replayed
+
+                if store.get(request_hash(body)) is not None:
+                    replayed += 1
+                else:
+                    recorded += 1
+                parts: list[str] = []
+                with client.stream(
+                    "POST", url, json=body, headers={"X-Srs-Scenario": name}
+                ) as resp:
+                    status = resp.status_code
+                    for line in resp.iter_lines():
+                        if line.startswith("data: ") and line != "data: [DONE]":
+                            chunk = json.loads(line[len("data: ") :])
+                            parts.append(
+                                (chunk.get("choices") or [{}])[0].get("delta", {}).get("content")
+                                or ""
+                            )
+                text = "".join(parts)
+                print(f"[{name}] {status}: {text[:100]!r}")
+                return status, text
 
             def run_scenarios(items: list[tuple[str, dict]]) -> None:
                 nonlocal recorded, replayed
@@ -268,6 +451,33 @@ def main() -> None:
             run_scenarios(base_scenarios(model))
             run_scenarios(council_critique_scenarios(model))
             run_scenarios(council_final_scenarios(model))
+
+            # ICE 多轮依赖链（§7.2）：录制器真实走完链路，链形态由真实 verdict 决定
+            refine_answers: list[str] = []
+            for scenario, question, sp in ice_scenario_plan():
+                answers = ice_chain_requests(send_stream, model, scenario, question, sp)
+                if scenario == "ice_refine_consensus":
+                    refine_answers = answers
+            ice_rejudge_requests(
+                send_stream, model, "ice_refine_consensus", ICE_REFINE_QUESTION, refine_answers
+            )
+
+            # AE-34-5 容错链：第 1 轮第二个成员注入失败（录制器单次尝试不重试，序号 5；
+            # 运行时适配器 max_retries=1 会多打一次，AE 侧对应 fail_at_calls [5, 6]），
+            # 评论/终局面对 (m0 新答案, m1 旧答案) 的变体需单独录制；max_rounds=2 保证必然终局
+            client.post(f"http://127.0.0.1:{port}/_test/config", json={"reset": True})
+            client.post(
+                f"http://127.0.0.1:{port}/_test/config",
+                json={"fail_at_calls": {model: [5]}},
+            )
+            ice_chain_requests(
+                send_stream,
+                model,
+                "ice_max_rounds_mbfail",
+                ICE_MAXR_QUESTION,
+                {"max_rounds": 2, "confidence_threshold": 1.0},
+            )
+            client.post(f"http://127.0.0.1:{port}/_test/config", json={"reset": True})
     finally:
         server.should_exit = True
         thread.join(timeout=5)

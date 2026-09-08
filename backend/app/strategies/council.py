@@ -332,8 +332,7 @@ class CouncilStrategy(Strategy):
                 final_content=ok[0].response_content,
                 usage=sum_usage(member_outcomes),
                 degraded=True,
-                members=member_outcomes,
-                critique=critique,
+                calls=[*member_outcomes, critique],
             )
 
         # 第二段：最终答案（与第一次同会话）
@@ -366,9 +365,7 @@ class CouncilStrategy(Strategy):
                 final_content=ok[0].response_content,
                 usage=sum_usage(member_outcomes),
                 degraded=True,
-                members=member_outcomes,
-                critique=critique,
-                judge=judge,
+                calls=[*member_outcomes, critique, judge],
             )
 
         judge.response_content = result.content
@@ -381,9 +378,7 @@ class CouncilStrategy(Strategy):
             final_content=result.content,
             usage=total,
             degraded=False,
-            members=member_outcomes,
-            critique=critique,
-            judge=judge,
+            calls=[*member_outcomes, critique, judge],
         )
 
     async def prepare_stream(self, ctx: StrategyContext) -> StreamPlan:

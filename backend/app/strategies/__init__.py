@@ -14,11 +14,13 @@ from app.strategies.base import (
     registered_strategies,
 )
 from app.strategies.council import CouncilStrategy
+from app.strategies.ice import IceStrategy
 
 __all__ = [
     "AllMembersFailed",
     "CallOutcome",
     "CouncilStrategy",
+    "IceStrategy",
     "MemberSpec",
     "Strategy",
     "StrategyContext",

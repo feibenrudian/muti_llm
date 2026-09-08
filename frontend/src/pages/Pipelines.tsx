@@ -8,6 +8,32 @@ interface MemberDraft {
   temperature: string;
 }
 
+/** ICE 参数表单值（数值以字符串承载，保存时才校验/转换）。 */
+interface IceParamsForm {
+  max_rounds: string;
+  confidence_threshold: string;
+  stagnation: boolean;
+  progress_comments: boolean;
+}
+
+// ICE 默认值与后端 IceStrategy.validate_params 的填充值保持一致（§3.2）
+const ICE_DEFAULTS: IceParamsForm = {
+  max_rounds: "3",
+  confidence_threshold: "0.8",
+  stagnation: true,
+  progress_comments: true,
+};
+
+const readIceParams = (params: Record<string, unknown>): IceParamsForm => ({
+  max_rounds: params.max_rounds !== undefined ? String(params.max_rounds) : ICE_DEFAULTS.max_rounds,
+  confidence_threshold:
+    params.confidence_threshold !== undefined
+      ? String(params.confidence_threshold)
+      : ICE_DEFAULTS.confidence_threshold,
+  stagnation: params.stagnation !== false,
+  progress_comments: params.progress_comments !== false,
+});
+
 // 上游 ID 与展示名相同时不重复拼接，避免下拉选项无谓加长
 const modelOptionLabel = (model: ModelRow) =>
   model.display_name === model.upstream_model_id ? model.display_name : `${model.display_name}（${model.upstream_model_id}）`;
@@ -73,9 +99,11 @@ function ProviderModelSelects({
 
 interface FormState {
   name: string;
+  strategy: string;
   judge_model_id: string;
   judge_prompt_template: string;
   members: MemberDraft[];
+  ice: IceParamsForm;
 }
 
 export default function Pipelines() {
@@ -83,9 +111,10 @@ export default function Pipelines() {
   const { data: pipelines = [], isPending } = useQuery({ queryKey: ["pipelines"], queryFn: api.pipelines.list });
   const { data: models = [] } = useQuery({ queryKey: ["models"], queryFn: api.models.list });
   const { data: providers = [] } = useQuery({ queryKey: ["providers"], queryFn: api.providers.list });
+  const { data: strategies = [] } = useQuery({ queryKey: ["strategies"], queryFn: api.meta.strategies });
   const [editing, setEditing] = useState<Pipeline | null>(null);
   const [creating, setCreating] = useState(false);
-  const [form, setForm] = useState<FormState>({ name: "", judge_model_id: "", judge_prompt_template: "", members: [{ model_id: "", temperature: "" }] });
+  const [form, setForm] = useState<FormState>({ name: "", strategy: "council", judge_model_id: "", judge_prompt_template: "", members: [{ model_id: "", temperature: "" }], ice: ICE_DEFAULTS });
   const [error, setError] = useState("");
   const [defaultTemplate, setDefaultTemplate] = useState("");
 
@@ -96,23 +125,45 @@ export default function Pipelines() {
   const invalidate = () => queryClient.invalidateQueries({ queryKey: ["pipelines"] });
   const modelName = (id: number) => models.find((m: ModelRow) => m.id === id)?.display_name ?? `#${id}`;
 
-  const buildBody = () => ({
-    name: form.name,
-    strategy: "council",
-    judge_model_id: Number(form.judge_model_id),
-    judge_prompt_template: form.judge_prompt_template,
-    members: form.members
-      .filter((member) => member.model_id)
-      .map((member) => ({
-        model_id: Number(member.model_id),
-        ...(member.temperature ? { param_overrides: { temperature: Number(member.temperature) } } : {}),
-      })),
-  });
+  const buildBody = () => {
+    const body: Record<string, unknown> = {
+      name: form.name,
+      strategy: form.strategy,
+      judge_model_id: Number(form.judge_model_id),
+      judge_prompt_template: form.judge_prompt_template,
+      members: form.members
+        .filter((member) => member.model_id)
+        .map((member) => ({
+          model_id: Number(member.model_id),
+          ...(member.temperature ? { param_overrides: { temperature: Number(member.temperature) } } : {}),
+        })),
+    };
+    // 仅 ICE 携带参数；council 提交空 strategy_params（后端 council 拒绝非空参数）
+    if (form.strategy === "ice") {
+      body.strategy_params = {
+        max_rounds: Number(form.ice.max_rounds),
+        confidence_threshold: Number(form.ice.confidence_threshold),
+        stagnation: form.ice.stagnation,
+        progress_comments: form.ice.progress_comments,
+      };
+    }
+    return body;
+  };
 
   const save = useMutation({
     mutationFn: async () => {
       if (!form.judge_model_id) throw new Error("必须选择裁判模型");
       if (form.members.filter((member) => member.model_id).length === 0) throw new Error("至少选择一个成员模型");
+      if (form.strategy === "ice") {
+        const maxRounds = Number(form.ice.max_rounds);
+        if (!Number.isInteger(maxRounds) || maxRounds < 1 || maxRounds > 5) {
+          throw new Error("max_rounds 必须是 1-5 的整数");
+        }
+        const threshold = Number(form.ice.confidence_threshold);
+        if (!Number.isFinite(threshold) || threshold < 0 || threshold > 1) {
+          throw new Error("confidence_threshold 必须在 0-1 之间");
+        }
+      }
       const body = buildBody();
       return editing ? api.pipelines.update(editing.id, body) : api.pipelines.create(body);
     },
@@ -132,7 +183,7 @@ export default function Pipelines() {
 
   const openCreate = () => {
     setEditing(null);
-    setForm({ name: "", judge_model_id: "", judge_prompt_template: defaultTemplate, members: [{ model_id: "", temperature: "" }] });
+    setForm({ name: "", strategy: "council", judge_model_id: "", judge_prompt_template: defaultTemplate, members: [{ model_id: "", temperature: "" }], ice: ICE_DEFAULTS });
     setError("");
     setCreating(true);
   };
@@ -141,15 +192,20 @@ export default function Pipelines() {
     setEditing(pipeline);
     setForm({
       name: pipeline.name,
+      strategy: pipeline.strategy,
       judge_model_id: String(pipeline.judge_model_id),
       judge_prompt_template: pipeline.judge_prompt_template || defaultTemplate,
       members: pipeline.members.map((member) => ({
         model_id: String(member.model_id),
         temperature: member.param_overrides.temperature !== undefined ? String(member.param_overrides.temperature) : "",
       })),
+      ice: readIceParams(pipeline.strategy_params ?? {}),
     });
     setError("");
   };
+
+  // 切换策略类型时联动重置参数区：ice→council 后提交不带 strategy_params，避免后端 422
+  const changeStrategy = (strategy: string) => setForm({ ...form, strategy, ice: ICE_DEFAULTS });
 
   const moveMember = (index: number, direction: -1 | 1) => {
     const target = index + direction;
@@ -232,6 +288,20 @@ export default function Pipelines() {
             <Field label="名称（对外虚拟模型名）" hint="小写字母/数字/-/_">
               <Input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} placeholder="council-v1" required />
             </Field>
+            <Field label="聚合策略" hint="ice = 迭代共识集成（多轮成员改进 + 仲裁）">
+              {strategies.length > 0 && !strategies.includes(form.strategy) ? (
+                // 未知策略（如后端已下线）只读兜底展示，避免误改成其他策略
+                <Input value={form.strategy} readOnly disabled aria-label="聚合策略" />
+              ) : (
+                <Select aria-label="聚合策略" value={form.strategy} onChange={(e) => changeStrategy(e.target.value)}>
+                  {(strategies.length > 0 ? strategies : ["council"]).map((s) => (
+                    <option key={s} value={s}>
+                      {s}
+                    </option>
+                  ))}
+                </Select>
+              )}
+            </Field>
             <div className="space-y-1">
               <p className="text-sm font-medium text-slate-700">裁判模型</p>
               <div className="flex items-center gap-2">
@@ -247,6 +317,46 @@ export default function Pipelines() {
               <span className="block text-xs text-slate-400">必选</span>
             </div>
           </div>
+
+          {form.strategy === "ice" ? (
+            <div className="space-y-2 rounded-md border border-slate-200 p-3" data-testid="ice-params">
+              <p className="text-sm font-medium text-slate-700">ICE 策略参数</p>
+              <div className="grid grid-cols-2 gap-3">
+                <Field label="max_rounds（成员轮数上限）" hint="整数 1-5，含第 0 轮">
+                  <Input
+                    inputMode="numeric"
+                    value={form.ice.max_rounds}
+                    onChange={(e) => setForm({ ...form, ice: { ...form.ice, max_rounds: e.target.value } })}
+                  />
+                </Field>
+                <Field label="confidence_threshold（共识置信度阈值）" hint="0-1，consensus=true 且不低于阈值才终局">
+                  <Input
+                    inputMode="decimal"
+                    value={form.ice.confidence_threshold}
+                    onChange={(e) => setForm({ ...form, ice: { ...form.ice, confidence_threshold: e.target.value } })}
+                  />
+                </Field>
+              </div>
+              <div className="flex gap-6">
+                <label className="flex items-center gap-1.5 text-sm text-slate-700">
+                  <input
+                    type="checkbox"
+                    checked={form.ice.stagnation}
+                    onChange={(e) => setForm({ ...form, ice: { ...form.ice, stagnation: e.target.checked } })}
+                  />
+                  stagnation（置信度停滞提前终局）
+                </label>
+                <label className="flex items-center gap-1.5 text-sm text-slate-700">
+                  <input
+                    type="checkbox"
+                    checked={form.ice.progress_comments}
+                    onChange={(e) => setForm({ ...form, ice: { ...form.ice, progress_comments: e.target.checked } })}
+                  />
+                  progress_comments（流式发送进度注释行）
+                </label>
+              </div>
+            </div>
+          ) : null}
 
           <div className="space-y-2">
             <p className="text-sm font-medium text-slate-700">成员模型（按顺序并发调用）</p>

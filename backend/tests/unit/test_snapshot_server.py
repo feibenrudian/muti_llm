@@ -133,6 +133,39 @@ async def test_fail_injection_overrides_snapshot(seeded_client: httpx.AsyncClien
     assert resp.json() == RESPONSE_NS
 
 
+async def test_fail_at_calls_injection(seeded_client: httpx.AsyncClient) -> None:
+    """UT-34-1 SRS 按序号注入：fail_at_calls {"m1": [2]} → 第1次成功、第2次500、第3次恢复。
+
+    reset 清空。叠加规则：fail_times 先拦（全局序号照常递增），fail_at_calls 按 1 起序号命中即 500。
+    """
+    resp = await seeded_client.post("/_test/config", json={"fail_at_calls": {"m1": [2]}})
+    assert resp.status_code == 200
+    assert resp.json()["fail_at_calls"] == {"m1": [2]}
+
+    resp = await seeded_client.post("/v1/chat/completions", json=REQUEST_NS)
+    assert resp.status_code == 200
+    resp = await seeded_client.post("/v1/chat/completions", json=REQUEST_NS)
+    assert resp.status_code == 500
+    assert resp.json()["error"]["type"] == "injected_failure"
+    assert "call #2" in resp.json()["error"]["message"]
+    for _ in range(2):
+        resp = await seeded_client.post("/v1/chat/completions", json=REQUEST_NS)
+        assert resp.status_code == 200
+
+    # reset 清空 fail_at_calls 与序号计数
+    resp = await seeded_client.post("/_test/config", json={"reset": True})
+    assert resp.json()["fail_at_calls"] == {}
+
+    await seeded_client.post(
+        "/_test/config", json={"fail_times": {"m1": 1}, "fail_at_calls": {"m1": [3]}}
+    )
+    statuses = [
+        (await seeded_client.post("/v1/chat/completions", json=REQUEST_NS)).status_code
+        for _ in range(4)
+    ]
+    assert statuses == [500, 200, 500, 200]
+
+
 async def test_request_recording(seeded_client: httpx.AsyncClient) -> None:
     """UT-03-5 请求录像：发送请求后 /_test/requests 能查到完整 messages/参数原文。"""
     await seeded_client.post("/v1/chat/completions", json=REQUEST_NS)

@@ -1,6 +1,8 @@
 # muti_llm — 多模型聚合 LLM 网关
 
-对外提供 **OpenAI 兼容 API**，内部将请求分发给多个上游 LLM 并行回答，由裁判模型聚合出最终答案（council 策略），配套 Web UI 完成 Provider/Model/Pipeline 配置、试运行与全链路 Trace 查询。
+对外提供 **OpenAI 兼容 API**，内部将请求分发给多个上游 LLM 并行回答，由裁判模型聚合出最终答案，配套 Web UI 完成 Provider/Model/Pipeline 配置、试运行与全链路 Trace 查询。
+
+内置两种聚合策略：**council**（单轮成员并发 + 裁判两段式裁决）与 **ice**（迭代共识集成：成员多轮迭代改进 + 仲裁者逐轮评论判断共识，收敛后终局裁决；详见 [doc/ICE策略集成技术方案与任务拆分.md](./doc/ICE策略集成技术方案与任务拆分.md)）。
 
 - 产品需求：[requirements.md](./requirements.md)
 - 技术方案与任务拆分：[tech-plan.md](./tech-plan.md)
@@ -54,8 +56,8 @@ curl http://127.0.0.1:8000/v1/chat/completions \
 ```
 
 - `model` 填 Pipeline 名（如 `council-v1`，多模型聚合）或真实模型名（直接透传）
-- 支持流式（`stream: true`，打字机输出来自裁判模型）
-- 每次请求的完整链路（原始输入 / 每个成员的输入输出 / 裁判 Prompt / 最终答案 / 耗时 / token）可在 Web UI「调用日志」查询
+- 支持流式（`stream: true`，打字机输出来自裁判模型；ICE 策略迭代期间以 SSE 注释行保活，OpenAI SDK 自动忽略）
+- 每次请求的完整链路（原始输入 / 每个成员的输入输出 / 裁判 Prompt / 最终答案 / 耗时 / token）可在 Web UI「调用日志」查询，ICE 链路按轮次分组展示
 
 ## 测试体系（Record once, replay forever）
 

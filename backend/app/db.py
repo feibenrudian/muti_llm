@@ -6,6 +6,7 @@ from typing import Any
 
 from sqlalchemy import event
 from sqlalchemy.ext.asyncio import (
+    AsyncConnection,
     AsyncEngine,
     AsyncSession,
     async_sessionmaker,
@@ -48,10 +49,28 @@ def create_session_factory(engine: AsyncEngine) -> async_sessionmaker[AsyncSessi
     return async_sessionmaker(engine, expire_on_commit=False)
 
 
+# 轻量补列（ICE D14）：create_all 不会给已存表加列。SQLite ADD COLUMN 的默认值必须是常量。
+_SCHEMA_PATCHES: dict[str, dict[str, str]] = {
+    "pipelines": {"strategy_params": "JSON NOT NULL DEFAULT '{}'"},
+    "model_call_logs": {"round": "INTEGER"},
+}
+
+
+async def _ensure_schema(conn: AsyncConnection) -> None:
+    """旧库补列：PRAGMA table_info 检测缺列 → ALTER TABLE ADD COLUMN（幂等）。"""
+    for table, columns in _SCHEMA_PATCHES.items():
+        rows = await conn.exec_driver_sql(f"PRAGMA table_info({table})")
+        existing = {row[1] for row in rows.fetchall()}
+        for name, ddl in columns.items():
+            if name not in existing:
+                await conn.exec_driver_sql(f"ALTER TABLE {table} ADD COLUMN {name} {ddl}")
+
+
 async def init_db(engine: AsyncEngine) -> None:
-    """建表（幂等）；本地工具 v1 不引入 Alembic（tech-plan 决策 D2）。"""
+    """建表 + 旧库补列（幂等）；本地工具 v1 不引入 Alembic（tech-plan 决策 D2）。"""
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
+        await _ensure_schema(conn)
 
 
 async def session_scope(factory: async_sessionmaker[AsyncSession]) -> AsyncIterator[AsyncSession]:

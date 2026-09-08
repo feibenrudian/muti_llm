@@ -31,6 +31,14 @@ async def _to_out(session: AsyncSession, row: Pipeline) -> PipelineOut:
     return PipelineOut(**payload)
 
 
+def _validate_strategy_params(strategy_name: str, params: dict | None) -> dict:
+    """按策略注册表校验 strategy_params（D13）：非法 → 422；返回填充默认值后的参数。"""
+    try:
+        return get_strategy(strategy_name).validate_params(params or {})
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from None
+
+
 async def _validate_refs(session: AsyncSession, body: PipelineCreate | PipelineUpdate) -> None:
     if body.strategy is not None:
         try:
@@ -72,6 +80,7 @@ async def create_pipeline(
     row = await Repository(session, Pipeline).create(
         name=body.name,
         strategy=body.strategy,
+        strategy_params=_validate_strategy_params(body.strategy, body.strategy_params),
         judge_model_id=body.judge_model_id,
         judge_prompt_template=body.judge_prompt_template,
         member_timeout_seconds=body.member_timeout_seconds,
@@ -119,7 +128,12 @@ async def update_pipeline(
         if await find_pipeline_by_name(session, body.name) is not None:
             raise HTTPException(status_code=409, detail=f"Pipeline 名已存在: {body.name}")
 
-    fields = body.model_dump(exclude_unset=True, exclude={"members"})
+    fields = body.model_dump(exclude_unset=True, exclude={"members", "strategy_params"})
+    # 策略/参数任一变更都按"生效策略"重新校验并规范化（未提供 strategy_params 时沿用存量值）
+    row.strategy_params = _validate_strategy_params(
+        body.strategy if body.strategy is not None else row.strategy,
+        body.strategy_params if body.strategy_params is not None else row.strategy_params,
+    )
     try:
         for key, value in fields.items():
             setattr(row, key, value)
