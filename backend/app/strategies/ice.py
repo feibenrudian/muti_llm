@@ -20,11 +20,13 @@ from typing import Any
 
 from app.adapters.base import AdapterError, BaseAdapter, LlmRequest, LlmUsage
 from app.adapters.factory import build_adapter
-from app.orm import Provider
 from app.strategies.base import (
     AllMembersFailed,
     CallOutcome,
+    FinalPlanReady,
     IterationState,
+    MemberSpec,
+    ProcessEvent,
     RoundResult,
     Strategy,
     StrategyContext,
@@ -38,10 +40,14 @@ from app.strategies.council import (
     AdapterFactory,
     _failures_summary,
     build_call_request,
+    check_member_failures,
+    default_member_adapter_factory,
+    indexed_outcome,
     merge_params,
     render_final_instruction,
     render_judge_prompt,
     run_members,
+    run_one,
     sum_usage,
 )
 
@@ -318,6 +324,49 @@ class IceStrategy(Strategy):
 
     # -- 成员迭代轮（D12：延续成员自身会话；复用 run_members 的限流/容错骨架） ---------
 
+    async def _refine_one(
+        self,
+        ctx: StrategyContext,
+        spec: MemberSpec,
+        prev: CallOutcome,
+        refine_prompt: str,
+        round_no: int,
+        adapter_factory: AdapterFactory,
+        semaphore: asyncio.Semaphore,
+    ) -> CallOutcome:
+        """单成员改进调用：原始 messages → assistant(上轮答案) → user(改进指令)。"""
+        merged = merge_params(spec.model.default_params, spec.member.param_overrides)
+        messages = [
+            *ctx.body["messages"],
+            {"role": "assistant", "content": prev.response_content},
+            {"role": "user", "content": refine_prompt},
+        ]
+        request, payload = build_call_request(
+            spec.model.upstream_model_id, messages, merged, stream=True
+        )
+        outcome = CallOutcome(
+            role="member",
+            model_id=spec.model.id,
+            upstream_model_id=spec.model.upstream_model_id,
+            provider_name=spec.provider.name,
+            request_payload=payload,
+            round_no=round_no,
+        )
+        adapter = adapter_factory(spec.provider, merged)
+        start = time.perf_counter()
+        async with semaphore:
+            try:
+                result = await adapter.complete(request)
+            except AdapterError as exc:
+                outcome.status = "timeout" if exc.kind == "timeout" else "failed"
+                outcome.error_message = str(exc)
+        outcome.duration_ms = int((time.perf_counter() - start) * 1000)
+        if outcome.status == "success":
+            outcome.response_content = result.content
+            outcome.usage = result.usage
+            outcome.duration_ms = result.duration_ms
+        return outcome
+
     async def _run_refine_round(
         self,
         ctx: StrategyContext,
@@ -327,62 +376,27 @@ class IceStrategy(Strategy):
         *,
         adapter_factory: AdapterFactory | None = None,
     ) -> list[CallOutcome]:
-        """第 k≥1 轮成员改进：原始 messages → assistant(上轮答案) → user(改进指令)。
-
-        与 ok 同序，每成员恰好一行；失败不抛错——调用方沿用上轮答案，失败行照落（§5）。
+        """第 k≥1 轮成员改进：与 ok 同序，每成员恰好一行；失败不抛错——
+        调用方沿用上轮答案，失败行照落（§5）。
         """
-        member_timeout = float(ctx.pipeline.member_timeout_seconds or 120)
         if adapter_factory is None:
-
-            def adapter_factory(provider: Provider, merged: dict[str, Any]) -> BaseAdapter:
-                return build_adapter(
-                    provider,
-                    fernet_key=ctx.fernet_key,
-                    timeout_seconds=member_timeout,
-                    max_retries=int(merged.get("max_retries", 1)),
-                )
-
+            adapter_factory = default_member_adapter_factory(ctx)
         semaphore = asyncio.Semaphore(max(1, int(ctx.pipeline.max_concurrency or 10)))
         specs = {spec.model.id: spec for spec in ctx.members}
         refine_prompt = render_judge_prompt(
             ICE_REFINE_TEMPLATE, ctx.body["messages"], [], critique=critique
         )
-
-        async def run_one(prev: CallOutcome) -> CallOutcome:
-            spec = specs[prev.model_id]
-            merged = merge_params(spec.model.default_params, spec.member.param_overrides)
-            messages = [
-                *ctx.body["messages"],
-                {"role": "assistant", "content": prev.response_content},
-                {"role": "user", "content": refine_prompt},
-            ]
-            request, payload = build_call_request(
-                spec.model.upstream_model_id, messages, merged, stream=True
+        return list(
+            await asyncio.gather(
+                *(
+                    self._refine_one(
+                        ctx, specs[prev.model_id], prev, refine_prompt, round_no,
+                        adapter_factory, semaphore,
+                    )
+                    for prev in ok
+                )
             )
-            outcome = CallOutcome(
-                role="member",
-                model_id=spec.model.id,
-                upstream_model_id=spec.model.upstream_model_id,
-                provider_name=spec.provider.name,
-                request_payload=payload,
-                round_no=round_no,
-            )
-            adapter = adapter_factory(spec.provider, merged)
-            start = time.perf_counter()
-            async with semaphore:
-                try:
-                    result = await adapter.complete(request)
-                except AdapterError as exc:
-                    outcome.status = "timeout" if exc.kind == "timeout" else "failed"
-                    outcome.error_message = str(exc)
-            outcome.duration_ms = int((time.perf_counter() - start) * 1000)
-            if outcome.status == "success":
-                outcome.response_content = result.content
-                outcome.usage = result.usage
-                outcome.duration_ms = result.duration_ms
-            return outcome
-
-        return list(await asyncio.gather(*(run_one(prev) for prev in ok)))
+        )
 
     # -- 主流程（§4.1 修正版伪代码逐行对应） ---------------------------------------------
 
@@ -621,3 +635,141 @@ class IceStrategy(Strategy):
             ),
         )
         return StreamPlan(iteration=state, **base_fields)
+
+    # -- 过程流式（T38：stream_process=true） -------------------------------------------
+
+    async def run_stream_process(
+        self,
+        ctx: StrategyContext,
+        *,
+        adapter_factory: AdapterFactory | None = None,
+        judge_adapter: BaseAdapter | None = None,
+    ) -> AsyncIterator[ProcessEvent | FinalPlanReady]:
+        """过程流式：第 0 轮移入生成器——成员/评论完成即事件，终局就绪以 FinalPlanReady 收尾。
+
+        复用 run 的轮次逻辑与容错矩阵；上游请求与 prepare_stream/_iterate 逐字节一致
+        （同一 run_one/_refine_one/_run_round_critique/_assemble_final），仅观测顺序
+        变为完成序；下游评论/终局的答案序仍按成员配置序。不发迭代注释行（事件块即进度）。
+        """
+        params = self.validate_params(ctx.pipeline.strategy_params)
+        judge_strict = (ctx.pipeline.fault_tolerance or {}).get("judge_failure") == "strict"
+        member_strict = (ctx.pipeline.fault_tolerance or {}).get("member_failure") == "strict"
+        if adapter_factory is None:
+            adapter_factory = default_member_adapter_factory(ctx)
+        semaphore = asyncio.Semaphore(max(1, int(ctx.pipeline.max_concurrency or 10)))
+
+        # 第 0 轮：成员原始请求（as_completed 完成序发事件，答案序仍按配置序）
+        tasks0 = [
+            asyncio.ensure_future(
+                indexed_outcome(i, run_one(ctx, spec, adapter_factory, semaphore))
+            )
+            for i, spec in enumerate(ctx.members)
+        ]
+        try:
+            ordered: list[CallOutcome | None] = [None] * len(tasks0)
+            for fut in asyncio.as_completed(tasks0):
+                i, outcome = await fut
+                outcome.round_no = 0
+                ordered[i] = outcome
+                yield ProcessEvent(
+                    kind="member", label=outcome.upstream_model_id, outcome=outcome, round_no=0
+                )
+            round0 = [o for o in ordered if o is not None]
+            check_member_failures(round0, strict=member_strict)
+            ok = [o for o in round0 if o.status == "success"]  # 失败成员整场退出（同 council skip）
+
+            adapter = judge_adapter if judge_adapter is not None else self._judge_adapter(ctx)
+            session: list[dict[str, str]] = []  # 仲裁者会话（D10）
+            critique = await self._run_round_critique(ctx, adapter, ok, session, round_no=0)
+            yield ProcessEvent(kind="critique", label="第 0 轮评论", outcome=critique, round_no=0)
+            if critique.status != "success":
+                # 过程流式契约（T38）：第 0 轮评论失败转为流内终止（成员块已发出），
+                # 与 AE-35-6 的 502 语义不同——仅 stream_process=true 时生效
+                raise StrategyExecutionError(
+                    f"裁判调用失败(评论阶段): {critique.error_message}",
+                    members=round0,
+                    critique=critique,
+                ) from None
+
+            verdict = parse_verdict(critique.response_content)
+            # 停滞序列只收解析成功的轮次（§4.3/§4.4）
+            conf_history = [verdict.confidence] if verdict.parsed else []
+            critique_text = critique.response_content
+            round_no = 0
+            while not self._should_finish(verdict, round_no, conf_history, params):
+                round_no += 1
+                refine_prompt = render_judge_prompt(
+                    ICE_REFINE_TEMPLATE, ctx.body["messages"], [], critique=verdict.critique
+                )
+                specs = {spec.model.id: spec for spec in ctx.members}
+                tasks_k = [
+                    asyncio.ensure_future(
+                        indexed_outcome(
+                            i,
+                            self._refine_one(
+                                ctx, specs[prev.model_id], prev, refine_prompt, round_no,
+                                adapter_factory, semaphore,
+                            ),
+                        )
+                    )
+                    for i, prev in enumerate(ok)
+                ]
+                refined: list[CallOutcome] = []
+                new_ok = list(ok)
+                try:
+                    for fut in asyncio.as_completed(tasks_k):
+                        i, outcome = await fut
+                        refined.append(outcome)
+                        if outcome.status == "success":
+                            new_ok[i] = outcome
+                        yield ProcessEvent(
+                            kind="member",
+                            label=outcome.upstream_model_id,
+                            outcome=outcome,
+                            round_no=round_no,
+                        )
+                finally:
+                    for task in tasks_k:
+                        task.cancel()
+                # 失败成员沿用上轮答案（§5），失败行照落；下一轮继续参与（可恢复）
+                ok = new_ok
+                critique = await self._run_round_critique(
+                    ctx, adapter, ok, session, round_no=round_no
+                )
+                yield ProcessEvent(
+                    kind="critique",
+                    label=f"第 {round_no} 轮评论",
+                    outcome=critique,
+                    round_no=round_no,
+                )
+                if critique.status != "success":
+                    # 迭代期评论失败：strict 抛错终止流，否则跳过剩余轮直接终局（D11）
+                    if judge_strict:
+                        raise StrategyExecutionError(
+                            f"裁判调用失败(strict): {critique.error_message}",
+                            members=refined,
+                            critique=critique,
+                        ) from None
+                    break
+                verdict = parse_verdict(critique.response_content)
+                critique_text = critique.response_content
+                if verdict.parsed:
+                    conf_history.append(verdict.confidence)
+
+            request, payload = self._assemble_final(ctx, session, ok, critique_text)
+            yield FinalPlanReady(
+                plan=StreamPlan(
+                    adapter=adapter,
+                    model_id=ctx.judge_model.id,
+                    upstream_model_id=ctx.judge_model.upstream_model_id,
+                    provider_name=ctx.judge_provider.name,
+                    pre_outcomes=[],
+                    base_usage=LlmUsage(),
+                    request=request,
+                    payload=payload,
+                )
+            )
+        finally:
+            # detach 关闭时断连会把 CancelledError 传入生成器：取消在飞成员任务
+            for task in tasks0:
+                task.cancel()

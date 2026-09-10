@@ -3,6 +3,7 @@ import type { TraceCall, TraceDetail } from "./api";
 import {
   formatBytes,
   formatDuration,
+  formatFirstToken,
   judgeVersionCount,
   seedVersions,
   statusTone,
@@ -34,6 +35,7 @@ const detail: TraceDetail = {
     response_content: "final",
     status: "success",
     total_duration_ms: 1200,
+    first_token_ms: 0,
     total_prompt_tokens: 10,
     total_completion_tokens: 5,
     created_at: "2026-09-02T12:00:00+00:00",
@@ -113,6 +115,12 @@ test("格式化：耗时与字节数（UT-27-1）", () => {
   expect(formatBytes(512)).toBe("512 B");
   expect(formatBytes(2048)).toBe("2.0 KB");
   expect(formatBytes(3 * 1024 * 1024)).toBe("3.0 MB");
+});
+
+test("TTFT 展示：>0 格式化耗时，0（失败/未产出 token）显示占位符", () => {
+  expect(formatFirstToken(350)).toBe("350ms");
+  expect(formatFirstToken(1200)).toBe("1.2s");
+  expect(formatFirstToken(0)).toBe("—");
 });
 
 test("状态配色映射（UT-27-1）", () => {

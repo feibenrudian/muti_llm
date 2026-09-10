@@ -2,9 +2,12 @@
 
 from __future__ import annotations
 
+import asyncio
 import json
+import re
 import time
 import uuid
+from collections.abc import AsyncIterator
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -20,6 +23,7 @@ from app.repos import (
     find_enabled_model_by_upstream_id,
     find_enabled_pipeline_by_name,
 )
+from app.settings import settings
 
 router = APIRouter(tags=["gateway"])
 
@@ -51,6 +55,11 @@ def _sse(obj: dict[str, Any]) -> str:
     return f"data: {json.dumps(obj, ensure_ascii=False)}\n\n"
 
 
+def _elapsed_ms(t0: float) -> int:
+    """请求级耗时（请求入口 t0 → 现在）；调用行耗时不准用它。"""
+    return int((time.perf_counter() - t0) * 1000)
+
+
 def ice_progress_comment(k: int, total: int) -> str:
     """ICE 迭代期 SSE 注释行（`:` 开头为 SSE 规范注释，OpenAI SDK 忽略，不占 data 序列）。"""
     return f": ice round {k}/{total}\n\n"
@@ -80,17 +89,18 @@ async def list_models(request: Request) -> Response:
 
 @router.post("/v1/chat/completions")
 async def chat_completions(request: Request, background: BackgroundTasks) -> Response:
+    t0 = time.perf_counter()  # 请求级计时起点（收到外部请求），贯穿所有终态路径
     try:
         body = await request.json()
     except Exception:
         return openai_error(400, "请求体不是合法 JSON")
     client_ip = request.client.host if request.client else ""
-    response, _ = await execute_chat(request.app, background, body, client_ip)
+    response, _ = await execute_chat(request.app, background, body, client_ip, t0)
     return response
 
 
 async def execute_chat(
-    app: Any, background: BackgroundTasks, body: dict[str, Any], client_ip: str
+    app: Any, background: BackgroundTasks, body: dict[str, Any], client_ip: str, t0: float
 ) -> tuple[Response, int | None]:
     """网关核心执行（校验 → Pipeline/透传路由 → 响应）。返回 (response, trace_id)。
 
@@ -134,12 +144,29 @@ async def execute_chat(
         if value is not None:
             params[key] = value
     stream = bool(body.get("stream"))
+    # 过程流式（T38/T39）：仅 pipeline 流式生效；None=请求体未显式给 → 用 pipeline 默认
+    stream_process_raw = body.get("stream_process")
 
     async with app.state.session_factory() as session:
         pipeline = await find_enabled_pipeline_by_name(session, model_field)
         if pipeline is not None:
+            # 请求体显式给了（含 false）就用请求体的值，否则用 pipeline 级默认
+            stream_process = (
+                bool(stream_process_raw)
+                if stream_process_raw is not None
+                else bool(pipeline.stream_process)
+            )
             return await _run_pipeline(
-                app, background, session, body, params, stream, pipeline, client_ip
+                app,
+                background,
+                session,
+                body,
+                params,
+                stream,
+                pipeline,
+                client_ip,
+                t0,
+                stream_process=stream_process,
             )
 
         model_row = await find_enabled_model_by_upstream_id(session, model_field)
@@ -158,7 +185,7 @@ async def execute_chat(
             )
 
         return await _passthrough(
-            app, background, session, body, model_row, provider, params, stream, client_ip
+            app, background, session, body, model_row, provider, params, stream, client_ip, t0
         )
 
 
@@ -228,6 +255,122 @@ async def _record_outcomes(session: AsyncSession, request_id: int, outcomes: lis
         await record_call(session, request_id=request_id, **outcome.to_log_kwargs())
 
 
+async def _detached_pipeline_persist(
+    session_factory: Any,
+    trace_id: int,
+    work: asyncio.Future[Any],
+    t0: float,
+) -> None:
+    """断连续跑（pipeline 非流式）：等待策略任务收尾，按真实终态落库，绝不留 pending。"""
+    from app.strategies.base import StrategyExecutionError
+
+    try:
+        result = await work
+    except StrategyExecutionError as exc:
+        failed_calls = list(exc.members)
+        if exc.critique is not None:
+            failed_calls.append(exc.critique)
+        if exc.judge is not None:
+            failed_calls.append(exc.judge)
+        async with session_factory() as s:
+            await _record_outcomes(s, trace_id, failed_calls)
+            await finish_request(
+                s, trace_id, status="failed", total_duration_ms=_elapsed_ms(t0)
+            )
+            await s.commit()
+        return
+    except Exception:
+        # 兜底：非预期异常也必须落终态，避免 trace 永远 pending
+        async with session_factory() as s:
+            await finish_request(
+                s, trace_id, status="failed", total_duration_ms=_elapsed_ms(t0)
+            )
+            await s.commit()
+        return
+    async with session_factory() as s:
+        await _record_outcomes(s, trace_id, result.calls)
+        duration = _elapsed_ms(t0)
+        await finish_request(
+            s,
+            trace_id,
+            status="degraded" if result.degraded else "success",
+            response_content=result.final_content,
+            response_finish_reason=result.final_finish_reason,
+            total_duration_ms=duration,
+            first_token_ms=duration,
+            total_prompt_tokens=result.usage.prompt_tokens,
+            total_completion_tokens=result.usage.completion_tokens,
+        )
+        await s.commit()
+
+
+async def _detached_passthrough_persist(
+    session_factory: Any,
+    trace_id: int,
+    work: asyncio.Future[Any],
+    payload: dict[str, Any],
+    model_row: LlmModel,
+    provider: Provider,
+    start: float,
+    t0: float,
+) -> None:
+    """断连续跑（透传非流式）：等待上游任务收尾，按真实终态落库，绝不留 pending。"""
+    try:
+        result = await work
+    except AdapterError as exc:
+        duration = int((time.perf_counter() - start) * 1000)
+        async with session_factory() as s:
+            await record_call(
+                s,
+                request_id=trace_id,
+                role="passthrough",
+                model_id=model_row.id,
+                upstream_model_id=model_row.upstream_model_id,
+                provider_name=provider.name,
+                request_payload=payload,
+                status="failed",
+                error_message=str(exc),
+                duration_ms=duration,
+            )
+            await finish_request(s, trace_id, status="failed", total_duration_ms=_elapsed_ms(t0))
+            await s.commit()
+        return
+    except Exception:
+        async with session_factory() as s:
+            await finish_request(
+                s, trace_id, status="failed", total_duration_ms=_elapsed_ms(t0)
+            )
+            await s.commit()
+        return
+    async with session_factory() as s:
+        await record_call(
+            s,
+            request_id=trace_id,
+            role="passthrough",
+            model_id=model_row.id,
+            upstream_model_id=model_row.upstream_model_id,
+            provider_name=provider.name,
+            request_payload=payload,
+            response_content=result.content,
+            duration_ms=result.duration_ms,
+            prompt_tokens=result.usage.prompt_tokens,
+            completion_tokens=result.usage.completion_tokens,
+        )
+        duration = _elapsed_ms(t0)
+        await finish_request(
+            s,
+            trace_id,
+            status="success",
+            response_content=result.content,
+            response_finish_reason="stop",
+            total_duration_ms=duration,
+            first_token_ms=duration,
+            total_prompt_tokens=result.usage.prompt_tokens,
+            total_completion_tokens=result.usage.completion_tokens,
+        )
+        await s.commit()
+
+
 async def _run_pipeline(
     app: Any,
     background: BackgroundTasks,
@@ -237,6 +380,9 @@ async def _run_pipeline(
     stream: bool,
     pipeline: Any,
     client_ip: str,
+    t0: float,
+    *,
+    stream_process: bool = False,
 ) -> tuple[Response, int]:
     from app.strategies import get_strategy
     from app.strategies.base import StrategyExecutionError
@@ -254,8 +400,29 @@ async def _run_pipeline(
         ctx = await _build_strategy_context(session, body, params, pipeline, app.state.fernet_key)
         strategy = get_strategy(pipeline.strategy)()
         if stream:
-            return await _pipeline_stream(app, background, session, trace, ctx, strategy)
-        result = await strategy.run(ctx)
+            if stream_process:
+                return await _pipeline_stream_process(
+                    app, background, session, trace, ctx, strategy, t0
+                )
+            return await _pipeline_stream(app, background, session, trace, ctx, strategy, t0)
+        await session.commit()  # 落 pending 并固定 ctx 内 ORM 属性：断连后续跑/取消才可写终态
+        work = asyncio.ensure_future(strategy.run(ctx))
+        try:
+            result = await work
+        except asyncio.CancelledError:
+            if settings.detach_on_disconnect:
+                # 断连续跑：响应已无法再交付，上游跑完由后台任务落真实终态
+                asyncio.create_task(
+                    _detached_pipeline_persist(app.state.session_factory, trace.id, work, t0)
+                )
+            else:
+                work.cancel()
+                async with app.state.session_factory() as s:
+                    await finish_request(
+                        s, trace.id, status="client_cancelled", total_duration_ms=_elapsed_ms(t0)
+                    )
+                    await s.commit()
+            raise
     except StrategyExecutionError as exc:
         failed_calls = list(exc.members)
         if exc.critique is not None:
@@ -263,20 +430,24 @@ async def _run_pipeline(
         if exc.judge is not None:
             failed_calls.append(exc.judge)
         await _record_outcomes(session, trace.id, failed_calls)
-        await finish_request(session, trace.id, status="failed")
+        await finish_request(
+            session, trace.id, status="failed", total_duration_ms=_elapsed_ms(t0)
+        )
         await session.commit()
         return openai_error(502, f"策略执行失败: {exc}", err_type="upstream_error"), trace.id
 
-    start = time.perf_counter()
     await _record_outcomes(session, trace.id, result.calls)
     status = "degraded" if result.degraded else "success"
+    duration = _elapsed_ms(t0)
     await finish_request(
         session,
         trace.id,
         status=status,
         response_content=result.final_content,
         response_finish_reason=result.final_finish_reason,
-        total_duration_ms=int((time.perf_counter() - start) * 1000),
+        total_duration_ms=duration,
+        # 非流式一次性响应：首 token 与完成同时到达
+        first_token_ms=duration,
         total_prompt_tokens=result.usage.prompt_tokens,
         total_completion_tokens=result.usage.completion_tokens,
     )
@@ -308,6 +479,37 @@ def make_chunker(response_id: str, created: int, model: str):
     return chunk
 
 
+_END: Any = object()
+
+# 成员/评论原文里可能自带 <think> 标签（思考型模型内联思考），会破坏下游客户端
+# （如 Unsloth Studio）朴素的 think 块字符串解析，导致过程内容泄漏进正式回复。
+_THINK_TAG_RE = re.compile(r"(</?)\s*(think)(\s[^>]*)?>", re.IGNORECASE)
+
+
+def _sanitize_reasoning(text: str) -> str:
+    """reasoning_content 消毒：用零宽空格拆断 think 标签，视觉不变但不再被解析。"""
+    return _THINK_TAG_RE.sub(lambda m: f"{m.group(1)}​think{m.group(3) or ''}>", text)
+
+
+async def _drain_with_heartbeat(
+    queue: asyncio.Queue[Any], interval: float
+) -> AsyncIterator[str]:
+    """queue.get() 带超时：超时发 ': ping'，收到 _END 结束；interval<=0 时纯透传。"""
+    if interval <= 0:
+        while (item := await queue.get()) is not _END:
+            yield item
+        return
+    while True:
+        try:
+            item = await asyncio.wait_for(queue.get(), interval)
+        except TimeoutError:
+            yield ": ping\n\n"
+            continue
+        if item is _END:
+            return
+        yield item
+
+
 async def _pipeline_stream(
     app: Any,
     background: BackgroundTasks,
@@ -315,6 +517,7 @@ async def _pipeline_stream(
     trace: Any,
     ctx: Any,
     strategy: Any,
+    t0: float,
 ) -> tuple[Response, int]:
     plan = await strategy.prepare_stream(ctx)
 
@@ -324,33 +527,55 @@ async def _pipeline_stream(
 
     if plan.iteration is not None:
         # ICE 迭代路径（D15）：注释行保活 → 逐轮执行 → 终局流式转发
-        return await _pipeline_stream_iterative(app, background, trace, ctx, plan)
+        return await _pipeline_stream_iterative(app, background, trace, ctx, plan, t0)
 
     session_factory = app.state.session_factory
     response_id = f"chatcmpl-{uuid.uuid4().hex[:24]}"
     chunk = make_chunker(response_id, int(time.time()), ctx.body["model"])
     outcome = StreamOutcome()
-    start = time.perf_counter()
+    start = time.perf_counter()  # 流段本地计时：仅供裁判调用行 duration_ms
+    trace_id: int = trace.id
+    queue: asyncio.Queue[Any] = asyncio.Queue()
 
-    async def event_stream():
+    async def pump() -> None:
         outcome.status = "client_cancelled"
         try:
-            yield _sse(chunk({"role": "assistant"}))
+            queue.put_nowait(_sse(chunk({"role": "assistant"})))
             async for delta in plan.adapter.stream(plan.request):
+                if outcome.first_token_ms == 0:
+                    outcome.first_token_ms = _elapsed_ms(t0)
                 outcome.parts.append(delta)
-                yield _sse(chunk({"content": delta}))
-            yield _sse(chunk({}, finish_reason="stop"))
-            yield "data: [DONE]\n\n"
+                queue.put_nowait(_sse(chunk({"content": delta})))
+            queue.put_nowait(_sse(chunk({}, finish_reason="stop")))
+            queue.put_nowait("data: [DONE]\n\n")
             outcome.status = "success"
         except AdapterError as exc:
             outcome.status = "failed"
             outcome.error = str(exc)
         finally:
             outcome.duration_ms = int((time.perf_counter() - start) * 1000)
+            queue.put_nowait(_END)
+
+    pump_task = asyncio.create_task(pump())
+
+    async def event_stream() -> AsyncIterator[str]:
+        drained = False
+        try:
+            async for line in _drain_with_heartbeat(queue, settings.sse_heartbeat_seconds):
+                yield line
+            drained = True
+        finally:
+            # detach 关闭时断开即取消上游；开启时仅 ferry 退出，pump 续跑由 persist 收尾
+            if not settings.detach_on_disconnect:
+                pump_task.cancel()
+                if not drained:
+                    # 客户端未收到完整流：即使 pump 已跑完，请求级状态仍按取消落库（消除竞态）
+                    outcome.status = "client_cancelled"
 
     async def persist() -> None:
         from app.strategies.base import CallOutcome
 
+        await asyncio.gather(pump_task, return_exceptions=True)
         content = "".join(outcome.parts)
         judge = CallOutcome(
             role="judge",
@@ -364,13 +589,14 @@ async def _pipeline_stream(
             duration_ms=outcome.duration_ms,
         )
         async with session_factory() as s:
-            await _record_outcomes(s, trace.id, [judge])
+            await _record_outcomes(s, trace_id, [judge])
             await finish_request(
                 s,
-                trace.id,
+                trace_id,
                 status=outcome.status,
                 response_content=content,
-                total_duration_ms=outcome.duration_ms,
+                total_duration_ms=_elapsed_ms(t0),
+                first_token_ms=outcome.first_token_ms,
                 total_prompt_tokens=plan.base_usage.prompt_tokens,
                 total_completion_tokens=plan.base_usage.completion_tokens,
             )
@@ -386,42 +612,51 @@ async def _pipeline_stream_iterative(
     trace: Any,
     ctx: Any,
     plan: Any,
+    t0: float,
 ) -> tuple[Response, int]:
     """ICE 迭代流式路径（D15）：注释行保活 → 逐轮执行（策略迭代状态）→ 终局裁决 SSE 转发。
 
-    取消传播：客户端断开时 CancelledError 传入迭代生成器取消在飞轮次任务；
-    已完成轮次行由 background persist 照常落库，trace 落 client_cancelled。
+    取消传播：detach 关闭时客户端断开经 ferry 取消 pump，CancelledError 传入迭代生成器
+    取消在飞轮次任务；detach 开启（默认）时 pump 续跑到底，persist 落真实终态。
     """
     from app.strategies.base import CallOutcome, StrategyExecutionError
 
     session_factory = app.state.session_factory
     chunk = make_chunker(f"chatcmpl-{uuid.uuid4().hex[:24]}", int(time.time()), ctx.body["model"])
     outcome = StreamOutcome()
-    start = time.perf_counter()
+    start = time.perf_counter()  # 本地计时：仅供裁判调用行 duration_ms
+    trace_id: int = trace.id
     iteration = plan.iteration
     iter_outcomes: list = []
     final_plan: Any = None
+    queue: asyncio.Queue[Any] = asyncio.Queue()
 
-    async def event_stream():
+    async def pump() -> None:
         nonlocal final_plan
         outcome.status = "client_cancelled"  # 未到终态即结束 → 视为取消
         try:
             # 首条注释行仅在进入第 1 轮迭代时发射（第 0 轮已在开流前完成）
             if iteration.progress_comments:
-                yield ice_progress_comment(iteration.completed_rounds, iteration.total_rounds)
+                queue.put_nowait(
+                    ice_progress_comment(iteration.completed_rounds, iteration.total_rounds)
+                )
             async for step in iteration.run():
                 iter_outcomes.extend(step.members)
                 if step.critique is not None:
                     iter_outcomes.append(step.critique)
                 if step.members and iteration.progress_comments:
-                    yield ice_progress_comment(step.round_no + 1, iteration.total_rounds)
+                    queue.put_nowait(
+                        ice_progress_comment(step.round_no + 1, iteration.total_rounds)
+                    )
             final_plan = iteration.final_plan
-            yield _sse(chunk({"role": "assistant"}))
+            queue.put_nowait(_sse(chunk({"role": "assistant"})))
             async for delta in final_plan.adapter.stream(final_plan.request):
+                if outcome.first_token_ms == 0:
+                    outcome.first_token_ms = _elapsed_ms(t0)
                 outcome.parts.append(delta)
-                yield _sse(chunk({"content": delta}))
-            yield _sse(chunk({}, finish_reason="stop"))
-            yield "data: [DONE]\n\n"
+                queue.put_nowait(_sse(chunk({"content": delta})))
+            queue.put_nowait(_sse(chunk({}, finish_reason="stop")))
+            queue.put_nowait("data: [DONE]\n\n")
             outcome.status = "success"
         except (AdapterError, StrategyExecutionError) as exc:
             # 终局流式中途失败 / 迭代期 strict 评论失败 → 终止流，按失败落库
@@ -429,8 +664,24 @@ async def _pipeline_stream_iterative(
             outcome.error = str(exc)
         finally:
             outcome.duration_ms = int((time.perf_counter() - start) * 1000)
+            queue.put_nowait(_END)
+
+    pump_task = asyncio.create_task(pump())
+
+    async def event_stream() -> AsyncIterator[str]:
+        drained = False
+        try:
+            async for line in _drain_with_heartbeat(queue, settings.sse_heartbeat_seconds):
+                yield line
+            drained = True
+        finally:
+            if not settings.detach_on_disconnect:
+                pump_task.cancel()
+                if not drained:
+                    outcome.status = "client_cancelled"
 
     async def persist() -> None:
+        await asyncio.gather(pump_task, return_exceptions=True)
         content = "".join(outcome.parts)
         prompt_tokens = plan.base_usage.prompt_tokens
         completion_tokens = plan.base_usage.completion_tokens
@@ -439,7 +690,7 @@ async def _pipeline_stream_iterative(
             completion_tokens += o.usage.completion_tokens
         async with session_factory() as s:
             if iter_outcomes:
-                await _record_outcomes(s, trace.id, iter_outcomes)
+                await _record_outcomes(s, trace_id, iter_outcomes)
             if final_plan is not None:  # 终局已开始才落 judge 行（迭代期取消则无此行）
                 judge = CallOutcome(
                     role="judge",
@@ -452,20 +703,173 @@ async def _pipeline_stream_iterative(
                     error_message=outcome.error,
                     duration_ms=outcome.duration_ms,
                 )
-                await _record_outcomes(s, trace.id, [judge])
+                await _record_outcomes(s, trace_id, [judge])
             await finish_request(
                 s,
-                trace.id,
+                trace_id,
                 status=outcome.status,
                 response_content=content,
-                total_duration_ms=outcome.duration_ms,
+                total_duration_ms=_elapsed_ms(t0),
+                first_token_ms=outcome.first_token_ms,
                 total_prompt_tokens=prompt_tokens,
                 total_completion_tokens=completion_tokens,
             )
             await s.commit()
 
     background.add_task(persist)
-    return StreamingResponse(event_stream(), media_type="text/event-stream"), trace.id
+    return StreamingResponse(event_stream(), media_type="text/event-stream"), trace_id
+
+
+async def _pipeline_stream_process(
+    app: Any,
+    background: BackgroundTasks,
+    session: AsyncSession,
+    trace: Any,
+    ctx: Any,
+    strategy: Any,
+    t0: float,
+) -> tuple[Response, int]:
+    """过程流式路径（T38 stream_process=true）：成员/评论完成即发 reasoning chunk，终局照旧。
+
+    与迭代路径同骨架（pump/ferry/persist + detach/心跳/t0 计时）；区别：响应不等前置阶段
+    全部完成——首个成员成功即返回（TTFT 提前到首成员完成）；前置明细不做开流前预写，
+    由 persist 从 ProcessEvent 累计落库。首个成功成员前 pump 失败 → 暂存异常重抛，
+    走 _run_pipeline 既有 502 JSON 路径（与今日全非流式/流式失败契约一致）。
+    """
+    from app.strategies.base import FinalPlanReady, StrategyExecutionError
+
+    await session.commit()  # 先落 pending 状态的 request_logs（pre_outcomes 由 persist 补写）
+
+    session_factory = app.state.session_factory
+    chunk = make_chunker(f"chatcmpl-{uuid.uuid4().hex[:24]}", int(time.time()), ctx.body["model"])
+    outcome = StreamOutcome()
+    start = time.perf_counter()  # 本地计时：仅供裁判调用行 duration_ms
+    trace_id: int = trace.id
+    queue: asyncio.Queue[Any] = asyncio.Queue()
+    pre_outcomes: list[Any] = []
+    final_plan: Any = None
+    first_success = asyncio.Event()
+    stashed: list[Exception] = []
+    role_sent = False
+
+    async def pump() -> None:
+        nonlocal final_plan, role_sent
+        outcome.status = "client_cancelled"  # 未到终态即结束 → 视为取消
+        try:
+            async for ev in strategy.run_stream_process(ctx):
+                if isinstance(ev, FinalPlanReady):
+                    final_plan = ev.plan
+                    # 终局转发：与常规流式路径同形态（role → content → stop → [DONE]）
+                    queue.put_nowait(_sse(chunk({"role": "assistant"})))
+                    async for delta in final_plan.adapter.stream(final_plan.request):
+                        if outcome.first_token_ms == 0:
+                            outcome.first_token_ms = _elapsed_ms(t0)
+                        outcome.parts.append(delta)
+                        queue.put_nowait(_sse(chunk({"content": delta})))
+                    queue.put_nowait(_sse(chunk({}, finish_reason="stop")))
+                    queue.put_nowait("data: [DONE]\n\n")
+                    outcome.status = "success"
+                    continue
+                pre_outcomes.append(ev.outcome)
+                header = f"【成员 {ev.label}】\n" if ev.kind == "member" else f"【{ev.label}】\n"
+                first_delta: dict[str, Any] = {"reasoning_content": header}
+                if not role_sent:
+                    # 与 content 路径一致：流的首个 chunk 携带 role
+                    first_delta["role"] = "assistant"
+                    role_sent = True
+                queue.put_nowait(_sse(chunk(first_delta)))
+                if ev.outcome.status == "success":
+                    content = _sanitize_reasoning(ev.outcome.response_content)
+                    for line in content.splitlines(keepends=True):
+                        queue.put_nowait(_sse(chunk({"reasoning_content": line})))
+                    if ev.kind == "member":
+                        first_success.set()
+                else:
+                    notice = f"（调用失败：{ev.outcome.error_message or ev.outcome.status}）\n"
+                    notice = _sanitize_reasoning(notice)
+                    queue.put_nowait(_sse(chunk({"reasoning_content": notice})))
+        except (AdapterError, StrategyExecutionError) as exc:
+            if not first_success.is_set():
+                # 开流前失败：暂存并唤醒网关 → 重抛走既有 502 JSON 路径
+                stashed.append(exc)
+                first_success.set()
+            else:
+                # 流内失败（评论/终局/strict 成员）：终止流不发 [DONE]，按失败落库
+                outcome.status = "failed"
+                outcome.error = str(exc)
+        finally:
+            outcome.duration_ms = int((time.perf_counter() - start) * 1000)
+            queue.put_nowait(_END)
+
+    pump_task = asyncio.create_task(pump())
+
+    # 响应起点：首个成员成功（TTFT 提前）或 pump 终止（开流前失败 → 重抛）
+    waiter = asyncio.create_task(first_success.wait())
+    await asyncio.wait({waiter, pump_task}, return_when=asyncio.FIRST_COMPLETED)
+    waiter.cancel()
+    if stashed:
+        await asyncio.gather(pump_task, return_exceptions=True)
+        raise stashed[0]
+    if pump_task.done() and not first_success.is_set():
+        # 非预期异常：同样在开流前抛出（500），不返回空 SSE
+        exc = pump_task.exception()
+        if exc is not None:
+            raise exc
+
+    async def event_stream() -> AsyncIterator[str]:
+        drained = False
+        try:
+            async for line in _drain_with_heartbeat(queue, settings.sse_heartbeat_seconds):
+                yield line
+            drained = True
+        finally:
+            # detach 关闭时断开即取消上游；开启时仅 ferry 退出，pump 续跑由 persist 收尾
+            if not settings.detach_on_disconnect:
+                pump_task.cancel()
+                if not drained:
+                    # 客户端未收到完整流：即使 pump 已跑完，请求级状态仍按取消落库（消除竞态）
+                    outcome.status = "client_cancelled"
+
+    async def persist() -> None:
+        from app.strategies.base import CallOutcome
+
+        await asyncio.gather(pump_task, return_exceptions=True)
+        content = "".join(outcome.parts)
+        prompt_tokens = 0
+        completion_tokens = 0
+        for o in pre_outcomes:
+            prompt_tokens += o.usage.prompt_tokens
+            completion_tokens += o.usage.completion_tokens
+        async with session_factory() as s:
+            if pre_outcomes:
+                await _record_outcomes(s, trace_id, pre_outcomes)
+            if final_plan is not None:  # 终局已开始才落 judge 行（前置期取消则无此行）
+                judge = CallOutcome(
+                    role="judge",
+                    model_id=final_plan.model_id,
+                    upstream_model_id=final_plan.upstream_model_id,
+                    provider_name=final_plan.provider_name,
+                    request_payload=final_plan.payload or {},
+                    response_content=content if outcome.status != "failed" else "",
+                    status=outcome.status,
+                    error_message=outcome.error,
+                    duration_ms=outcome.duration_ms,
+                )
+                await _record_outcomes(s, trace_id, [judge])
+            await finish_request(
+                s,
+                trace_id,
+                status=outcome.status,
+                response_content=content,
+                total_duration_ms=_elapsed_ms(t0),
+                first_token_ms=outcome.first_token_ms,
+                total_prompt_tokens=prompt_tokens,
+                total_completion_tokens=completion_tokens,
+            )
+            await s.commit()
+
+    background.add_task(persist)
+    return StreamingResponse(event_stream(), media_type="text/event-stream"), trace_id
 
 
 def _merged_params(model_row: LlmModel, params: dict[str, Any]) -> dict[str, Any]:
@@ -531,6 +935,7 @@ async def _passthrough(
     params: dict[str, Any],
     stream: bool,
     client_ip: str,
+    t0: float,
 ) -> tuple[Response, int]:
     trace = await start_request(
         session,
@@ -553,12 +958,36 @@ async def _passthrough(
 
     if stream:
         return await _passthrough_stream(
-            app, background, session, trace, model_row, provider, payload, llm_request, adapter
+            app, background, session, trace, model_row, provider, payload, llm_request, adapter, t0
         )
 
-    start = time.perf_counter()
+    start = time.perf_counter()  # 调用行本地计时：仅供 passthrough 调用行 duration_ms
+    await session.commit()  # 落 pending：断连后续跑/取消才能写终态（对齐流式路径）
+    work = asyncio.ensure_future(adapter.complete(llm_request))
     try:
-        result = await adapter.complete(llm_request)
+        result = await work
+    except asyncio.CancelledError:
+        if settings.detach_on_disconnect:
+            asyncio.create_task(
+                _detached_passthrough_persist(
+                    app.state.session_factory,
+                    trace.id,
+                    work,
+                    payload,
+                    model_row,
+                    provider,
+                    start,
+                    t0,
+                )
+            )
+        else:
+            work.cancel()
+            async with app.state.session_factory() as s:
+                await finish_request(
+                    s, trace.id, status="client_cancelled", total_duration_ms=_elapsed_ms(t0)
+                )
+                await s.commit()
+        raise
     except AdapterError as exc:
         duration = int((time.perf_counter() - start) * 1000)
         await record_call(
@@ -573,7 +1002,9 @@ async def _passthrough(
             error_message=str(exc),
             duration_ms=duration,
         )
-        await finish_request(session, trace.id, status="failed", total_duration_ms=duration)
+        await finish_request(
+            session, trace.id, status="failed", total_duration_ms=_elapsed_ms(t0)
+        )
         await session.commit()
         return openai_error(502, f"上游调用失败: {exc}", err_type="upstream_error"), trace.id
 
@@ -590,7 +1021,7 @@ async def _passthrough(
         prompt_tokens=result.usage.prompt_tokens,
         completion_tokens=result.usage.completion_tokens,
     )
-    duration = int((time.perf_counter() - start) * 1000)
+    duration = _elapsed_ms(t0)
     await finish_request(
         session,
         trace.id,
@@ -598,6 +1029,7 @@ async def _passthrough(
         response_content=result.content,
         response_finish_reason="stop",
         total_duration_ms=duration,
+        first_token_ms=duration,
         total_prompt_tokens=result.usage.prompt_tokens,
         total_completion_tokens=result.usage.completion_tokens,
     )
@@ -620,6 +1052,7 @@ class StreamOutcome:
     parts: list[str] = field(default_factory=list)
     error: str = ""
     duration_ms: int = 0
+    first_token_ms: int = 0
 
 
 async def _passthrough_stream(
@@ -632,6 +1065,7 @@ async def _passthrough_stream(
     payload: dict[str, Any],
     llm_request: LlmRequest,
     adapter: Any,
+    t0: float,
 ) -> tuple[Response, int]:
     await session.commit()  # 先落 pending 状态的 request_logs
 
@@ -639,30 +1073,50 @@ async def _passthrough_stream(
     chunk = make_chunker(f"chatcmpl-{uuid.uuid4().hex[:24]}", int(time.time()), payload["model"])
 
     outcome = StreamOutcome()
-    start = time.perf_counter()
+    start = time.perf_counter()  # 流段本地计时：仅供 passthrough 调用行 duration_ms
+    trace_id: int = trace.id
+    queue: asyncio.Queue[Any] = asyncio.Queue()
 
-    async def event_stream():
+    async def pump() -> None:
         outcome.status = "client_cancelled"  # 未到终态即结束 → 视为取消
         try:
-            yield _sse(chunk({"role": "assistant"}))
+            queue.put_nowait(_sse(chunk({"role": "assistant"})))
             async for delta in adapter.stream(llm_request):
+                if outcome.first_token_ms == 0:
+                    outcome.first_token_ms = _elapsed_ms(t0)
                 outcome.parts.append(delta)
-                yield _sse(chunk({"content": delta}))
-            yield _sse(chunk({}, finish_reason="stop"))
-            yield "data: [DONE]\n\n"
+                queue.put_nowait(_sse(chunk({"content": delta})))
+            queue.put_nowait(_sse(chunk({}, finish_reason="stop")))
+            queue.put_nowait("data: [DONE]\n\n")
             outcome.status = "success"
         except AdapterError as exc:
             outcome.status = "failed"
             outcome.error = str(exc)
         finally:
             outcome.duration_ms = int((time.perf_counter() - start) * 1000)
+            queue.put_nowait(_END)
+
+    pump_task = asyncio.create_task(pump())
+
+    async def event_stream() -> AsyncIterator[str]:
+        drained = False
+        try:
+            async for line in _drain_with_heartbeat(queue, settings.sse_heartbeat_seconds):
+                yield line
+            drained = True
+        finally:
+            if not settings.detach_on_disconnect:
+                pump_task.cancel()
+                if not drained:
+                    outcome.status = "client_cancelled"
 
     async def persist() -> None:
+        await asyncio.gather(pump_task, return_exceptions=True)
         async with session_factory() as s:
             content = "".join(outcome.parts)
             await record_call(
                 s,
-                request_id=trace.id,
+                request_id=trace_id,
                 role="passthrough",
                 model_id=model_row.id,
                 upstream_model_id=model_row.upstream_model_id,
@@ -677,12 +1131,13 @@ async def _passthrough_stream(
             )
             await finish_request(
                 s,
-                trace.id,
+                trace_id,
                 status=outcome.status,
                 response_content=content,
-                total_duration_ms=outcome.duration_ms,
+                total_duration_ms=_elapsed_ms(t0),
+                first_token_ms=outcome.first_token_ms,
             )
             await s.commit()
 
     background.add_task(persist)
-    return StreamingResponse(event_stream(), media_type="text/event-stream"), trace.id
+    return StreamingResponse(event_stream(), media_type="text/event-stream"), trace_id

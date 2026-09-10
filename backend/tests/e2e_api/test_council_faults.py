@@ -1,8 +1,10 @@
-"""AE-18-1..3 + UT-18-1：council 容错矩阵与降级。"""
+"""AE-18-1..3 + UT-18-1/2：council 容错矩阵与降级、断连取消/续跑。"""
 
 import asyncio
+import time
 
 import httpx
+import pytest
 
 from app.orm import RequestLog
 from app.repos import Repository, list_model_calls
@@ -138,9 +140,15 @@ async def test_judge_failure_strict(
 
 
 async def test_stream_client_cancel_propagates(
-    backend_live: tuple[str, str], srs_live_seeded: str
+    backend_live: tuple[str, str], srs_live_seeded: str, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """UT-18-1 取消传播：流式断开后成员/评论 success、judge call 与请求终态 client_cancelled。"""
+    """UT-18-1 取消传播：流式断开后成员/评论 success、judge call 与请求终态 client_cancelled。
+
+    本用例验证取消语义，显式关闭断连续跑（detach_on_disconnect=False）。
+    """
+    from app import settings as settings_module
+
+    monkeypatch.setattr(settings_module.settings, "detach_on_disconnect", False)
     base_url, service_key = backend_live
     async with httpx.AsyncClient(timeout=60, base_url=base_url) as client:
         await _seed_council(client, srs_live_seeded)
@@ -170,3 +178,43 @@ async def test_stream_client_cancel_propagates(
     assert [c.role for c in calls] == ["member", "member", "judge_critique", "judge"]
     assert all(c.status == "success" for c in calls[:3])  # 成员与评论阶段已完成
     assert calls[-1].status == "client_cancelled"  # 最终裁判流被取消
+
+
+async def test_stream_client_cancel_detached(
+    backend_live: tuple[str, str], srs_live_seeded: str
+) -> None:
+    """UT-18-2 断连续跑(council)：judge 流跑完，trace 与全部 4 行 success。"""
+    base_url, service_key = backend_live
+    async with httpx.AsyncClient(timeout=60, base_url=base_url) as client:
+        await _seed_council(client, srs_live_seeded)
+        # 与 UT-18-1 同一 payload/延迟配置（快照回放）；区别仅在 detach 默认开
+        resp = await client.post(f"{srs_live_seeded}/_test/config", json={"delay_scale": 1})
+        assert resp.status_code == 200
+
+        async with client.stream(
+            "POST",
+            "/v1/chat/completions",
+            json={**COUNCIL_BODY, "stream": True},
+            headers=auth_headers(service_key),
+        ) as resp:
+            async for line in resp.aiter_lines():
+                if line.startswith("data: "):
+                    break  # 读完首个 chunk 即断开
+
+    from app.main import app
+
+    deadline = time.monotonic() + 30
+    while True:
+        async with app.state.session_factory() as session:
+            requests = await Repository(session, RequestLog).list()
+            trace = requests[-1]
+            if trace.status != "pending":
+                calls = await list_model_calls(session, trace.id)
+                break
+        assert time.monotonic() < deadline, "trace 未在超时内落终态"
+        await asyncio.sleep(0.2)
+
+    assert trace.status == "success"
+    assert trace.response_content == snapshot_content("council_judge")
+    assert [c.role for c in calls] == ["member", "member", "judge_critique", "judge"]
+    assert all(c.status == "success" for c in calls)

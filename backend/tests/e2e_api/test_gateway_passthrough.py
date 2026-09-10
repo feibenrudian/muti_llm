@@ -1,4 +1,7 @@
-"""AE-11-1..4：透传调用（非流式）+ 调用日志。"""
+"""AE-11-1..4 + AE-36-1：透传调用（非流式）+ 调用日志 + 非流式断连续跑。"""
+
+import asyncio
+import time
 
 import httpx
 
@@ -139,3 +142,48 @@ async def test_upstream_failure(
     assert trace.status == "failed"
     assert calls[0].status == "failed"
     assert calls[0].error_message
+
+
+async def test_nonstream_disconnect_detached(
+    backend_live: tuple[str, str], srs_live_seeded: str
+) -> None:
+    """AE-36-1 非流式断连：work 任务续跑，trace 落终态非 pending。"""
+    base_url, service_key = backend_live
+    async with httpx.AsyncClient(timeout=60, base_url=base_url) as client:
+        await seed_provider_and_model(client, srs_live_seeded)
+        # delay_scale=2 拉宽取消窗口：断开时上游必在生成中（同一 payload → 快照回放）
+        resp = await client.post(f"{srs_live_seeded}/_test/config", json={"delay_scale": 2})
+        assert resp.status_code == 200
+
+        request_task = asyncio.create_task(
+            client.post(
+                f"{base_url}/v1/chat/completions",
+                json={
+                    "model": "deepseek-v4-flash",
+                    "messages": [{"role": "user", "content": QUANTUM}],
+                    "temperature": 0.7,
+                },
+                headers=auth_headers(service_key),
+            )
+        )
+        await asyncio.sleep(0.5)
+        request_task.cancel()  # 客户端断连：取消在途请求
+        try:
+            await request_task
+        except asyncio.CancelledError:
+            pass
+
+    from app.main import app as backend_app
+
+    deadline = time.monotonic() + 30
+    while True:
+        async with backend_app.state.session_factory() as session:
+            requests = await Repository(session, RequestLog).list()
+            if requests and requests[-1].status != "pending":
+                trace = requests[-1]
+                break
+        assert time.monotonic() < deadline, "trace 未在超时内落终态（pending-forever 回归）"
+        await asyncio.sleep(0.2)
+
+    assert trace.status == "success"
+    assert trace.response_content == snapshot_content("passthrough_basic")

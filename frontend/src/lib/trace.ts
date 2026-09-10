@@ -149,6 +149,11 @@ export function formatDuration(ms: number): string {
   return `${ms}ms`;
 }
 
+/** TTFT 展示：0 = 失败/未产出 token，无意义时值显示占位符。 */
+export function formatFirstToken(ms: number): string {
+  return ms > 0 ? formatDuration(ms) : "—";
+}
+
 export function formatBytes(bytes: number): string {
   if (bytes >= 1024 * 1024) return `${(bytes / 1024 / 1024).toFixed(1)} MB`;
   if (bytes >= 1024) return `${(bytes / 1024).toFixed(1)} KB`;

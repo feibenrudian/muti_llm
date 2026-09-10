@@ -21,6 +21,7 @@ async def seed_council(
     *,
     name: str = "council-v1",
     fault_tolerance: dict | None = None,
+    stream_process: bool | None = None,
 ) -> dict:
     """provider + 2 个模型 + council pipeline（成员A覆盖temp0.7 / 成员B覆盖temp0.9，裁判=m1）。"""
     resp = await client.post(
@@ -63,6 +64,8 @@ async def seed_council(
     }
     if fault_tolerance is not None:
         payload["fault_tolerance"] = fault_tolerance
+    if stream_process is not None:
+        payload["stream_process"] = stream_process
     resp = await client.post("/api/admin/pipelines", json=payload)
     assert resp.status_code == 201, resp.text
     return {"provider_id": provider_id, "m1": m1, "m2": m2}

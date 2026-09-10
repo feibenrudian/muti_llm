@@ -1,10 +1,10 @@
-"""UT-32-2..3：旧库补列（_ensure_schema 幂等）与 round 落库往返。"""
+"""UT-32-2..5：旧库补列（_ensure_schema 幂等）、round 落库往返、request_logs/pipelines 补列。"""
 
 from sqlalchemy.ext.asyncio import AsyncConnection, AsyncEngine
 
 from app.db import create_db_engine, create_session_factory, init_db
-from app.logging_svc import record_call, start_request
-from app.orm import ModelCallLog, Pipeline
+from app.logging_svc import finish_request, record_call, start_request
+from app.orm import ModelCallLog, Pipeline, RequestLog
 from app.strategies.base import CallOutcome
 
 _LEGACY_PIPELINES_DDL = """
@@ -115,4 +115,72 @@ async def test_record_call_round_no() -> None:
     async with factory() as s:
         assert (await s.get(ModelCallLog, with_id)).round == 2
         assert (await s.get(ModelCallLog, without_id)).round is None
+    await engine.dispose()
+
+
+_LEGACY_REQUEST_LOGS_DDL = """
+CREATE TABLE request_logs (
+    id INTEGER NOT NULL PRIMARY KEY,
+    pipeline_name VARCHAR(100) NOT NULL DEFAULT '',
+    client_model_field VARCHAR(100) NOT NULL,
+    request_messages JSON NOT NULL DEFAULT '[]',
+    request_params JSON NOT NULL DEFAULT '{}',
+    response_content TEXT NOT NULL DEFAULT '',
+    response_finish_reason VARCHAR(30) NOT NULL DEFAULT '',
+    status VARCHAR(30) NOT NULL DEFAULT 'success',
+    total_duration_ms INTEGER NOT NULL DEFAULT 0,
+    total_prompt_tokens INTEGER NOT NULL DEFAULT 0,
+    total_completion_tokens INTEGER NOT NULL DEFAULT 0,
+    client_ip VARCHAR(64) NOT NULL DEFAULT '',
+    created_at DATETIME
+)
+"""
+
+
+async def test_ensure_schema_patches_request_logs_first_token_ms() -> None:
+    """UT-32-4 request_logs 补列 first_token_ms：旧行读回 0；finish_request 可写入。"""
+    engine = create_db_engine(":memory:")
+    async with engine.begin() as conn:
+        await conn.exec_driver_sql(_LEGACY_REQUEST_LOGS_DDL)
+        await conn.exec_driver_sql(
+            "INSERT INTO request_logs (client_model_field) VALUES ('legacy-model')"
+        )
+        assert "first_token_ms" not in await _table_columns(conn, "request_logs")
+
+    await init_db(engine)
+    await init_db(engine)  # 二次执行幂等
+
+    async with engine.begin() as conn:
+        assert "first_token_ms" in await _table_columns(conn, "request_logs")
+
+    factory = create_session_factory(engine)
+    async with factory() as s:
+        row = await s.get(RequestLog, 1)
+        assert row is not None
+        assert row.first_token_ms == 0
+        await finish_request(s, row.id, status="success", total_duration_ms=120, first_token_ms=45)
+        await s.commit()
+    async with factory() as s:
+        row = await s.get(RequestLog, 1)
+        assert row is not None
+        assert row.first_token_ms == 45
+    await engine.dispose()
+
+
+async def test_ensure_schema_patches_pipelines_stream_process() -> None:
+    """UT-32-5 pipelines 补列 stream_process：旧行读回 False；幂等。"""
+    engine = await _build_legacy_engine()  # 旧库 pipelines 无 strategy_params / stream_process
+    async with engine.begin() as conn:
+        assert "stream_process" not in await _table_columns(conn, "pipelines")
+
+    await init_db(engine)
+    await init_db(engine)
+
+    async with engine.begin() as conn:
+        assert "stream_process" in await _table_columns(conn, "pipelines")
+    factory = create_session_factory(engine)
+    async with factory() as s:
+        pipeline = await s.get(Pipeline, 1)
+        assert pipeline is not None
+        assert pipeline.stream_process is False
     await engine.dispose()

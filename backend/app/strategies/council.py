@@ -9,7 +9,7 @@ from __future__ import annotations
 import asyncio
 import re
 import time
-from collections.abc import Callable
+from collections.abc import AsyncIterator, Callable, Coroutine
 from typing import Any
 
 from app.adapters.base import (
@@ -23,7 +23,9 @@ from app.orm import Provider
 from app.strategies.base import (
     AllMembersFailed,
     CallOutcome,
+    FinalPlanReady,
     MemberSpec,
+    ProcessEvent,
     Strategy,
     StrategyContext,
     StrategyExecutionError,
@@ -170,66 +172,99 @@ def sum_usage(outcomes: list[CallOutcome]) -> LlmUsage:
     return usage
 
 
-async def run_members(
+def default_member_adapter_factory(
     ctx: StrategyContext,
-    adapter_factory: AdapterFactory | None = None,
-) -> list[CallOutcome]:
-    """并发执行全部成员：受 max_concurrency 限流、部分失败容错。
+) -> AdapterFactory:
+    """成员适配器工厂（默认）：member_timeout_seconds 为 TTFT/块间空闲超时预算。"""
+
+    member_timeout = float(ctx.pipeline.member_timeout_seconds or 120)
+
+    def factory(provider: Provider, merged: dict[str, Any]) -> BaseAdapter:
+        return build_adapter(
+            provider,
+            fernet_key=ctx.fernet_key,
+            timeout_seconds=member_timeout,
+            max_retries=int(merged.get("max_retries", 1)),
+        )
+
+    return factory
+
+
+async def run_one(
+    ctx: StrategyContext,
+    spec: MemberSpec,
+    adapter_factory: AdapterFactory,
+    semaphore: asyncio.Semaphore,
+) -> CallOutcome:
+    """单成员调用：构造请求 → 限流执行 → 成败均回填 CallOutcome（不抛错）。
 
     上游一律流式调用（决策 D8）：member_timeout_seconds 是成员适配器的
     TTFT/块间空闲超时预算——复杂问题生成再久也不算超时，只有等不到上游数据才超时。
-    容错：默认(skip)只要 ≥1 成功即继续；fault_tolerance.member_failure=strict 时任一失败即
-    抛 AllMembersFailed；全部失败时无论模式都抛 AllMembersFailed。
     """
-    member_timeout = float(ctx.pipeline.member_timeout_seconds or 120)
-    if adapter_factory is None:
+    merged = merge_params(spec.model.default_params, spec.member.param_overrides)
+    request, payload = build_call_request(
+        spec.model.upstream_model_id, ctx.body["messages"], merged, stream=True
+    )
+    outcome = CallOutcome(
+        role="member",
+        model_id=spec.model.id,
+        upstream_model_id=spec.model.upstream_model_id,
+        provider_name=spec.provider.name,
+        request_payload=payload,
+    )
+    adapter = adapter_factory(spec.provider, merged)
+    start = time.perf_counter()
+    async with semaphore:
+        try:
+            result = await adapter.complete(request)
+        except AdapterError as exc:
+            outcome.status = "timeout" if exc.kind == "timeout" else "failed"
+            outcome.error_message = str(exc)
+    outcome.duration_ms = int((time.perf_counter() - start) * 1000)
+    if outcome.status == "success":
+        outcome.response_content = result.content
+        outcome.usage = result.usage
+        outcome.duration_ms = result.duration_ms
+    return outcome
 
-        def adapter_factory(provider: Provider, merged: dict[str, Any]) -> BaseAdapter:
-            return build_adapter(
-                provider,
-                fernet_key=ctx.fernet_key,
-                timeout_seconds=member_timeout,
-                max_retries=int(merged.get("max_retries", 1)),
-            )
 
-    strict = (ctx.pipeline.fault_tolerance or {}).get("member_failure") == "strict"
-    semaphore = asyncio.Semaphore(max(1, int(ctx.pipeline.max_concurrency or 10)))
-
-    async def run_one(spec: MemberSpec) -> CallOutcome:
-        merged = merge_params(spec.model.default_params, spec.member.param_overrides)
-        request, payload = build_call_request(
-            spec.model.upstream_model_id, ctx.body["messages"], merged, stream=True
-        )
-        outcome = CallOutcome(
-            role="member",
-            model_id=spec.model.id,
-            upstream_model_id=spec.model.upstream_model_id,
-            provider_name=spec.provider.name,
-            request_payload=payload,
-        )
-        adapter = adapter_factory(spec.provider, merged)
-        start = time.perf_counter()
-        async with semaphore:
-            try:
-                result = await adapter.complete(request)
-            except AdapterError as exc:
-                outcome.status = "timeout" if exc.kind == "timeout" else "failed"
-                outcome.error_message = str(exc)
-        outcome.duration_ms = int((time.perf_counter() - start) * 1000)
-        if outcome.status == "success":
-            outcome.response_content = result.content
-            outcome.usage = result.usage
-            outcome.duration_ms = result.duration_ms
-        return outcome
-
-    outcomes = list(await asyncio.gather(*(run_one(spec) for spec in ctx.members)))
-
+def check_member_failures(outcomes: list[CallOutcome], *, strict: bool) -> None:
+    """成员容错矩阵：strict 任一失败 / 全部失败 → AllMembersFailed（带全量明细）。"""
     if strict and any(o.status != "success" for o in outcomes):
         raise AllMembersFailed(
             f"strict 模式下存在失败成员: {_failures_summary(outcomes)}", members=outcomes
         )
     if all(o.status != "success" for o in outcomes):
         raise AllMembersFailed(f"全部成员失败: {_failures_summary(outcomes)}", members=outcomes)
+
+
+async def indexed_outcome(
+    index: int, coro: Coroutine[Any, Any, CallOutcome]
+) -> tuple[int, CallOutcome]:
+    """as_completed 包装：携带配置序下标（as_completed 产出的是新协程，无法反查原任务）。"""
+    return index, await coro
+
+
+async def run_members(
+    ctx: StrategyContext,
+    adapter_factory: AdapterFactory | None = None,
+) -> list[CallOutcome]:
+    """并发执行全部成员：受 max_concurrency 限流、部分失败容错。
+
+    容错：默认(skip)只要 ≥1 成功即继续；fault_tolerance.member_failure=strict 时任一失败即
+    抛 AllMembersFailed；全部失败时无论模式都抛 AllMembersFailed。
+    """
+    if adapter_factory is None:
+        adapter_factory = default_member_adapter_factory(ctx)
+    strict = (ctx.pipeline.fault_tolerance or {}).get("member_failure") == "strict"
+    semaphore = asyncio.Semaphore(max(1, int(ctx.pipeline.max_concurrency or 10)))
+
+    outcomes = list(
+        await asyncio.gather(
+            *(run_one(ctx, spec, adapter_factory, semaphore) for spec in ctx.members)
+        )
+    )
+    check_member_failures(outcomes, strict=strict)
     return outcomes
 
 
@@ -415,3 +450,67 @@ class CouncilStrategy(Strategy):
             pre_outcomes=member_outcomes + [critique],
             base_usage=base_usage,
         )
+
+    async def run_stream_process(
+        self, ctx: StrategyContext
+    ) -> AsyncIterator[ProcessEvent | FinalPlanReady]:
+        """过程流式（T38）：成员完成即事件（as_completed 完成序），评论与终局计划随后。
+
+        上游请求与 prepare_stream 逐字节一致（同一 run_one/_run_critique/assemble_final）；
+        仅观测顺序变为完成序，下游评论/终局的答案序仍按成员配置序。
+        """
+        adapter_factory = default_member_adapter_factory(ctx)
+        strict = (ctx.pipeline.fault_tolerance or {}).get("member_failure") == "strict"
+        semaphore = asyncio.Semaphore(max(1, int(ctx.pipeline.max_concurrency or 10)))
+        tasks = [
+            asyncio.ensure_future(
+                indexed_outcome(i, run_one(ctx, spec, adapter_factory, semaphore))
+            )
+            for i, spec in enumerate(ctx.members)
+        ]
+        try:
+            ordered: list[CallOutcome | None] = [None] * len(tasks)
+            for fut in asyncio.as_completed(tasks):
+                i, outcome = await fut
+                ordered[i] = outcome
+                yield ProcessEvent(
+                    kind="member", label=outcome.upstream_model_id, outcome=outcome
+                )
+            member_outcomes = [o for o in ordered if o is not None]
+            check_member_failures(member_outcomes, strict=strict)
+            ok = [o for o in member_outcomes if o.status == "success"]
+
+            adapter = self._judge_adapter(ctx)
+            critique = await self._run_critique(ctx, adapter, ok)
+            yield ProcessEvent(kind="critique", label="评论", outcome=critique)
+            if critique.status != "success":
+                # 评论失败：成员明细已随事件落地，按 prepare_stream 同形态抛错
+                raise StrategyExecutionError(
+                    f"裁判调用失败(评论阶段): {critique.error_message}",
+                    members=member_outcomes,
+                    critique=critique,
+                ) from None
+
+            request, payload = self.assemble_final(
+                ctx,
+                ok,
+                critique.response_content,
+                critique.request_payload["messages"],
+                stream=True,
+            )
+            yield FinalPlanReady(
+                plan=StreamPlan(
+                    adapter=adapter,
+                    request=request,
+                    payload=payload,
+                    model_id=ctx.judge_model.id,
+                    upstream_model_id=ctx.judge_model.upstream_model_id,
+                    provider_name=ctx.judge_provider.name,
+                    pre_outcomes=[],
+                    base_usage=LlmUsage(),
+                )
+            )
+        finally:
+            # detach 关闭时断连会把 CancelledError 传入生成器：取消在飞成员任务
+            for task in tasks:
+                task.cancel()

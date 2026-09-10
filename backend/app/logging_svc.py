@@ -89,6 +89,7 @@ async def finish_request(
     response_content: str = "",
     response_finish_reason: str = "",
     total_duration_ms: int = 0,
+    first_token_ms: int = 0,
     total_prompt_tokens: int = 0,
     total_completion_tokens: int = 0,
 ) -> None:
@@ -99,6 +100,7 @@ async def finish_request(
     row.response_content = response_content
     row.response_finish_reason = response_finish_reason
     row.total_duration_ms = total_duration_ms
+    row.first_token_ms = first_token_ms
     row.total_prompt_tokens = total_prompt_tokens
     row.total_completion_tokens = total_completion_tokens
     await session.flush()

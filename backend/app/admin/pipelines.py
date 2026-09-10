@@ -87,6 +87,7 @@ async def create_pipeline(
         fault_tolerance=body.fault_tolerance,
         max_concurrency=body.max_concurrency,
         enabled=body.enabled,
+        stream_process=body.stream_process,
     )
     try:
         await session.flush()

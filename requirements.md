@@ -101,7 +101,8 @@
 
 - `stream=true` 时以 SSE 返回，chunk 格式兼容 OpenAI。
 - 流式语义：**成员阶段非流式并发**（等待完整答案），**裁判阶段流式转发**给客户端。即用户看到的打字机效果来自裁判模型的输出。
-- 需正确处理客户端中断连接（取消上游调用，标记日志状态为 `client_cancelled`）。
+- 可选字段 `stream_process=true`（仅 Pipeline 流式生效，非流式与透传静默忽略）：过程流式——每个成员/评论完成即以 `delta.reasoning_content` 块（带【成员 X】/【评论】/【第 k 轮评论】标题）推送给客户端，裁判最终答案仍走 `delta.content`；首字节时间（TTFT）从"全部成员完成"提前到"首个成员完成"。上游调用载荷与默认流式完全一致。Pipeline 另有同名开关作为默认（请求体显式 `stream_process` 优先，显式 false 可覆盖 pipeline 默认开）——供无法自定义请求体的客户端（如 Unsloth Studio）使用。
+- 需正确处理客户端中断连接：**默认断连续跑**（detach）——客户端断开后上游调用仍执行到底，日志落真实终态（`success`/`failed`）与完整内容；可配置关闭（`MUTILLM_DETACH_ON_DISCONNECT=false`），关闭后断开即取消上游调用并标记日志状态为 `client_cancelled`。
 
 #### FR-3 模型列表接口 【P1】
 

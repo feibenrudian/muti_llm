@@ -51,6 +51,8 @@ export interface Pipeline {
   fault_tolerance: Record<string, string>;
   max_concurrency: number;
   enabled: boolean;
+  /** 过程流式（reasoning_content）pipeline 级默认；请求体显式 stream_process 优先。 */
+  stream_process: boolean;
   members: PipelineMemberRow[];
 }
 
@@ -105,6 +107,8 @@ export interface TraceDetail {
     response_content: string;
     status: string;
     total_duration_ms: number;
+    /** 请求入口 → 最终响应首个内容 token（TTFT）；失败未产出 token 时为 0。 */
+    first_token_ms: number;
     total_prompt_tokens: number;
     total_completion_tokens: number;
     created_at: string;

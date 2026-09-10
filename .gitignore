@@ -39,3 +39,4 @@ run/
 # ZCode 会话文件
 .zcode/
 .sisyphus/
+.omo/

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from abc import ABC, abstractmethod
 from collections.abc import AsyncIterator, Callable
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from typing import Any
 
 from app.adapters.base import BaseAdapter, LlmRequest, LlmUsage
@@ -141,6 +141,24 @@ class StreamPlan:
     iteration: IterationState | None = None
 
 
+@dataclass
+class ProcessEvent:
+    """渐进执行事件：成员/评论完成（网关发 reasoning chunk + 累积落库明细）。"""
+
+    kind: str  # "member" | "critique"
+    label: str  # 成员 upstream_model_id / "评论" / "第 k 轮评论"
+    outcome: CallOutcome
+    round_no: int | None = None
+
+
+@dataclass
+class FinalPlanReady:
+    """终局就绪：与 prepare_stream 同形态的 StreamPlan（pre_outcomes/base_usage 恒空，
+    前置明细已由 ProcessEvent 携带，token 由网关从事件累计）。"""
+
+    plan: StreamPlan
+
+
 class Strategy(ABC):
     """聚合策略接口。新策略继承本类并用 register_strategy 注册。"""
 
@@ -163,6 +181,25 @@ class Strategy(ABC):
     @abstractmethod
     async def prepare_stream(self, ctx: StrategyContext) -> StreamPlan:
         """流式：完成前置阶段并给出最终阶段的流式调用计划。"""
+
+    async def run_stream_process(
+        self, ctx: StrategyContext
+    ) -> AsyncIterator[ProcessEvent | FinalPlanReady]:
+        """过程流式（stream_process=true，T38）：前置阶段完成即事件，终局就绪收尾。
+
+        默认实现为非渐进回退：走 prepare_stream，再回放前置明细为事件。
+        """
+        plan = await self.prepare_stream(ctx)
+        for outcome in plan.pre_outcomes:
+            kind = "critique" if outcome.role == "judge_critique" else "member"
+            if kind == "member":
+                label = outcome.upstream_model_id
+            elif outcome.round_no is None:
+                label = "评论"
+            else:
+                label = f"第 {outcome.round_no} 轮评论"
+            yield ProcessEvent(kind=kind, label=label, outcome=outcome, round_no=outcome.round_no)
+        yield FinalPlanReady(plan=replace(plan, pre_outcomes=[], base_usage=LlmUsage()))
 
 
 _REGISTRY: dict[str, type[Strategy]] = {}

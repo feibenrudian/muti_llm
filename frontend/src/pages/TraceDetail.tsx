@@ -5,6 +5,7 @@ import { api, streamRejudge, type ModelRow, type TraceCall } from "../lib/api";
 import {
   formatDateTime,
   formatDuration,
+  formatFirstToken,
   seedVersions,
   statusTone,
   toTimeline,
@@ -425,7 +426,15 @@ export default function TraceDetail() {
         key: "final",
         label: "最终响应",
         content: (
-          <Card title={`Ⓝ 最终响应（${request.status}）`}>
+          <Card
+            title={`Ⓝ 最终响应（${request.status}）`}
+            actions={
+              <span className="text-xs text-slate-400">
+                最终响应时间 {formatFirstToken(request.first_token_ms)} · 最终消耗时间{" "}
+                {formatDuration(request.total_duration_ms)}
+              </span>
+            }
+          >
             <p className="whitespace-pre-wrap text-sm">{request.response_content || "（空）"}</p>
           </Card>
         ),

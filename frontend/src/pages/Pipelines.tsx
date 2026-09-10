@@ -102,6 +102,7 @@ interface FormState {
   strategy: string;
   judge_model_id: string;
   judge_prompt_template: string;
+  stream_process: boolean;
   members: MemberDraft[];
   ice: IceParamsForm;
 }
@@ -114,7 +115,7 @@ export default function Pipelines() {
   const { data: strategies = [] } = useQuery({ queryKey: ["strategies"], queryFn: api.meta.strategies });
   const [editing, setEditing] = useState<Pipeline | null>(null);
   const [creating, setCreating] = useState(false);
-  const [form, setForm] = useState<FormState>({ name: "", strategy: "council", judge_model_id: "", judge_prompt_template: "", members: [{ model_id: "", temperature: "" }], ice: ICE_DEFAULTS });
+  const [form, setForm] = useState<FormState>({ name: "", strategy: "council", judge_model_id: "", judge_prompt_template: "", stream_process: false, members: [{ model_id: "", temperature: "" }], ice: ICE_DEFAULTS });
   const [error, setError] = useState("");
   const [defaultTemplate, setDefaultTemplate] = useState("");
 
@@ -131,6 +132,7 @@ export default function Pipelines() {
       strategy: form.strategy,
       judge_model_id: Number(form.judge_model_id),
       judge_prompt_template: form.judge_prompt_template,
+      stream_process: form.stream_process,
       members: form.members
         .filter((member) => member.model_id)
         .map((member) => ({
@@ -183,7 +185,7 @@ export default function Pipelines() {
 
   const openCreate = () => {
     setEditing(null);
-    setForm({ name: "", strategy: "council", judge_model_id: "", judge_prompt_template: defaultTemplate, members: [{ model_id: "", temperature: "" }], ice: ICE_DEFAULTS });
+    setForm({ name: "", strategy: "council", judge_model_id: "", judge_prompt_template: defaultTemplate, stream_process: false, members: [{ model_id: "", temperature: "" }], ice: ICE_DEFAULTS });
     setError("");
     setCreating(true);
   };
@@ -195,6 +197,7 @@ export default function Pipelines() {
       strategy: pipeline.strategy,
       judge_model_id: String(pipeline.judge_model_id),
       judge_prompt_template: pipeline.judge_prompt_template || defaultTemplate,
+      stream_process: pipeline.stream_process,
       members: pipeline.members.map((member) => ({
         model_id: String(member.model_id),
         temperature: member.param_overrides.temperature !== undefined ? String(member.param_overrides.temperature) : "",
@@ -244,6 +247,7 @@ export default function Pipelines() {
                   <Td>{modelName(pipeline.judge_model_id)}</Td>
                   <Td>
                     <Badge tone={pipeline.enabled ? "success" : "muted"}>{pipeline.enabled ? "启用" : "停用"}</Badge>
+                    {pipeline.stream_process ? <Badge tone="warn">过程流式</Badge> : null}
                   </Td>
                   <Td>
                     <div className="flex gap-1">
@@ -318,8 +322,16 @@ export default function Pipelines() {
             </div>
           </div>
 
-          {form.strategy === "ice" ? (
-            <div className="space-y-2 rounded-md border border-slate-200 p-3" data-testid="ice-params">
+          <label className="flex items-center gap-1.5 text-sm text-slate-700">
+            <input
+              type="checkbox"
+              checked={form.stream_process}
+              onChange={(e) => setForm({ ...form, stream_process: e.target.checked })}
+            />
+            过程流式输出（reasoning_content）
+          </label>
+
+          {form.strategy === "ice" ? (            <div className="space-y-2 rounded-md border border-slate-200 p-3" data-testid="ice-params">
               <p className="text-sm font-medium text-slate-700">ICE 策略参数</p>
               <div className="grid grid-cols-2 gap-3">
                 <Field label="max_rounds（成员轮数上限）" hint="整数 1-5，含第 0 轮">

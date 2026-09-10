@@ -56,8 +56,10 @@ curl http://127.0.0.1:8000/v1/chat/completions \
 ```
 
 - `model` 填 Pipeline 名（如 `council-v1`，多模型聚合）或真实模型名（直接透传）
-- 支持流式（`stream: true`，打字机输出来自裁判模型；ICE 策略迭代期间以 SSE 注释行保活，OpenAI SDK 自动忽略）
-- 每次请求的完整链路（原始输入 / 每个成员的输入输出 / 裁判 Prompt / 最终答案 / 耗时 / token）可在 Web UI「调用日志」查询，ICE 链路按轮次分组展示
+- 支持流式（`stream: true`，打字机输出来自裁判模型；空闲期每 15s 发 SSE 注释行心跳保活，OpenAI SDK 自动忽略）
+- 过程流式：请求体加 `"stream_process": true`（或在「组合」页给 Pipeline 勾选「过程流式输出」作为默认，请求体显式 `false` 可临时关闭），成员/评论的产出会以 `reasoning_content`（DeepSeek 风格 think 通道）随流推出，正式答案仍走 `content`
+- 客户端断开默认不中断上游（`MUTILLM_DETACH_ON_DISCONNECT=false` 可恢复"断开即取消"）：结果照常跑完落库，事后可在「调用日志」取回
+- 每次请求的完整链路（原始输入 / 每个成员的输入输出 / 裁判 Prompt / 最终答案 / 首 token 与总耗时 / token）可在 Web UI「调用日志」查询，ICE 链路按轮次分组展示
 
 ## 测试体系（Record once, replay forever）
 

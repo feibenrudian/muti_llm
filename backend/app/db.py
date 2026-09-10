@@ -51,8 +51,12 @@ def create_session_factory(engine: AsyncEngine) -> async_sessionmaker[AsyncSessi
 
 # 轻量补列（ICE D14）：create_all 不会给已存表加列。SQLite ADD COLUMN 的默认值必须是常量。
 _SCHEMA_PATCHES: dict[str, dict[str, str]] = {
-    "pipelines": {"strategy_params": "JSON NOT NULL DEFAULT '{}'"},
+    "pipelines": {
+        "strategy_params": "JSON NOT NULL DEFAULT '{}'",
+        "stream_process": "INTEGER NOT NULL DEFAULT 0",
+    },
     "model_call_logs": {"round": "INTEGER"},
+    "request_logs": {"first_token_ms": "INTEGER NOT NULL DEFAULT 0"},
 }
 
 

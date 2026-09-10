@@ -471,6 +471,19 @@ make seed          # 起服务+灌入演示数据(指向快照回放服务器), 
 
 （T15/T16/T17/T18/T25/T30 的既有用例随两段式行为更新：roles 4 行、usage 四快照之和、评论失败降级、重跑成对落行、评论行不占版本号等。）
 
+#### T38 过程流式（stream_process=true）（增量需求）
+产出：请求体新参数 `stream_process`（仅 Pipeline 流式生效；非流式/透传静默忽略；不进 `strategy_params`、不透传上游，`build_call_request` 白名单不回归）。策略层新增 `ProcessEvent`/`FinalPlanReady`（`app/strategies/base.py`）与 `Strategy.run_stream_process`——默认实现回放 `prepare_stream` 前置明细为非渐进回退；council/ICE 覆写为 `asyncio.as_completed` 完成序渐进执行（`run_one` 提层共享、ICE 第 0 轮移入生成器、`_refine_one` 共享，上游载荷逐字节不变，快照复用不重录）；渐进生成器 try/finally 取消在飞成员任务（对齐 ICE `_iterate` 取消契约）。网关新增 `_pipeline_stream_process`（pump/ferry/persist 同 ICE 迭代路径骨架）：成员/评论完成即发 `delta.reasoning_content` 块（`【成员 X】`/`【评论】`/`【第 k 轮评论】` 标题块 + 按行内容，失败成员一行失败提示），流的首 chunk 携带 role；首个成员成功即返回响应（`asyncio.wait(FIRST_COMPLETED)`），此前 pump 失败重抛走既有 502 JSON；终局裁决照旧 content 流式；前置明细不做开流前预写，由 persist 从事件累计落库。错误契约：部分成员失败 → 提示行后继续；全成员失败 → 502；评论/终局失败 → 流内终止无 [DONE]；ICE 第 0 轮评论失败由 502 转为流内终止（仅 flag 开启时，AE-35-6 opt-in 契约变化）；detach/心跳/t0 请求级计时语义不变，`first_token_ms` 仅在终局首个 content delta 记录。
+| 编号 | 类型 | 用例 | 断言要点 |
+| --- | --- | --- | --- |
+| AE-38-1 | AE | council 过程流式 | 成员块×2 各自连续（完成序不定、不断言成员次序）→ 评论块 → content=裁判流式快照；[DONE] 结尾；落库 roles=[member×2, judge_critique, judge] |
+| AE-38-2 | AE | ICE 多轮过程流式 | 每轮成员块→该轮评论块→终局 content=快照；call 行 round 与既有语义一致 |
+| AE-38-3 | AE | 全成员失败+flag | 开流前 502 JSON（同今日错误形态）；成员失败行照落、裁判未执行 |
+| AE-38-4 | AE | 评论失败+flag | 200，成员块已发出，流内终止无 [DONE]，trace=failed，评论失败行落库 |
+| AE-38-5 | AE | flag 忽略 | 透传流式/非流式 pipeline 带 `stream_process` → 响应与既有行为一致，零 reasoning_content |
+| AE-39-1 | AE | pipeline 默认开 | `pipelines.stream_process=true`（schema 幂等补列）+ 请求体不带 flag → 流式响应含 reasoning 过程块（供不能自定义请求体的客户端） |
+| AE-39-2 | AE | 请求体覆盖默认 | pipeline 默认开 + 请求体显式 `stream_process=false` → 经典路径，零 reasoning 块 |
+| UT-32-5 | UT | schema 补列 | 旧库 pipelines 无该列 → init_db 幂等补列，旧行读回 False |
+
 ---
 
 ## 4. 里程碑映射（对应需求文档 M1–M4）

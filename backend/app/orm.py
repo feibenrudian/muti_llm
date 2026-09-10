@@ -87,6 +87,8 @@ class Pipeline(Base):
     fault_tolerance: Mapped[dict] = mapped_column(JSON, default=dict)
     max_concurrency: Mapped[int] = mapped_column(Integer, default=10)
     enabled: Mapped[bool] = mapped_column(Boolean, default=True)
+    # 过程流式（T38）pipeline 级默认；请求体显式 stream_process 优先于此
+    stream_process: Mapped[bool] = mapped_column(Boolean, default=False)
     created_at: Mapped[datetime] = mapped_column(UTCDatetime, default=utcnow)
     updated_at: Mapped[datetime] = _updated_at()
 
@@ -117,6 +119,8 @@ class RequestLog(Base):
     # success | degraded | failed | client_cancelled
     status: Mapped[str] = mapped_column(String(30), default="success")
     total_duration_ms: Mapped[int] = mapped_column(Integer, default=0)
+    # 请求入口 → 最终响应首个内容 token（TTFT）；失败未产出 token 时保持 0
+    first_token_ms: Mapped[int] = mapped_column(Integer, default=0)
     total_prompt_tokens: Mapped[int] = mapped_column(Integer, default=0)
     total_completion_tokens: Mapped[int] = mapped_column(Integer, default=0)
     client_ip: Mapped[str] = mapped_column(String(64), default="")

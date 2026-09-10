@@ -90,6 +90,7 @@ class PipelineCreate(BaseModel):
     fault_tolerance: dict[str, Any] = Field(default_factory=dict)
     max_concurrency: int = Field(default=10, ge=1, le=100)
     enabled: bool = True
+    stream_process: bool = False
     members: list[PipelineMemberIn] = Field(min_length=1)
 
 
@@ -103,6 +104,7 @@ class PipelineUpdate(BaseModel):
     fault_tolerance: dict[str, Any] | None = None
     max_concurrency: int | None = Field(default=None, ge=1, le=100)
     enabled: bool | None = None
+    stream_process: bool | None = None
     members: list[PipelineMemberIn] | None = None
 
 
@@ -128,6 +130,7 @@ class PipelineOut(BaseModel):
     fault_tolerance: dict[str, Any]
     max_concurrency: int
     enabled: bool
+    stream_process: bool
     created_at: datetime
     updated_at: datetime
     members: list[PipelineMemberOut]

@@ -360,7 +360,7 @@ stream=true 时序：
 | AE-35-3 | AE | 注释行存在且无害 | 迭代场景输出含 `: ice round 1/2` 行；OpenAI 兼容 chunk 序列仍完整可解析 |
 | AE-35-4 | AE | 注释可关 | progress_comments=false → 全程无 `:` 开头行 |
 | AE-35-5 | AE | council 回归 | council 流式输出无注释行，AE-17-1..3 行为不变 |
-| AE-35-6 | AE | 开流前失败 | 第 0 轮评论失败（流式）→ 返回错误 JSON 非 200（同 council 语义） |
+| AE-35-6 | AE | 开流前失败 | 第 0 轮评论失败（流式）→ 返回错误 JSON 非 200（同 council 语义）。**opt-in 契约变化（T38）**：`stream_process=true` 时第 0 轮成员块已发出，评论失败转为流内终止（无 [DONE]），trace=failed |
 | AE-35-7 | AE | 迭代期取消 | backend_live 断开 → client_cancelled；已完成轮次行已落库 |
 
 ### T36 Web UI（UE + 前端 UT）

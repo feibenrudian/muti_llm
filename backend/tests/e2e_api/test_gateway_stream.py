@@ -1,9 +1,11 @@
-"""AE-12-1..3：透传流式 SSE + 客户端取消。"""
+"""AE-12-1..4：透传流式 SSE + 客户端取消/断连续跑。"""
 
 import asyncio
 import json
+import time
 
 import httpx
+import pytest
 
 from app.orm import RequestLog
 from app.repos import Repository
@@ -78,12 +80,38 @@ async def test_stream_logging(
     assert trace.response_content == text
     assert trace.response_content == snapshot_stream_text("passthrough_stream")
 
+    detail = (await asgi_client.get(f"/api/admin/traces/{trace.id}")).json()
+    request = detail["request"]
+    assert request["total_duration_ms"] >= request["first_token_ms"] > 0
+    # 请求级总耗时从请求入口起算，必然覆盖任一调用行的上游耗时
+    assert request["total_duration_ms"] >= detail["calls"][0]["duration_ms"]
 
-async def test_client_cancel(backend_live: tuple[str, str], srs_live_seeded: str) -> None:
+
+async def _wait_terminal_trace(timeout: float = 15.0) -> RequestLog:
+    """轮询直到最新 trace 落终态（detached 续跑是后台完成，不能用固定 sleep）。"""
+    from app.main import app as backend_app
+
+    deadline = time.monotonic() + timeout
+    while True:
+        async with backend_app.state.session_factory() as session:
+            requests = await Repository(session, RequestLog).list()
+            if requests and requests[-1].status != "pending":
+                return requests[-1]
+        assert time.monotonic() < deadline, "trace 未在超时内落终态"
+        await asyncio.sleep(0.1)
+
+
+async def test_client_cancel(
+    backend_live: tuple[str, str], srs_live_seeded: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
     """AE-12-3 取消：读首 chunk 后断开 → 日志 status=client_cancelled。
 
     走真实 TCP（ASGITransport 不传播断开，见 conftest.backend_live 注释）。
+    本用例验证取消语义，显式关闭断连续跑（detach_on_disconnect=False）。
     """
+    from app import settings as settings_module
+
+    monkeypatch.setattr(settings_module.settings, "detach_on_disconnect", False)
     base_url, service_key = backend_live
     async with httpx.AsyncClient(timeout=30) as client:
         # 种子：provider/model 指向 SRS
@@ -127,3 +155,45 @@ async def test_client_cancel(backend_live: tuple[str, str], srs_live_seeded: str
         requests = await Repository(session, RequestLog).list()
         assert requests, "no request logged"
         assert requests[-1].status == "client_cancelled"
+
+
+async def test_client_cancel_detached(
+    backend_live: tuple[str, str], srs_live_seeded: str
+) -> None:
+    """AE-12-4 断连续跑：detach 默认开，断开后上游跑完，trace=success 且全文落库。"""
+    base_url, service_key = backend_live
+    async with httpx.AsyncClient(timeout=30) as client:
+        resp = await client.post(
+            f"{base_url}/api/admin/providers",
+            json={
+                "name": "srs-provider",
+                "protocol": "openai_compatible",
+                "base_url": f"{srs_live_seeded}/v1",
+                "api_key": "sk-srs-test",
+            },
+        )
+        assert resp.status_code == 201
+        provider_id = resp.json()["id"]
+        resp = await client.post(
+            f"{base_url}/api/admin/models",
+            json={
+                "provider_id": provider_id,
+                "display_name": "deepseek-v4-flash",
+                "upstream_model_id": "deepseek-v4-flash",
+            },
+        )
+        assert resp.status_code == 201
+
+        async with client.stream(
+            "POST",
+            f"{base_url}/v1/chat/completions",
+            json=stream_body(),
+            headers=auth_headers(service_key),
+        ) as resp:
+            async for line in resp.aiter_lines():
+                if line.startswith("data: "):
+                    break  # 读完首个 chunk 即断开（与 AE-12-3 同一 payload，快照回放）
+
+    trace = await _wait_terminal_trace()
+    assert trace.status == "success"
+    assert trace.response_content == snapshot_stream_text("passthrough_stream")

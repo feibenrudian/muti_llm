@@ -6,6 +6,7 @@ UI 拿 trace_id 再查 Trace 详情，展示成员答案/裁判 Prompt/最终答
 from __future__ import annotations
 
 import json
+import time
 from typing import Any
 
 from fastapi import APIRouter, BackgroundTasks, Request
@@ -26,13 +27,14 @@ class PlaygroundRun(BaseModel):
 async def playground_run(
     body: PlaygroundRun, request: Request, background: BackgroundTasks
 ) -> dict[str, Any]:
+    t0 = time.perf_counter()
     payload: dict[str, Any] = {
         "model": body.pipeline_name,
         "messages": [{"role": "user", "content": body.message}],
     }
     if body.temperature is not None:
         payload["temperature"] = body.temperature
-    response, trace_id = await execute_chat(request.app, background, payload, "playground")
+    response, trace_id = await execute_chat(request.app, background, payload, "playground", t0)
 
     data: dict[str, Any] | None = None
     if isinstance(response.body, (bytes, bytearray)):
