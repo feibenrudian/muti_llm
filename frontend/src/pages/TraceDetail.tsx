@@ -43,6 +43,54 @@ function CallDetails({ call }: { call: TraceCall }) {
   );
 }
 
+/**
+ * 裁判单轮折叠块：一级折叠 = 第 X 轮，二级折叠 = 输入 / 输出。
+ * live（流式推进到本轮）时自动展开，完成后保持展开；历史数据默认全折叠。
+ */
+function JudgeRound({
+  roundNo,
+  kind,
+  live,
+  payload,
+  children,
+}: {
+  roundNo: number;
+  kind: string;
+  live: boolean;
+  payload: TraceCall["request_payload"] | null;
+  children: ReactNode;
+}) {
+  const roundRef = useRef<HTMLDetailsElement>(null);
+  const outputRef = useRef<HTMLDetailsElement>(null);
+  // 只在 live 由 false 变 true 时展开，不强制收起：用户手动折叠的选择不被流式重渲染覆盖
+  useEffect(() => {
+    if (live) {
+      if (roundRef.current) roundRef.current.open = true;
+      if (outputRef.current) outputRef.current.open = true;
+    }
+  }, [live]);
+  return (
+    <details ref={roundRef}>
+      <summary className="cursor-pointer text-sm font-medium text-slate-700">
+        第 {roundNo} 轮 · {kind}
+        {live ? "（生成中…）" : ""}
+      </summary>
+      <div className="mt-1 ml-3 space-y-1 border-l border-slate-200 pl-3">
+        <details>
+          <summary className="cursor-pointer text-xs text-slate-500">输入</summary>
+          <pre className="mt-1 max-h-72 overflow-auto rounded bg-slate-50 p-2 text-xs">
+            {payload ? JSON.stringify(payload, null, 2) : "等待生成…"}
+          </pre>
+        </details>
+        <details ref={outputRef}>
+          <summary className="cursor-pointer text-xs text-slate-500">输出</summary>
+          {children}
+        </details>
+      </div>
+    </details>
+  );
+}
+
 /** 状态小圆点的配色（tab 上概览各成员成败，沿用 statusTone 的语义）。 */
 const statusDot: Record<"success" | "warn" | "danger" | "muted", string> = {
   success: "bg-emerald-500",
@@ -263,8 +311,13 @@ function JudgeCard({
       ? "warn"
       : statusTone(selected.status);
   const critiques = selected?.critiques ?? [];
+  // 流式两阶段：终局段开流前 payload 已随 meta 事件就位，以此区分"评论阶段 / 终局阶段"
+  const finalPhase = selected?.status === "streaming" && selected.payload !== null;
   const streamingCritique =
-    selected?.status === "streaming" && critiques.some((c) => c.status === "streaming");
+    selected?.status === "streaming" && !finalPhase && critiques.some((c) => c.status === "streaming");
+  // 一级轮次编号：评论按后端 round（ICE 0 起；council/重跑评论无轮次语义 → 顺延），终局 = 最后评论轮 + 1
+  const critiqueRounds = critiques.map((c, i) => c.round ?? i + 1);
+  const finalRoundNo = critiqueRounds.reduce((max, n) => Math.max(max, n), 0) + 1;
   const tabTone = (id: number): keyof typeof statusDot => {
     const v = versions.get(id);
     if (!v) return "muted";
@@ -313,46 +366,34 @@ function JudgeCard({
         </div>
       ) : (
         <div className="space-y-2">
-          {critiques.map((c, i) => (
-            <details key={i} open={c.status === "streaming"}>
-              <summary className="cursor-pointer text-xs text-slate-500">
-                {c.round !== null ? `第 ${c.round} 轮 · 评论` : "第一次调用 · 评论"}
-                {c.status === "streaming" ? "（生成中…）" : ""}
-              </summary>
-              <div className="mt-1 space-y-1">
-                <details>
-                  <summary className="cursor-pointer text-xs text-slate-500">入参（实际发出的完整请求）</summary>
-                  <pre className="mt-1 max-h-72 overflow-auto rounded bg-slate-50 p-2 text-xs">
-                    {c.payload ? JSON.stringify(c.payload, null, 2) : "等待生成…"}
-                  </pre>
-                </details>
-                {/* 评论失败时错误统一在主输出区展示，这里不重复渲染 */}
-                {c.status === "failed" ? null : (
+          {critiques.map((c, i) => {
+            const live = selected.status === "streaming" && !finalPhase && c.status === "streaming";
+            return (
+              <JudgeRound key={i} roundNo={critiqueRounds[i]} kind="评论" live={live} payload={c.payload}>
+                {c.status === "failed" ? (
+                  <p className="rounded bg-red-50 p-2 text-xs text-red-600">{c.error || "评论调用失败"}</p>
+                ) : (
                   <p className="whitespace-pre-wrap rounded bg-slate-50 p-2 text-xs text-slate-600">
-                    {c.content || "等待评论…"}
+                    {c.content || (live ? "等待评论…" : "（空）")}
                   </p>
                 )}
-              </div>
-            </details>
-          ))}
-          <details>
-            <summary className="cursor-pointer text-xs text-slate-500">入参（第二次调用 · 实际发出的完整请求）</summary>
-            <pre className="mt-1 max-h-72 overflow-auto rounded bg-slate-50 p-2 text-xs">
-              {selected.payload ? JSON.stringify(selected.payload, null, 2) : "等待生成…"}
-            </pre>
-          </details>
-          {selected.status === "failed" ? (
-            <p className="rounded bg-red-50 p-2 text-sm text-red-600">{selected.error || "调用失败"}</p>
-          ) : (
-            <p className="whitespace-pre-wrap rounded bg-slate-50 p-2 text-sm">
-              {selected.content ||
-                (selected.status === "streaming"
-                  ? streamingCritique
-                    ? "正在生成评论（第一次调用）…"
-                    : "等待输出…"
-                  : "（空）")}
-            </p>
-          )}
+              </JudgeRound>
+            );
+          })}
+          <JudgeRound roundNo={finalRoundNo} kind="最终答案" live={finalPhase} payload={selected.payload}>
+            {selected.status === "failed" ? (
+              <p className="rounded bg-red-50 p-2 text-sm text-red-600">{selected.error || "调用失败"}</p>
+            ) : (
+              <p className="whitespace-pre-wrap rounded bg-slate-50 p-2 text-sm">
+                {selected.content ||
+                  (selected.status === "streaming"
+                    ? streamingCritique
+                      ? "正在生成评论…"
+                      : "等待输出…"
+                    : "（空）")}
+              </p>
+            )}
+          </JudgeRound>
           {selected.status === "failed" || selected.status === "cancelled" ? (
             <div>
               <Button variant="secondary" onClick={() => startStream(selectedModelId)}>

@@ -77,8 +77,8 @@ test("UE-27-2 详情时间线：原始请求 → 裁判 → 成员tab切换 → 
   await expect(memberTabs.first()).toHaveAttribute("aria-selected", "true");
 
   // 非选中成员不渲染：入参/输出折叠块只有当前成员一份，且默认折叠保持紧凑
-  const outputDetails = page.locator('details:has(summary:text-is("输出"))');
-  await expect(outputDetails).toHaveCount(1); // 裁判输出直出展示，折叠块仅成员
+  const outputDetails = memberCard.locator('details:has(summary:text-is("输出"))');
+  await expect(outputDetails).toHaveCount(1); // 裁判输出收在轮次折叠块内，成员卡的输出折叠块仅此一份
   await expect(outputDetails).not.toHaveAttribute("open");
 
   // 切 tab 即换成员模型：入参 temperature 随成员切换（0.7 → 0.9 → 0.7），无需长页滚动
@@ -93,18 +93,23 @@ test("UE-27-2 详情时间线：原始请求 → 裁判 → 成员tab切换 → 
   await memberTabs.nth(0).click();
   await expect(inputDetails.locator("pre")).toContainText('"temperature": 0.7');
 
-  // 裁判入参（第二次调用）含组装 Prompt（展开后可见成员答案标注）；输出直接可见且即最终答案
+  // 裁判按轮分层：一级=第 X 轮（第 1 轮评论 / 第 2 轮最终答案），二级=输入/输出，默认全折叠
   await page.getByRole("tab", { name: /裁判/ }).click();
   const judgeCard = page.locator("section", { hasText: "裁判调用" });
-  const finalInput = judgeCard.locator("details").filter({ hasText: "入参（第二次调用" });
-  await finalInput.locator("summary").click();
-  await expect(finalInput.locator("pre")).toContainText("【回答 1】");
+  const finalRound = judgeCard
+    .locator("details")
+    .filter({ has: page.getByText("第 2 轮 · 最终答案", { exact: true }) });
+  await finalRound.locator("summary").first().click();
+  await finalRound.getByText("输入", { exact: true }).click();
+  // 终局输入含组装 Prompt（成员答案标注）
+  await expect(finalRound.locator("pre")).toContainText("【回答 1】");
+  await finalRound.getByText("输出", { exact: true }).click();
   await page.getByRole("tab", { name: "最终响应" }).click();
   const finalText = await page
     .locator("section", { hasText: "最终响应" })
     .locator("p")
     .innerText();
-  await expect(judgeCard.locator("p").last()).toHaveText(finalText);
+  await expect(judgeCard.locator("p.text-sm")).toHaveText(finalText);
 });
 
 test("UE-27-3 失败详情：成员卡片展示错误信息", async ({ page, request }) => {
@@ -191,11 +196,14 @@ test("UE-31-1 两段式裁判：裁判卡展示评论（第一次调用），换
   await page.getByRole("tab", { name: /裁判/ }).click();
   const judgeCard = page.locator("section").filter({ has: page.getByLabel("裁判模型") });
 
-  // 原始版本：评论块（第一次调用）内含入参与评论输出；主输出 = 第二次调用的最终答案
-  const critiqueBlock = judgeCard.locator("details").filter({ hasText: "第一次调用 · 评论" });
+  // 原始版本：第 1 轮（评论）折叠块内含输入与评论输出；第 2 轮（最终答案）输出 = 主答案
+  const critiqueBlock = judgeCard
+    .locator("details")
+    .filter({ has: page.getByText("第 1 轮 · 评论", { exact: true }) });
   await critiqueBlock.locator("summary").first().click();
-  await critiqueBlock.getByText("入参（实际发出的完整请求）").click();
+  await critiqueBlock.getByText("输入", { exact: true }).click();
   await expect(critiqueBlock.locator("pre")).toContainText("你将看到用户的问题");
+  await critiqueBlock.getByText("输出", { exact: true }).click();
   await expect(critiqueBlock.locator("p")).toContainText("【回答 1】");
   await expect(critiqueBlock.locator("p")).toContainText("可信度");
   await expect(judgeCard.locator("p.text-sm")).toContainText("量子纠缠");

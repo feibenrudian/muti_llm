@@ -119,21 +119,33 @@ test("UE-36-3 Trace 轮次展示：成员卡带第 0/1 轮标签，裁判卡内�
   await page.getByRole("tab", { name: "成员模型输出 · 第 1 轮" }).click();
   await expect(memberCard.getByText("第 1 轮", { exact: true })).toBeVisible();
 
-  // 裁判卡：两轮评论折叠块默认折叠，逐轮独立展开；终局答案直出
+  // 裁判卡按轮分层：一级=第 X 轮（默认折叠，逐轮独立展开），二级=输入/输出；终局答案在最后一轮内
   await page.getByRole("tab", { name: "裁判模型输出" }).click();
   const judgeCard = page.locator("section").filter({ has: page.getByLabel("裁判模型") });
-  const round0 = judgeCard.locator("details").filter({ hasText: "第 0 轮 · 评论" });
-  const round1 = judgeCard.locator("details").filter({ hasText: "第 1 轮 · 评论" });
+  const round0 = judgeCard
+    .locator("details")
+    .filter({ has: page.getByText("第 0 轮 · 评论", { exact: true }) });
+  const round1 = judgeCard
+    .locator("details")
+    .filter({ has: page.getByText("第 1 轮 · 评论", { exact: true }) });
+  const finalRound = judgeCard
+    .locator("details")
+    .filter({ has: page.getByText("第 2 轮 · 最终答案", { exact: true }) });
   await expect(round0).toBeVisible();
   await expect(round1).toBeVisible();
+  await expect(finalRound).toBeVisible();
   await expect(round0).not.toHaveAttribute("open");
   await expect(round1).not.toHaveAttribute("open");
   await round0.locator("summary").first().click();
+  await round0.getByText("输出", { exact: true }).click();
   await expect(round0.locator("p")).toContainText("consensus");
   await expect(round1).not.toHaveAttribute("open");
   await round1.locator("summary").first().click();
+  await round1.getByText("输出", { exact: true }).click();
   await expect(round1.locator("p")).toContainText("consensus");
-  await expect(judgeCard.locator("p.text-sm")).toContainText("井栏");
+  await finalRound.locator("summary").first().click();
+  await finalRound.getByText("输出", { exact: true }).click();
+  await expect(finalRound.locator("p.text-sm")).toContainText("井栏");
 });
 
 test("UE-36-4 Playground：ICE pipeline 试运行，多轮成员卡 + 最终答案正常展示", async ({
@@ -188,9 +200,11 @@ test("UE-36-5 换裁判重跑：ICE trace 换成员模型作裁判，流式两�
   await expect(judgeCard.getByText("该模型尚未生成裁判结果")).toBeVisible();
   await judgeCard.getByRole("button", { name: "生成", exact: true }).click();
 
-  // 两段输出完整呈现：评论段（自由文本）+ 最终答案，版本数 +1
+  // 两段输出完整呈现：评论在第 1 轮（重跑评论无轮次语义 → 顺延编号）、最终答案在第 2 轮，版本数 +1
   await expect(page.getByText("裁判聚合（2 个版本）")).toBeVisible({ timeout: 30_000 });
-  const critiqueBlock = judgeCard.locator("details").filter({ hasText: "第一次调用 · 评论" });
+  const critiqueBlock = judgeCard
+    .locator("details")
+    .filter({ has: page.getByText("第 1 轮 · 评论", { exact: true }) });
   await expect(critiqueBlock.locator("p")).toContainText("【回答 1】");
   await expect(judgeCard.locator("p.text-sm")).toContainText("三种主要说法");
 });
