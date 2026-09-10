@@ -42,6 +42,8 @@ class SrsState:
     # reset 的恢复基准：保持构造时（如 runner 提速）的缩放，而非硬编码 1.0
     initial_delay_scale: float = 1.0
     models_auth_fail: bool = False
+    # 非 None 时 /v1/models 固定返回该列表（模拟上游模型列表增减，AE-40-1）；reset 恢复 None
+    models_override: list[str] | None = None
     recordings: list[dict[str, Any]] = field(default_factory=list)
 
 
@@ -264,9 +266,8 @@ def create_app(
                     }
                 },
             )
-        data = [
-            {"id": mid, "object": "model", "owned_by": "srs"} for mid in state.store.model_ids()
-        ]
+        ids = state.models_override if state.models_override is not None else state.store.model_ids()
+        data = [{"id": mid, "object": "model", "owned_by": "srs"} for mid in ids]
         return JSONResponse({"object": "list", "data": data})
 
     @app.post("/_test/config")
@@ -279,6 +280,7 @@ def create_app(
             state.timeout_ms.clear()
             state.delay_scale = state.initial_delay_scale
             state.models_auth_fail = False
+            state.models_override = None
             state.recordings.clear()
         if "fail_times" in body:
             state.fail_times.update(body["fail_times"])
@@ -292,6 +294,12 @@ def create_app(
             state.delay_scale = float(body["delay_scale"])
         if "models_auth_fail" in body:
             state.models_auth_fail = bool(body["models_auth_fail"])
+        if "models_override" in body:
+            state.models_override = (
+                [str(mid) for mid in body["models_override"]]
+                if body["models_override"] is not None
+                else None
+            )
         return JSONResponse(
             {
                 "mode": state.mode,
@@ -300,6 +308,7 @@ def create_app(
                 "timeout_ms": state.timeout_ms,
                 "delay_scale": state.delay_scale,
                 "models_auth_fail": state.models_auth_fail,
+                "models_override": state.models_override,
                 "recordings": len(state.recordings),
                 "snapshots": len(state.store),
             }

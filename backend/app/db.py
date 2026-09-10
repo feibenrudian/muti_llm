@@ -55,6 +55,7 @@ _SCHEMA_PATCHES: dict[str, dict[str, str]] = {
         "strategy_params": "JSON NOT NULL DEFAULT '{}'",
         "stream_process": "INTEGER NOT NULL DEFAULT 0",
     },
+    "models": {"upstream_missing": "INTEGER NOT NULL DEFAULT 0"},
     "model_call_logs": {"round": "INTEGER"},
     "request_logs": {"first_token_ms": "INTEGER NOT NULL DEFAULT 0"},
 }

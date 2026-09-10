@@ -484,6 +484,13 @@ make seed          # 起服务+灌入演示数据(指向快照回放服务器), 
 | AE-39-2 | AE | 请求体覆盖默认 | pipeline 默认开 + 请求体显式 `stream_process=false` → 经典路径，零 reasoning 块 |
 | UT-32-5 | UT | schema 补列 | 旧库 pipelines 无该列 → init_db 幂等补列，旧行读回 False |
 
+#### T40 模型同步下线标记（增量需求）
+产出：Provider 模型同步从"只增"改为全量 diff（`_sync_models` 取代 `_create_missing_models`）——上游列表已消失的模型打 `models.upstream_missing=true` 并联动停用（`enabled=false`，schema 幂等补列），防止继续配置过时模型；重新上架自动恢复 enabled；用户手动停用（upstream_missing=false）不被覆盖；不物理删除（级联删除仅用户显式触发）。`POST /providers/{id}/test` 响应新增 `removed`（本次新下线的模型 ID）；模型页下线模型置灰、加"上游已下线"标签并置底排序；Pipeline 成员/裁判选择器不列出下线模型（已选中的保留展示便于更换）。SRS `_test/config` 新增 `models_override`（模拟上游列表增减，reset 恢复）。
+| 编号 | 类型 | 用例 | 断言要点 |
+| --- | --- | --- | --- |
+| AE-40-1 | AE | 下线同步 | 上游缩列表 → removed=[下线ID]、该模型 upstream_missing=true+enabled=false；重复测试不重复上报；手动停用不被覆盖；重新上架自动恢复 enabled |
+| UT-40-1 | UT | schema 补列 | 旧库 models 无该列 → init_db 幂等补列，旧行读回 False |
+
 ---
 
 ## 4. 里程碑映射（对应需求文档 M1–M4）

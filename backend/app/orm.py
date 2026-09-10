@@ -68,6 +68,8 @@ class LlmModel(Base):
     # {temperature, max_tokens, top_p, timeout_seconds, max_retries}
     default_params: Mapped[dict] = mapped_column(JSON, default=dict)
     enabled: Mapped[bool] = mapped_column(Boolean, default=True)
+    # 模型同步发现上游列表已无此 ID（enabled 被联动置 False）；与手动停用区分，上游重新上架时自动恢复
+    upstream_missing: Mapped[bool] = mapped_column(Boolean, default=False)
     created_at: Mapped[datetime] = mapped_column(UTCDatetime, default=utcnow)
     updated_at: Mapped[datetime] = _updated_at()
 

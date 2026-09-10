@@ -35,8 +35,13 @@ const readIceParams = (params: Record<string, unknown>): IceParamsForm => ({
 });
 
 // 上游 ID 与展示名相同时不重复拼接，避免下拉选项无谓加长
-const modelOptionLabel = (model: ModelRow) =>
-  model.display_name === model.upstream_model_id ? model.display_name : `${model.display_name}（${model.upstream_model_id}）`;
+const modelOptionLabel = (model: ModelRow) => {
+  const base =
+    model.display_name === model.upstream_model_id
+      ? model.display_name
+      : `${model.display_name}（${model.upstream_model_id}）`;
+  return model.upstream_missing ? `${base}【上游已下线】` : base;
+};
 
 /** 供应商→模型两级联动：先选供应商缩小范围，再在其模型中挑选，避免全量列表过长并消歧同名模型。 */
 function ProviderModelSelects({
@@ -59,7 +64,13 @@ function ProviderModelSelects({
   const selected = models.find((m: ModelRow) => String(m.id) === value);
   const derivedProvider = selected ? String(selected.provider_id) : "";
   const providerId = pickedProvider || derivedProvider;
-  const scopedModels = providerId ? models.filter((m: ModelRow) => String(m.provider_id) === providerId) : [];
+  // 上游已下线的模型不进选项（防止新配置引用过时模型）；已选中的仍保留展示，便于用户识别并更换
+  const scopedModels = providerId
+    ? models.filter(
+        (m: ModelRow) =>
+          String(m.provider_id) === providerId && (!m.upstream_missing || String(m.id) === value),
+      )
+    : [];
   const providerOptions = providers.filter((p: Provider) => models.some((m: ModelRow) => m.provider_id === p.id));
   return (
     <>

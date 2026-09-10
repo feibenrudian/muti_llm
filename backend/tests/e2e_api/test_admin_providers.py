@@ -239,3 +239,62 @@ async def test_auto_sync_models(asgi_client: httpx.AsyncClient, srs_live_seeded:
     )
     assert resp.status_code == 201
     assert (await asgi_client.get("/api/admin/models")).json().__len__() == 1
+
+
+async def test_sync_marks_removed_models_offline(asgi_client: httpx.AsyncClient, srs_live: str) -> None:
+    """AE-40-1 下线同步：上游列表缩小时消失的模型被标记 upstream_missing 并联动停用
+    （重复测试不重复上报）；用户手动停用不被同步覆盖；上游重新上架自动恢复。"""
+    http = httpx.AsyncClient()
+    await http.post(f"{srs_live}/_test/config", json={"models_override": ["m-stay", "m-gone"]})
+    resp = await asgi_client.post(
+        "/api/admin/providers",
+        json={
+            "name": "sync-offline",
+            "protocol": "openai_compatible",
+            "base_url": f"{srs_live}/v1",
+            "api_key": "sk-srs-test",
+        },
+    )
+    pid = resp.json()["id"]
+
+    async def models_of_provider() -> dict[str, dict]:
+        rows = (await asgi_client.get("/api/admin/models")).json()
+        return {m["upstream_model_id"]: m for m in rows if m["provider_id"] == pid}
+
+    assert set(await models_of_provider()) == {"m-stay", "m-gone"}
+
+    # 上游下线 m-gone → 测试触发同步：标记下线 + 联动停用，不物理删除
+    await http.post(f"{srs_live}/_test/config", json={"models_override": ["m-stay"]})
+    data = (await asgi_client.post(f"/api/admin/providers/{pid}/test")).json()
+    assert data["ok"] is True
+    assert data["removed"] == ["m-gone"]
+    assert data["synced"] == []
+    rows = await models_of_provider()
+    assert rows["m-gone"]["upstream_missing"] is True
+    assert rows["m-gone"]["enabled"] is False
+    assert rows["m-stay"]["upstream_missing"] is False
+    assert rows["m-stay"]["enabled"] is True
+
+    # 重复测试：已标记的不重复上报
+    data = (await asgi_client.post(f"/api/admin/providers/{pid}/test")).json()
+    assert data["removed"] == []
+
+    # 用户手动停用仍在上游的模型：同步不覆盖其 enabled，也不打上游下线标
+    stay_id = rows["m-stay"]["id"]
+    assert (await asgi_client.patch(f"/api/admin/models/{stay_id}", json={"enabled": False})).status_code == 200
+    data = (await asgi_client.post(f"/api/admin/providers/{pid}/test")).json()
+    assert data["removed"] == []
+    rows = await models_of_provider()
+    assert rows["m-stay"]["enabled"] is False
+    assert rows["m-stay"]["upstream_missing"] is False
+
+    # 上游重新上架 m-gone：自动恢复启用；手动停用的 m-stay 保持停用
+    await http.post(f"{srs_live}/_test/config", json={"models_override": ["m-stay", "m-gone"]})
+    data = (await asgi_client.post(f"/api/admin/providers/{pid}/test")).json()
+    assert data["synced"] == []
+    assert data["removed"] == []
+    rows = await models_of_provider()
+    assert rows["m-gone"]["upstream_missing"] is False
+    assert rows["m-gone"]["enabled"] is True
+    assert rows["m-stay"]["enabled"] is False
+    assert rows["m-stay"]["upstream_missing"] is False

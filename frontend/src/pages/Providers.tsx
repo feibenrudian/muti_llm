@@ -55,7 +55,7 @@ export default function Providers() {
     onMutate: (id) => setTestResult((prev) => ({ ...prev, [id]: "loading" })),
     onSuccess: (result, id) => {
       setTestResult((prev) => ({ ...prev, [id]: result }));
-      if (result.synced && result.synced.length > 0) invalidate();
+      if ((result.synced?.length ?? 0) + (result.removed?.length ?? 0) > 0) invalidate();
     },
     onError: (err, id) =>
       setTestResult((prev) => ({
@@ -134,6 +134,11 @@ export default function Providers() {
                           {result.synced && result.synced.length > 0 ? (
                             <p className="text-xs text-emerald-600">
                               同步新增 {result.synced.length} 个模型
+                            </p>
+                          ) : null}
+                          {result.removed && result.removed.length > 0 ? (
+                            <p className="text-xs text-amber-600">
+                              同步停用 {result.removed.length} 个上游已下线模型：{result.removed.join("、")}
                             </p>
                           ) : null}
                         </>

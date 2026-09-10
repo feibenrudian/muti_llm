@@ -37,18 +37,22 @@ def to_out(row: Provider, fernet_key: bytes) -> ProviderOut:
     )
 
 
-async def _create_missing_models(
+async def _sync_models(
     session: AsyncSession, provider_row: Provider, upstream_ids: list[str]
-) -> list[str]:
-    """按上游模型列表补建该 Provider 缺失的 LlmModel（display_name=模型 ID），返回新建列表。"""
-    existing = set(
-        (
-            await session.execute(
-                select(LlmModel.upstream_model_id).where(LlmModel.provider_id == provider_row.id)
-            )
-        ).scalars()
+) -> tuple[list[str], list[str]]:
+    """按上游模型列表全量 diff 同步该 Provider 的 LlmModel，返回 (新增, 本次下线)。
+
+    缺失的补建（display_name=模型 ID）；上游已消失的标记下线（upstream_missing=True 且
+    enabled=False，防止用户继续配置过时模型）；标记过的模型重新上架则自动恢复 enabled。
+    手动停用（upstream_missing=False）的模型不受同步影响。"""
+    rows = (
+        (await session.execute(select(LlmModel).where(LlmModel.provider_id == provider_row.id)))
+        .scalars()
+        .all()
     )
-    created: list[str] = []
+    existing = {row.upstream_model_id: row for row in rows}
+    upstream_set = set(upstream_ids)
+    added: list[str] = []
     for upstream_id in upstream_ids:
         if upstream_id in existing:
             continue
@@ -57,8 +61,20 @@ async def _create_missing_models(
             display_name=upstream_id,
             upstream_model_id=upstream_id,
         )
-        created.append(upstream_id)
-    return created
+        added.append(upstream_id)
+    removed: list[str] = []
+    for row in rows:
+        if row.upstream_model_id in upstream_set:
+            if row.upstream_missing:  # 重新上架：恢复同步时的联动停用
+                await Repository(session, LlmModel).update(
+                    row.id, upstream_missing=False, enabled=True
+                )
+        elif not row.upstream_missing:  # 尚未标记 → 本次新下线；已标记不动（用户手动启用不被覆盖）
+            await Repository(session, LlmModel).update(
+                row.id, upstream_missing=True, enabled=False
+            )
+            removed.append(row.upstream_model_id)
+    return added, removed
 
 
 @router.post("", status_code=201, response_model=ProviderOut)
@@ -75,10 +91,10 @@ async def create_provider(
         enabled=body.enabled,
     )
     await session.commit()
-    # 建好即按上游模型列表自动补建（best-effort）：上游不可达不阻塞创建，之后点"测试"会再同步
+    # 建好即按上游模型列表自动同步（best-effort）：上游不可达不阻塞创建，之后点"测试"会再同步
     try:
         adapter = build_adapter(row, fernet_key=fernet_key, timeout_seconds=15, max_retries=0)
-        await _create_missing_models(session, row, await adapter.probe())
+        await _sync_models(session, row, await adapter.probe())
         await session.commit()
     except Exception:
         await session.rollback()
@@ -146,7 +162,7 @@ async def test_provider(
     provider_id: int, request: Request, session: AsyncSession = Depends(get_session)
 ) -> dict:
     """连通性测试（业务结果而非异常，便于 UI 展示）：GET 上游模型列表，验证 URL/Key 可用；
-    成功时顺带把上游新出现的模型同步进来。"""
+    成功时顺带全量同步模型：新增上游新出现的模型，停用（不下删）上游已消失的模型。"""
     row = await Repository(session, Provider).get(provider_id)
     if row is None:
         raise HTTPException(status_code=404, detail="provider not found")
@@ -160,13 +176,14 @@ async def test_provider(
     start = time.perf_counter()
     try:
         model_ids = await adapter.probe()
-        synced = await _create_missing_models(session, row, model_ids)
+        synced, removed = await _sync_models(session, row, model_ids)
         await session.commit()
         return {
             "ok": True,
             "latency_ms": int((time.perf_counter() - start) * 1000),
             "models": model_ids[:50],
             "synced": synced,
+            "removed": removed,
         }
     except AdapterError as exc:
         return {

@@ -68,6 +68,7 @@ class ModelOut(BaseModel):
     upstream_model_id: str
     default_params: dict[str, Any]
     enabled: bool
+    upstream_missing: bool
     created_at: datetime
     updated_at: datetime
 

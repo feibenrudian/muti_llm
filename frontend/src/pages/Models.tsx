@@ -65,6 +65,11 @@ export default function Models() {
       })),
   });
 
+  // 上游已下线的模型置底展示（置灰 + 标签），正常模型保持按 id 稳定排序
+  const sortedModels = [...models].sort(
+    (a: ModelRow, b: ModelRow) => Number(a.upstream_missing) - Number(b.upstream_missing) || a.id - b.id,
+  );
+
   return (
     <div className="space-y-4">
       <h1 className="text-lg font-bold">模型（Model）</h1>
@@ -86,11 +91,17 @@ export default function Models() {
               </tr>
             </thead>
             <tbody>
-              {models.map((model: ModelRow) => {
+              {sortedModels.map((model: ModelRow) => {
                 const result = testResult[model.id];
                 return (
-                  <tr key={model.id} className="border-b border-slate-50">
-                    <Td>{model.display_name}</Td>
+                  <tr
+                    key={model.id}
+                    className={`border-b border-slate-50 ${model.upstream_missing ? "opacity-50" : ""}`}
+                  >
+                    <Td>
+                      {model.display_name}{" "}
+                      {model.upstream_missing ? <Badge tone="warn">上游已下线</Badge> : null}
+                    </Td>
                     <Td>{providerName(model.provider_id)}</Td>
                     <Td className="font-mono text-xs">{model.upstream_model_id}</Td>
                     <Td className="font-mono text-xs">{JSON.stringify(model.default_params)}</Td>
@@ -100,7 +111,7 @@ export default function Models() {
                       ) : result.ok ? (
                         <Badge tone="success">成功 {result.latency_ms}ms</Badge>
                       ) : (
-                        <Badge tone="danger" >失败</Badge>
+                        <Badge tone="danger">失败</Badge>
                       )}
                       {result && result !== "loading" && !result.ok ? (
                         <p className="mt-1 max-w-64 text-xs text-red-600">{result.error}</p>

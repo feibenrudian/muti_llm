@@ -19,6 +19,7 @@ export interface ProviderTestResult {
   latency_ms: number;
   models?: string[];
   synced?: string[];
+  removed?: string[];
   error?: string;
 }
 
@@ -29,6 +30,8 @@ export interface ModelRow {
   upstream_model_id: string;
   default_params: Record<string, number>;
   enabled: boolean;
+  /** 模型同步发现上游列表已无此 ID（联动停用；重新上架自动恢复） */
+  upstream_missing: boolean;
   created_at: string;
   updated_at: string;
 }

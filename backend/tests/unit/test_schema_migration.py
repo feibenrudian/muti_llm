@@ -4,7 +4,7 @@ from sqlalchemy.ext.asyncio import AsyncConnection, AsyncEngine
 
 from app.db import create_db_engine, create_session_factory, init_db
 from app.logging_svc import finish_request, record_call, start_request
-from app.orm import ModelCallLog, Pipeline, RequestLog
+from app.orm import LlmModel, ModelCallLog, Pipeline, RequestLog
 from app.strategies.base import CallOutcome
 
 _LEGACY_PIPELINES_DDL = """
@@ -84,6 +84,61 @@ async def test_ensure_schema_patches_legacy_db() -> None:
         assert pipeline.strategy_params == {}
         call = (await s.execute(ModelCallLog.__table__.select())).mappings().one()
         assert call["round"] is None
+    await engine.dispose()
+
+
+async def test_ensure_schema_patches_models_upstream_missing() -> None:
+    """UT-40-1 models 补列 upstream_missing：旧行读回 False；幂等。"""
+    engine = create_db_engine(":memory:")
+    async with engine.begin() as conn:
+        await conn.exec_driver_sql(
+            """
+CREATE TABLE providers (
+    id INTEGER NOT NULL PRIMARY KEY,
+    name VARCHAR(100) NOT NULL,
+    protocol VARCHAR(30) NOT NULL,
+    base_url VARCHAR(500) NOT NULL,
+    api_key_encrypted TEXT,
+    remark VARCHAR(500),
+    enabled BOOLEAN,
+    created_at DATETIME,
+    updated_at DATETIME
+)
+"""
+        )
+        await conn.exec_driver_sql(
+            """
+CREATE TABLE models (
+    id INTEGER NOT NULL PRIMARY KEY,
+    provider_id INTEGER NOT NULL,
+    display_name VARCHAR(100) NOT NULL,
+    upstream_model_id VARCHAR(200) NOT NULL,
+    default_params JSON NOT NULL DEFAULT '{}',
+    enabled BOOLEAN NOT NULL DEFAULT 1,
+    created_at DATETIME,
+    updated_at DATETIME
+)
+"""
+        )
+        await conn.exec_driver_sql(
+            "INSERT INTO providers (id, name, protocol, base_url) VALUES (1, 'p', 'openai_compatible', 'http://x')"
+        )
+        await conn.exec_driver_sql(
+            "INSERT INTO models (id, provider_id, display_name, upstream_model_id) VALUES (1, 1, 'm', 'm-up')"
+        )
+        assert "upstream_missing" not in await _table_columns(conn, "models")
+
+    await init_db(engine)
+    await init_db(engine)  # 二次执行幂等
+
+    async with engine.begin() as conn:
+        assert "upstream_missing" in await _table_columns(conn, "models")
+
+    factory = create_session_factory(engine)
+    async with factory() as s:
+        model = await s.get(LlmModel, 1)
+        assert model is not None
+        assert model.upstream_missing is False
     await engine.dispose()
 
 
