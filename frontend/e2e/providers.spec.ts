@@ -19,7 +19,9 @@ test("UE-21-5 协议自动识别：Anthropic 官方地址标记 anthropic 并正
   await page.goto("/providers");
   await page.getByRole("button", { name: "新建 Provider" }).click();
   await page.getByLabel("名称").fill("Claude E2E");
-  await page.getByLabel("Base URL").fill("https://api.anthropic.com");
+  // hostname 含 "anthropic" 触发协议识别；.invalid 为 RFC 2606 保留 TLD 必不解析，
+  // 保存时的连通性探测毫秒级失败（best-effort 秒回），不直连真实 api.anthropic.com
+  await page.getByLabel("Base URL").fill("https://api.anthropic.invalid");
   await expect(page.locator("form").getByText("已识别协议：anthropic")).toBeVisible();
   await page.getByLabel("API Key").fill("sk-ant-e2e-12345678");
   await page.getByRole("button", { name: "保存" }).click();
