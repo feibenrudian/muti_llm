@@ -226,6 +226,10 @@ export type RejudgeStreamEvent =
       duration_ms: number;
       prompt_tokens: number;
       completion_tokens: number;
+      /** 评论段（第一次调用）单列的耗时/token；duration_ms/prompt_tokens 为两段合计。 */
+      critique_duration_ms: number;
+      critique_prompt_tokens: number;
+      critique_completion_tokens: number;
     };
 
 /**

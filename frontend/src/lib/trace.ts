@@ -72,6 +72,9 @@ export interface JudgeCritique {
   payload: TraceCall["request_payload"] | null;
   /** ICE 轮评论的轮次；council 评论与重跑评论为 null。 */
   round: number | null;
+  durationMs: number;
+  promptTokens: number;
+  completionTokens: number;
 }
 
 /** 一个裁判版本的展示状态：已落库的行、或进行中/刚结束的流式重跑（content=第二次调用的最终答案）。 */
@@ -99,6 +102,9 @@ export const critiqueFromCall = (call: TraceCall): JudgeCritique => ({
   error: call.error_message,
   payload: call.request_payload,
   round: call.round,
+  durationMs: call.duration_ms,
+  promptTokens: call.prompt_tokens,
+  completionTokens: call.completion_tokens,
 });
 
 export const versionFromCall = (call: TraceCall): JudgeVersion => ({

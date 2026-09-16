@@ -52,12 +52,14 @@ function JudgeRound({
   kind,
   live,
   payload,
+  stats,
   children,
 }: {
   roundNo: number;
   kind: string;
   live: boolean;
   payload: TraceCall["request_payload"] | null;
+  stats?: string;
   children: ReactNode;
 }) {
   const roundRef = useRef<HTMLDetailsElement>(null);
@@ -72,8 +74,11 @@ function JudgeRound({
   return (
     <details ref={roundRef}>
       <summary className="cursor-pointer text-sm font-medium text-slate-700">
-        第 {roundNo} 轮 · {kind}
+        <span>
+          第 {roundNo} 轮 · {kind}
+        </span>
         {live ? "（生成中…）" : ""}
+        {stats ? <span className="ml-2 text-xs font-normal text-slate-400">{stats}</span> : null}
       </summary>
       <div className="mt-1 ml-3 space-y-1 border-l border-slate-200 pl-3">
         <details>
@@ -219,7 +224,16 @@ function JudgeCard({
           setVersion(modelId, (v) => ({
             ...v,
             critiques: [
-              { status: "streaming", content: "", error: "", payload: event.payload, round: null },
+              {
+                status: "streaming",
+                content: "",
+                error: "",
+                payload: event.payload,
+                round: null,
+                durationMs: 0,
+                promptTokens: 0,
+                completionTokens: 0,
+              },
             ],
           }));
         } else {
@@ -232,7 +246,18 @@ function JudgeCard({
             receivedTokens: v.receivedTokens + 1,
             critiques: v.critiques.length
               ? [{ ...v.critiques[0], content: v.critiques[0].content + event.text }]
-              : [{ status: "streaming", content: event.text, error: "", payload: null, round: null }],
+              : [
+                  {
+                    status: "streaming",
+                    content: event.text,
+                    error: "",
+                    payload: null,
+                    round: null,
+                    durationMs: 0,
+                    promptTokens: 0,
+                    completionTokens: 0,
+                  },
+                ],
           }));
         } else {
           setVersion(modelId, (v) => ({
@@ -247,9 +272,10 @@ function JudgeCard({
           status: event.status === "success" ? "success" : "failed",
           content: event.content,
           error: event.error,
-          durationMs: event.duration_ms,
-          promptTokens: event.prompt_tokens,
-          completionTokens: event.completion_tokens,
+          // done 事件的 duration/tokens 是两段合计；版本行只挂终局段，与落库口径一致
+          durationMs: event.duration_ms - event.critique_duration_ms,
+          promptTokens: event.prompt_tokens - event.critique_prompt_tokens,
+          completionTokens: event.completion_tokens - event.critique_completion_tokens,
           critiques: v.critiques.length
             ? [
                 {
@@ -257,6 +283,9 @@ function JudgeCard({
                   status: event.critique ? "success" : "failed",
                   content: event.critique || v.critiques[0].content,
                   error: event.critique ? "" : event.error,
+                  durationMs: event.critique_duration_ms,
+                  promptTokens: event.critique_prompt_tokens,
+                  completionTokens: event.critique_completion_tokens,
                 },
               ]
             : [],
@@ -369,7 +398,18 @@ function JudgeCard({
           {critiques.map((c, i) => {
             const live = selected.status === "streaming" && !finalPhase && c.status === "streaming";
             return (
-              <JudgeRound key={i} roundNo={critiqueRounds[i]} kind="评论" live={live} payload={c.payload}>
+              <JudgeRound
+                key={i}
+                roundNo={critiqueRounds[i]}
+                kind="评论"
+                live={live}
+                payload={c.payload}
+                stats={
+                  live
+                    ? undefined
+                    : `${formatDuration(c.durationMs)} · ${c.promptTokens}/${c.completionTokens} tokens`
+                }
+              >
                 {c.status === "failed" ? (
                   <p className="rounded bg-red-50 p-2 text-xs text-red-600">{c.error || "评论调用失败"}</p>
                 ) : (
@@ -380,7 +420,17 @@ function JudgeCard({
               </JudgeRound>
             );
           })}
-          <JudgeRound roundNo={finalRoundNo} kind="最终答案" live={finalPhase} payload={selected.payload}>
+          <JudgeRound
+            roundNo={finalRoundNo}
+            kind="最终答案"
+            live={finalPhase}
+            payload={selected.payload}
+            stats={
+              selected.status === "streaming"
+                ? undefined
+                : `${formatDuration(selected.durationMs)} · ${selected.promptTokens}/${selected.completionTokens} tokens`
+            }
+          >
             {selected.status === "failed" ? (
               <p className="rounded bg-red-50 p-2 text-sm text-red-600">{selected.error || "调用失败"}</p>
             ) : (

@@ -254,6 +254,9 @@ async def rejudge_stream(
                 "duration_ms": outcome.duration_ms,
                 "prompt_tokens": critique_usage.prompt_tokens + final_usage.prompt_tokens,
                 "completion_tokens": critique_usage.completion_tokens + final_usage.completion_tokens,
+                "critique_duration_ms": outcome.critique_duration_ms,
+                "critique_prompt_tokens": critique_usage.prompt_tokens,
+                "critique_completion_tokens": critique_usage.completion_tokens,
             }
         )
 
