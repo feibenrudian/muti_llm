@@ -29,7 +29,7 @@ export default defineConfig({
         },
         { command: backendCmd, port: 9802, timeout: 60_000, reuseExistingServer: false },
         {
-          command: "VITE_PROXY_TARGET=http://127.0.0.1:9802 npm run dev -- --port 9803 --strictPort",
+          command: "VITE_PROXY_TARGET=http://127.0.0.1:9802 npm run dev -- --host 127.0.0.1 --port 9803 --strictPort",
           port: 9803,
           timeout: 60_000,
           reuseExistingServer: false,
