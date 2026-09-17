@@ -10,8 +10,22 @@ RUN_DIR="$ROOT_DIR/run"
 PID_FILE="$RUN_DIR/muti_llm.pid"
 LOG_FILE="$RUN_DIR/server.log"
 
-HOST="${MUTILLM_HOST:-127.0.0.1}"
+HOST="${MUTILLM_HOST:-0.0.0.0}"
 PORT="${MUTILLM_PORT:-8000}"
+
+# 0.0.0.0 仅表示“监听所有网卡”，本机访问/健康检查仍走 127.0.0.1
+connect_host() {
+  if [ "$HOST" = "0.0.0.0" ] || [ "$HOST" = "::" ]; then
+    echo "127.0.0.1"
+  else
+    echo "$HOST"
+  fi
+}
+
+# 局域网访问地址（取默认路由出口网卡的 IPv4，取不到则回退 127.0.0.1）
+lan_ip() {
+  ip -4 route get 1.1.1.1 2>/dev/null | sed -n 's/.*src \([0-9.]\+\).*/\1/p' | head -n1 || true
+}
 
 is_running() {
   [ -f "$PID_FILE" ] && kill -0 "$(cat "$PID_FILE")" 2>/dev/null
@@ -45,7 +59,7 @@ wait_healthy() {
   local pid="$1" i
   for i in $(seq 1 60); do
     kill -0 "$pid" 2>/dev/null || return 1
-    if curl -sf "http://$HOST:$PORT/health" >/dev/null 2>&1; then
+    if curl -sf "http://$(connect_host):$PORT/health" >/dev/null 2>&1; then
       return 0
     fi
     sleep 0.5
@@ -78,12 +92,22 @@ ensure_frontend_built() {
 }
 
 print_ports() {
+  local display_host="$HOST" lip
+  if [ "$HOST" = "0.0.0.0" ] || [ "$HOST" = "::" ]; then
+    lip="$(lan_ip)"
+    display_host="${lip:-127.0.0.1}"
+  fi
   echo "──────────────────────────────────────────────────────"
-  echo "  Web UI          http://$HOST:$PORT/"
-  echo "  OpenAI 兼容 API  http://$HOST:$PORT/v1/chat/completions   (Authorization: Bearer <服务Key>)"
-  echo "  管理 API         http://$HOST:$PORT/api/admin"
-  echo "  API 文档         http://$HOST:$PORT/docs"
-  echo "  健康检查         http://$HOST:$PORT/health"
+  if [ "$display_host" != "$HOST" ]; then
+    echo "  监听地址         $HOST（所有网卡，局域网可访问）"
+    echo "  局域网访问       http://$display_host:$PORT/"
+    echo "  本机访问         http://127.0.0.1:$PORT/"
+  fi
+  echo "  Web UI          http://$display_host:$PORT/"
+  echo "  OpenAI 兼容 API  http://$display_host:$PORT/v1/chat/completions   (Authorization: Bearer <服务Key>)"
+  echo "  管理 API         http://$display_host:$PORT/api/admin"
+  echo "  API 文档         http://$display_host:$PORT/docs"
+  echo "  健康检查         http://$display_host:$PORT/health"
   echo "  运行日志         $LOG_FILE"
   echo "──────────────────────────────────────────────────────"
 }
@@ -177,8 +201,8 @@ do_stop() {
 
 do_status() {
   if is_running; then
-    echo "✓ 运行中 (pid $(cat "$PID_FILE"))，端口 $PORT"
-    curl -sf "http://$HOST:$PORT/health" && echo ""
+    echo "✓ 运行中 (pid $(cat "$PID_FILE"))，监听 $HOST:$PORT"
+    curl -sf "http://$(connect_host):$PORT/health" && echo ""
     return 0
   fi
   local occupants
@@ -186,7 +210,7 @@ do_status() {
   if [ -n "$occupants" ]; then
     echo "⚠ PID 文件缺失/失效，但端口 $PORT 正被进程占用 (pid: $(echo $occupants))"
     echo "  多为本脚本外启动的服务（如 make dev-backend）；可执行 $0 restart 接管"
-    curl -sf "http://$HOST:$PORT/health" && echo ""
+    curl -sf "http://$(connect_host):$PORT/health" && echo ""
     return 0
   fi
   echo "✗ 未运行"
@@ -200,7 +224,7 @@ case "${1:-}" in
   status) do_status ;;
   *)
     echo "用法: $0 {start|stop|restart|status}"
-    echo "环境变量: MUTILLM_HOST(默认 127.0.0.1)  MUTILLM_PORT(默认 8000)"
+    echo "环境变量: MUTILLM_HOST(默认 0.0.0.0，监听所有网卡；仅本机可设为 127.0.0.1)  MUTILLM_PORT(默认 8000)"
     exit 1
     ;;
 esac
