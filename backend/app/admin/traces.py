@@ -283,6 +283,8 @@ async def rejudge_stream(
                 duration_ms=outcome.critique_duration_ms or outcome.duration_ms,
                 prompt_tokens=critique_usage.prompt_tokens,
                 completion_tokens=critique_usage.completion_tokens,
+                cached_tokens=critique_usage.cached_tokens,
+                cache_write_tokens=critique_usage.cache_write_tokens,
             )
             if outcome.final_payload is not None:
                 await record_call(
@@ -298,6 +300,8 @@ async def rejudge_stream(
                     duration_ms=outcome.duration_ms,
                     prompt_tokens=final_usage.prompt_tokens,
                     completion_tokens=final_usage.completion_tokens,
+                    cached_tokens=final_usage.cached_tokens,
+                    cache_write_tokens=final_usage.cache_write_tokens,
                 )
             await s.commit()
 

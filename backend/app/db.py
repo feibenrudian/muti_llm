@@ -56,7 +56,11 @@ _SCHEMA_PATCHES: dict[str, dict[str, str]] = {
         "stream_process": "INTEGER NOT NULL DEFAULT 0",
     },
     "models": {"upstream_missing": "INTEGER NOT NULL DEFAULT 0"},
-    "model_call_logs": {"round": "INTEGER"},
+    "model_call_logs": {
+        "round": "INTEGER",
+        "cached_tokens": "INTEGER NOT NULL DEFAULT 0",
+        "cache_write_tokens": "INTEGER NOT NULL DEFAULT 0",
+    },
     "request_logs": {"first_token_ms": "INTEGER NOT NULL DEFAULT 0"},
 }
 

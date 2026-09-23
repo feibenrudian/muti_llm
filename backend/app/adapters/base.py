@@ -35,8 +35,18 @@ class LlmRequest:
 
 @dataclass
 class LlmUsage:
+    """归一化 token 用量（T41 对账语义）。
+
+    prompt_tokens 恒为计费输入总量（含缓存命中与写入）：OpenAI 兼容上游原生即此语义；
+    Anthropic 的 input_tokens 不含缓存部分，由适配器补和归一化。cached_tokens 为命中
+    （读缓存）部分，cache_write_tokens 为写入缓存部分（仅 Anthropic 暴露，OpenAI 自动
+    缓存无独立写入计费）。
+    """
+
     prompt_tokens: int = 0
     completion_tokens: int = 0
+    cached_tokens: int = 0
+    cache_write_tokens: int = 0
 
     @property
     def total_tokens(self) -> int:

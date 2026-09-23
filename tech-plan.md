@@ -491,6 +491,20 @@ make seed          # 起服务+灌入演示数据(指向快照回放服务器), 
 | AE-40-1 | AE | 下线同步 | 上游缩列表 → removed=[下线ID]、该模型 upstream_missing=true+enabled=false；重复测试不重复上报；手动停用不被覆盖；重新上架自动恢复 enabled |
 | UT-40-1 | UT | schema 补列 | 旧库 models 无该列 → init_db 幂等补列，旧行读回 False |
 
+#### T41 用量统计看板（增量需求）
+产出：与供应商对账的 token 用量统计看板（FR-15 扩展）。数据采集先行修复三处失真：① `LlmUsage` 扩展 `cached_tokens`/`cache_write_tokens` 并归一化语义——`prompt_tokens` 恒为计费输入总量（OpenAI 兼容上游原生含 cached；Anthropic 的 input_tokens 不含缓存，适配器补和为 input+cache_read+cache_creation），命中=cached、未命中=prompt−cached−write；openai_compat 解析 `prompt_tokens_details.cached_tokens`，anthropic 适配器解析 `cache_read_input_tokens`/`cache_creation_input_tokens`。② 流式路径的 usage 事件此前被丢弃（透传流式 token 全记 0、裁判流式只记前置阶段汇总），四处 pump 改用 `stream_events_timed` 捕获 usage 并透传落库（`record_call`/`to_log_kwargs`/rejudge 落库同步加缓存两列）。③ schema 幂等补列 `model_call_logs.cached_tokens/cache_write_tokens`（无 Alembic，D2）。统计 API 新增 `app/admin/stats.py`（1.2 未规划统计端点位置：属 admin 管理域只读资源路由，与 traces.py 平级；聚合用 SQLAlchemy func.sum/func.date 直接查询，无独立写路径故不设域服务）四端点 `overview/daily/by-provider/by-model`，数据源为 `model_call_logs`（冗余存储 provider_name/upstream_model_id，配置删除后统计仍完整；`created_at` 已有索引），共用 start/end（end 含当天，语义同 traces）/provider/model 筛选，`daily` 按 UTC 天分组；命中率由前端计算。前端新增"用量统计"页（路由 `/stats`）：KPI 卡、手写堆叠柱状日趋势图（零图表依赖，与项目无组件库约定一致）、供应商/模型明细表（含命中率列）、CSV 导出（客户端生成，BOM+CRLF/引号转义）。`mock_anthropic.build_sse_events` 增加可选缓存 usage 参数（测试地基，默认行为不变）。
+| 编号 | 类型 | 用例 | 断言要点 |
+| --- | --- | --- | --- |
+| UT-41-1 | UT | schema 补列 | 旧库 model_call_logs 无缓存两列 → init_db 幂等补列，旧行读回 0 |
+| UT-41-2 | UT | OpenAI 缓存解析 | chunk usage 带 prompt_tokens_details.cached_tokens → LlmUsage.cached_tokens；字段缺省 → 0 |
+| UT-41-3 | UT | Anthropic 归一化 | 带 cache_read/creation → prompt=input+读+写、cached/写 分列；无字段 → 行为与现状一致 |
+| UT-41-4 | UT | 前端纯函数 | hitRate/未命中（异常口径不为负）/formatTokens/formatRate/toCsv（BOM+转义） |
+| AE-41-1 | AE | 聚合正确性 | SRS 回放跑 council → 四端点合计与 model_call_logs 逐行求和一致；裁判行 cached_tokens 与快照 usage 一致（解析→落库→聚合全链路） |
+| AE-41-2 | AE | 筛选 | provider/model/日期范围（start=明天 → 空；end 含当天）各维度命中正确 |
+| AE-41-3 | AE | 流式 usage 修复 | 透传流式与 council 流式的调用行/请求级总计 token 与快照一致（修复前为 0），请求级总计=该请求各调用行之和 |
+| UE-41-1 | UE | 看板渲染 | 造数跑一次 council → 模型表 2 行、供应商表行含快照精确合计；起始=明天 → 空态，重置 → 恢复 |
+| UE-41-2 | UE | CSV 导出 | 导出触发 download，文件名/BOM/中文表头/供应商行内容正确 |
+
 ---
 
 ## 4. 里程碑映射（对应需求文档 M1–M4）

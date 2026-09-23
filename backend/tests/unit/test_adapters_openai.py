@@ -192,6 +192,73 @@ async def test_reasoning_phase_no_false_timeout(srs_thinking: str) -> None:
     assert result.usage.completion_tokens == 5
 
 
+# ---- 缓存命中拆分（T41）：prompt_tokens_details.cached_tokens 解析 ----
+
+CACHE_REQUEST: dict[str, Any] = {
+    "model": "mock-cache",
+    "messages": [{"role": "user", "content": "缓存用例"}],
+    "stream": True,
+    "stream_options": {"include_usage": True},
+}
+
+
+def _cache_chunks(usage: dict[str, Any]) -> list[dict[str, Any]]:
+    return [
+        _thinking_chunk({"content": "你好"}, delay_ms=0),
+        {"chunk": {"id": "chatcmpl-cache", "object": "chat.completion.chunk", "created": 1,
+                   "model": "mock-cache", "choices": [], "usage": usage}, "delay_ms": 0},
+    ]
+
+
+@pytest.fixture
+def srs_cache_usage(tmp_path: Path) -> Generator[str, None, None]:
+    """挂载带/不带 cached_tokens 两个合成快照的 SRS。"""
+    root = tmp_path / "snapshots"
+    store = SnapshotStore(root)
+    store.save(
+        Snapshot(
+            scenario="cache_hit",
+            request=dict(CACHE_REQUEST, messages=[{"role": "user", "content": "缓存用例A"}]),
+            stream_chunks=_cache_chunks(
+                {
+                    "prompt_tokens": 100,
+                    "completion_tokens": 20,
+                    "prompt_tokens_details": {"cached_tokens": 64},
+                }
+            ),
+        )
+    )
+    store.save(
+        Snapshot(
+            scenario="cache_absent",
+            request=dict(CACHE_REQUEST, messages=[{"role": "user", "content": "缓存用例B"}]),
+            stream_chunks=_cache_chunks({"prompt_tokens": 100, "completion_tokens": 20}),
+        )
+    )
+    yield from _run_srs(root)
+
+
+async def test_usage_cached_tokens_parsed(srs_cache_usage: str) -> None:
+    """UT-41-2 缓存命中拆分：cached_tokens 从 details 解析；字段缺省 → 0。"""
+    adapter = make_adapter(srs_cache_usage)
+    hit = await adapter.complete(
+        LlmRequest(
+            model="mock-cache", messages=[NormalizedMessage(role="user", content="缓存用例A")]
+        )
+    )
+    assert hit.usage.prompt_tokens == 100
+    assert hit.usage.cached_tokens == 64
+    assert hit.usage.completion_tokens == 20
+
+    absent = await adapter.complete(
+        LlmRequest(
+            model="mock-cache", messages=[NormalizedMessage(role="user", content="缓存用例B")]
+        )
+    )
+    assert absent.usage.prompt_tokens == 100
+    assert absent.usage.cached_tokens == 0
+
+
 async def test_reasoning_events_surface(srs_thinking: str) -> None:
     """UT-06-13 思考增量暴露为 reasoning 事件：text 为空，reasoning 拼接完整、只含 content 正文。"""
     adapter = make_adapter(srs_thinking)

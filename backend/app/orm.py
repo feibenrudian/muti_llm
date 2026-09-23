@@ -151,6 +151,9 @@ class ModelCallLog(Base):
     duration_ms: Mapped[int] = mapped_column(Integer, default=0)
     prompt_tokens: Mapped[int] = mapped_column(Integer, default=0)
     completion_tokens: Mapped[int] = mapped_column(Integer, default=0)
+    # 缓存拆分（T41 对账）：命中读/写入缓存的输入 token 数，均含于 prompt_tokens
+    cached_tokens: Mapped[int] = mapped_column(Integer, default=0)
+    cache_write_tokens: Mapped[int] = mapped_column(Integer, default=0)
     created_at: Mapped[datetime] = mapped_column(UTCDatetime, default=utcnow)
 
 

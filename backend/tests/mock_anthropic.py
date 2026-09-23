@@ -28,12 +28,24 @@ DEFAULT_NON_STREAM: dict[str, Any] = {
 }
 
 
-def build_sse_events(deltas: Sequence[str], *, thinking: Sequence[str] = ()) -> list[str]:
+def build_sse_events(
+    deltas: Sequence[str],
+    *,
+    thinking: Sequence[str] = (),
+    cache_read_input_tokens: int = 0,
+    cache_creation_input_tokens: int = 0,
+) -> list[str]:
     """按增量文本生成合法的 Anthropic SSE 事件行序列。
 
     thinking 非空时先输出 thinking 内容块（thinking_delta 增量），再输出文本块。
     signature 为空串：ThinkingBlock 必填该字段，但空值不影响流式累积。
+    缓存两个参数非 0 时写入 message_start 的 usage（真实上游形态），供 T41 归一化用例使用。
     """
+    start_usage: dict[str, Any] = {"input_tokens": 5, "output_tokens": 0}
+    if cache_read_input_tokens:
+        start_usage["cache_read_input_tokens"] = cache_read_input_tokens
+    if cache_creation_input_tokens:
+        start_usage["cache_creation_input_tokens"] = cache_creation_input_tokens
     lines = [
         (
             "message_start",
@@ -44,7 +56,7 @@ def build_sse_events(deltas: Sequence[str], *, thinking: Sequence[str] = ()) -> 
                     "role": "assistant",
                     "content": [],
                     "model": "claude-sonnet-4",
-                    "usage": {"input_tokens": 5, "output_tokens": 0},
+                    "usage": start_usage,
                 },
             },
         ),

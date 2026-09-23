@@ -10,6 +10,7 @@ import Pipelines from "./pages/Pipelines";
 import Playground from "./pages/Playground";
 import Traces from "./pages/Traces";
 import TraceDetail from "./pages/TraceDetail";
+import Stats from "./pages/Stats";
 import Settings from "./pages/Settings";
 
 const queryClient = new QueryClient({
@@ -28,6 +29,7 @@ const router = createBrowserRouter([
       { path: "playground", element: <Playground /> },
       { path: "traces", element: <Traces /> },
       { path: "traces/:id", element: <TraceDetail /> },
+      { path: "stats", element: <Stats /> },
       { path: "settings", element: <Settings /> },
     ],
   },

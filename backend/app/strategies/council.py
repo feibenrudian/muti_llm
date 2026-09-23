@@ -169,6 +169,8 @@ def sum_usage(outcomes: list[CallOutcome]) -> LlmUsage:
     for o in outcomes:
         usage.prompt_tokens += o.usage.prompt_tokens
         usage.completion_tokens += o.usage.completion_tokens
+        usage.cached_tokens += o.usage.cached_tokens
+        usage.cache_write_tokens += o.usage.cache_write_tokens
     return usage
 
 

@@ -143,6 +143,44 @@ export interface PlaygroundResult {
   trace_id: number | null;
 }
 
+/** 用量统计（T41 对账看板）：prompt_tokens 恒为计费输入总量（含缓存命中/写入）。 */
+export interface UsageMetrics {
+  calls: number;
+  failed_calls: number;
+  prompt_tokens: number;
+  completion_tokens: number;
+  cached_tokens: number;
+  cache_write_tokens: number;
+  total_tokens: number;
+}
+
+export type StatsOverview = UsageMetrics;
+
+export interface StatsDailyRow extends UsageMetrics {
+  /** UTC 日期（YYYY-MM-DD），与库内 created_at 时区一致。 */
+  date: string;
+}
+
+export interface StatsProviderRow extends UsageMetrics {
+  provider_name: string;
+}
+
+export interface StatsModelRow extends UsageMetrics {
+  provider_name: string;
+  model_id: number;
+  upstream_model_id: string;
+  /** 模型已删除时为 null，统计仍按日志冗余字段呈现。 */
+  display_name: string | null;
+}
+
+/** 类型别名（非 interface）：需要隐式索引签名以传入 buildQuery 的 Record 参数。 */
+export type StatsFilters = {
+  start?: string;
+  end?: string;
+  provider?: string;
+  model?: string;
+};
+
 export class ApiError extends Error {
   status: number;
 
@@ -331,5 +369,12 @@ export const api = {
     update: (body: { log_retention_days?: number }) => patch<{ ok: boolean }>("/api/admin/settings", body),
     serviceKey: () => req<ServiceKeyInfo>("/api/admin/settings/service-key"),
     resetKey: () => post<{ service_api_key: string }>("/api/admin/settings/service-key/reset"),
+  },
+  stats: {
+    overview: (params: StatsFilters) => req<StatsOverview>(`/api/admin/stats/overview${buildQuery(params)}`),
+    daily: (params: StatsFilters) => req<StatsDailyRow[]>(`/api/admin/stats/daily${buildQuery(params)}`),
+    byProvider: (params: StatsFilters) =>
+      req<StatsProviderRow[]>(`/api/admin/stats/by-provider${buildQuery(params)}`),
+    byModel: (params: StatsFilters) => req<StatsModelRow[]>(`/api/admin/stats/by-model${buildQuery(params)}`),
   },
 };

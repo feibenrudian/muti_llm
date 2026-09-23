@@ -15,7 +15,7 @@ from fastapi import APIRouter, BackgroundTasks, Request
 from fastapi.responses import JSONResponse, Response, StreamingResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.adapters.base import AdapterError, LlmRequest, NormalizedMessage
+from app.adapters.base import AdapterError, LlmRequest, LlmUsage, NormalizedMessage
 from app.adapters.factory import build_adapter
 from app.logging_svc import finish_request, record_call, start_request
 from app.orm import LlmModel, Provider
@@ -541,11 +541,14 @@ async def _pipeline_stream(
         outcome.status = "client_cancelled"
         try:
             queue.put_nowait(_sse(chunk({"role": "assistant"})))
-            async for delta in plan.adapter.stream(plan.request):
-                if outcome.first_token_ms == 0:
-                    outcome.first_token_ms = _elapsed_ms(t0)
-                outcome.parts.append(delta)
-                queue.put_nowait(_sse(chunk({"content": delta})))
+            async for event in plan.adapter.stream_events_timed(plan.request):
+                if event.usage is not None:
+                    outcome.usage = event.usage
+                if event.text:
+                    if outcome.first_token_ms == 0:
+                        outcome.first_token_ms = _elapsed_ms(t0)
+                    outcome.parts.append(event.text)
+                    queue.put_nowait(_sse(chunk({"content": event.text})))
             queue.put_nowait(_sse(chunk({}, finish_reason="stop")))
             queue.put_nowait("data: [DONE]\n\n")
             outcome.status = "success"
@@ -577,6 +580,7 @@ async def _pipeline_stream(
 
         await asyncio.gather(pump_task, return_exceptions=True)
         content = "".join(outcome.parts)
+        judge_usage = outcome.usage or LlmUsage()
         judge = CallOutcome(
             role="judge",
             model_id=plan.model_id,
@@ -587,6 +591,7 @@ async def _pipeline_stream(
             status=outcome.status,
             error_message=outcome.error,
             duration_ms=outcome.duration_ms,
+            usage=judge_usage,
         )
         async with session_factory() as s:
             await _record_outcomes(s, trace_id, [judge])
@@ -597,8 +602,9 @@ async def _pipeline_stream(
                 response_content=content,
                 total_duration_ms=_elapsed_ms(t0),
                 first_token_ms=outcome.first_token_ms,
-                total_prompt_tokens=plan.base_usage.prompt_tokens,
-                total_completion_tokens=plan.base_usage.completion_tokens,
+                total_prompt_tokens=plan.base_usage.prompt_tokens + judge_usage.prompt_tokens,
+                total_completion_tokens=plan.base_usage.completion_tokens
+                + judge_usage.completion_tokens,
             )
             await s.commit()
 
@@ -650,11 +656,14 @@ async def _pipeline_stream_iterative(
                     )
             final_plan = iteration.final_plan
             queue.put_nowait(_sse(chunk({"role": "assistant"})))
-            async for delta in final_plan.adapter.stream(final_plan.request):
-                if outcome.first_token_ms == 0:
-                    outcome.first_token_ms = _elapsed_ms(t0)
-                outcome.parts.append(delta)
-                queue.put_nowait(_sse(chunk({"content": delta})))
+            async for event in final_plan.adapter.stream_events_timed(final_plan.request):
+                if event.usage is not None:
+                    outcome.usage = event.usage
+                if event.text:
+                    if outcome.first_token_ms == 0:
+                        outcome.first_token_ms = _elapsed_ms(t0)
+                    outcome.parts.append(event.text)
+                    queue.put_nowait(_sse(chunk({"content": event.text})))
             queue.put_nowait(_sse(chunk({}, finish_reason="stop")))
             queue.put_nowait("data: [DONE]\n\n")
             outcome.status = "success"
@@ -688,6 +697,9 @@ async def _pipeline_stream_iterative(
         for o in iter_outcomes:
             prompt_tokens += o.usage.prompt_tokens
             completion_tokens += o.usage.completion_tokens
+        final_usage = outcome.usage or LlmUsage()
+        prompt_tokens += final_usage.prompt_tokens
+        completion_tokens += final_usage.completion_tokens
         async with session_factory() as s:
             if iter_outcomes:
                 await _record_outcomes(s, trace_id, iter_outcomes)
@@ -702,6 +714,7 @@ async def _pipeline_stream_iterative(
                     status=outcome.status,
                     error_message=outcome.error,
                     duration_ms=outcome.duration_ms,
+                    usage=final_usage,
                 )
                 await _record_outcomes(s, trace_id, [judge])
             await finish_request(
@@ -761,11 +774,14 @@ async def _pipeline_stream_process(
                     final_plan = ev.plan
                     # 终局转发：与常规流式路径同形态（role → content → stop → [DONE]）
                     queue.put_nowait(_sse(chunk({"role": "assistant"})))
-                    async for delta in final_plan.adapter.stream(final_plan.request):
-                        if outcome.first_token_ms == 0:
-                            outcome.first_token_ms = _elapsed_ms(t0)
-                        outcome.parts.append(delta)
-                        queue.put_nowait(_sse(chunk({"content": delta})))
+                    async for event in final_plan.adapter.stream_events_timed(final_plan.request):
+                        if event.usage is not None:
+                            outcome.usage = event.usage
+                        if event.text:
+                            if outcome.first_token_ms == 0:
+                                outcome.first_token_ms = _elapsed_ms(t0)
+                            outcome.parts.append(event.text)
+                            queue.put_nowait(_sse(chunk({"content": event.text})))
                     queue.put_nowait(_sse(chunk({}, finish_reason="stop")))
                     queue.put_nowait("data: [DONE]\n\n")
                     outcome.status = "success"
@@ -840,6 +856,9 @@ async def _pipeline_stream_process(
         for o in pre_outcomes:
             prompt_tokens += o.usage.prompt_tokens
             completion_tokens += o.usage.completion_tokens
+        final_usage = outcome.usage or LlmUsage()
+        prompt_tokens += final_usage.prompt_tokens
+        completion_tokens += final_usage.completion_tokens
         async with session_factory() as s:
             if pre_outcomes:
                 await _record_outcomes(s, trace_id, pre_outcomes)
@@ -854,6 +873,7 @@ async def _pipeline_stream_process(
                     status=outcome.status,
                     error_message=outcome.error,
                     duration_ms=outcome.duration_ms,
+                    usage=final_usage,
                 )
                 await _record_outcomes(s, trace_id, [judge])
             await finish_request(
@@ -1046,13 +1066,18 @@ async def _passthrough(
 
 @dataclass
 class StreamOutcome:
-    """流式结果载体：generator 只更新内存，由 background task 持久化（断开安全）。"""
+    """流式结果载体：generator 只更新内存，由 background task 持久化（断开安全）。
+
+    usage 为终局流（passthrough 为唯一调用，pipeline 为裁判调用）结束时的汇总事件，
+    上游不支持 usage 时保持 None（T41：此前该事件被丢弃，流式 token 全部记 0）。
+    """
 
     status: str = "client_cancelled"
     parts: list[str] = field(default_factory=list)
     error: str = ""
     duration_ms: int = 0
     first_token_ms: int = 0
+    usage: LlmUsage | None = None
 
 
 async def _passthrough_stream(
@@ -1081,11 +1106,14 @@ async def _passthrough_stream(
         outcome.status = "client_cancelled"  # 未到终态即结束 → 视为取消
         try:
             queue.put_nowait(_sse(chunk({"role": "assistant"})))
-            async for delta in adapter.stream(llm_request):
-                if outcome.first_token_ms == 0:
-                    outcome.first_token_ms = _elapsed_ms(t0)
-                outcome.parts.append(delta)
-                queue.put_nowait(_sse(chunk({"content": delta})))
+            async for event in adapter.stream_events_timed(llm_request):
+                if event.usage is not None:
+                    outcome.usage = event.usage
+                if event.text:
+                    if outcome.first_token_ms == 0:
+                        outcome.first_token_ms = _elapsed_ms(t0)
+                    outcome.parts.append(event.text)
+                    queue.put_nowait(_sse(chunk({"content": event.text})))
             queue.put_nowait(_sse(chunk({}, finish_reason="stop")))
             queue.put_nowait("data: [DONE]\n\n")
             outcome.status = "success"
@@ -1114,6 +1142,7 @@ async def _passthrough_stream(
         await asyncio.gather(pump_task, return_exceptions=True)
         async with session_factory() as s:
             content = "".join(outcome.parts)
+            usage = outcome.usage or LlmUsage()
             await record_call(
                 s,
                 request_id=trace_id,
@@ -1128,6 +1157,10 @@ async def _passthrough_stream(
                 else "client_cancelled",
                 error_message=outcome.error,
                 duration_ms=outcome.duration_ms,
+                prompt_tokens=usage.prompt_tokens,
+                completion_tokens=usage.completion_tokens,
+                cached_tokens=usage.cached_tokens,
+                cache_write_tokens=usage.cache_write_tokens,
             )
             await finish_request(
                 s,
@@ -1136,6 +1169,8 @@ async def _passthrough_stream(
                 response_content=content,
                 total_duration_ms=_elapsed_ms(t0),
                 first_token_ms=outcome.first_token_ms,
+                total_prompt_tokens=usage.prompt_tokens,
+                total_completion_tokens=usage.completion_tokens,
             )
             await s.commit()
 

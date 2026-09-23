@@ -113,10 +113,14 @@ class OpenAICompatAdapter(BaseAdapter):
             async for chunk in response:
                 usage = getattr(chunk, "usage", None)
                 if usage is not None:
+                    details = getattr(usage, "prompt_tokens_details", None)
                     yield StreamEvent(
                         usage=LlmUsage(
                             prompt_tokens=usage.prompt_tokens or 0,
                             completion_tokens=usage.completion_tokens or 0,
+                            cached_tokens=(getattr(details, "cached_tokens", 0) or 0)
+                            if details is not None
+                            else 0,
                         )
                     )
                 if not chunk.choices:

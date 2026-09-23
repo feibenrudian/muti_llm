@@ -1,7 +1,8 @@
 """Anthropic 协议适配器：messages API ↔ 归一化契约转换。
 
 差异处理：system 消息提升为顶层 system 参数；max_tokens 必填（默认 4096）；
-usage 的 input/output_tokens 映射为 prompt/completion（流内经 message 事件采集）。
+usage 的 input/output_tokens 映射为 prompt/completion，cache_read/cache_creation_input_tokens
+拆分为命中/写入（prompt = input + 读 + 写，归一化语义见 base.LlmUsage）。
 注意：Anthropic Messages API（SDK 1.x）已移除 temperature/top_p 采样参数，本适配器静默忽略。
 一律流式调用（决策 D8，超时=TTFT/块间空闲，由基座统一实现）；SDK 自带重试关闭，重试统一由基座实现。
 """
@@ -119,8 +120,16 @@ class AnthropicAdapter(BaseAdapter):
         except anthropic.APIError as exc:
             raise map_anthropic_error(exc) from None
         usage = final.usage
+        cache_read = getattr(usage, "cache_read_input_tokens", 0) or 0
+        cache_write = getattr(usage, "cache_creation_input_tokens", 0) or 0
+        # input_tokens 不含缓存部分，归一化为计费输入总量（T41 对账语义，见 base.LlmUsage）
         yield StreamEvent(
-            usage=LlmUsage(prompt_tokens=usage.input_tokens, completion_tokens=usage.output_tokens)
+            usage=LlmUsage(
+                prompt_tokens=usage.input_tokens + cache_read + cache_write,
+                completion_tokens=usage.output_tokens,
+                cached_tokens=cache_read,
+                cache_write_tokens=cache_write,
+            )
         )
 
     async def probe(self) -> list[str]:

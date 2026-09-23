@@ -87,6 +87,8 @@ class CallOutcome:
             "duration_ms": self.duration_ms,
             "prompt_tokens": self.usage.prompt_tokens,
             "completion_tokens": self.usage.completion_tokens,
+            "cached_tokens": self.usage.cached_tokens,
+            "cache_write_tokens": self.usage.cache_write_tokens,
             "round_no": self.round_no,
         }
 

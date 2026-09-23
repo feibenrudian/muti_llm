@@ -68,6 +68,33 @@ async def test_stream_event_conversion(anthropic_mock: str) -> None:
     assert deltas == ["你好", "，世界"]
 
 
+async def test_usage_cache_fields_normalized(anthropic_mock: str) -> None:
+    """UT-41-3 缓存归一化：prompt = input + 缓存读 + 缓存写；无缓存字段时行为不变。"""
+    resp = await httpx.AsyncClient().post(
+        f"{anthropic_mock}/_test/config",
+        json={
+            "sse_events": build_sse_events(
+                ["你好"], cache_read_input_tokens=200, cache_creation_input_tokens=50
+            )
+        },
+    )
+    assert resp.status_code == 200
+
+    adapter = make_adapter(anthropic_mock)
+    result = await adapter.complete(make_request())
+    assert result.usage.prompt_tokens == 5 + 200 + 50  # input_tokens 不含缓存，归一化补和
+    assert result.usage.cached_tokens == 200
+    assert result.usage.cache_write_tokens == 50
+    assert result.usage.completion_tokens == 2
+
+    # 默认 SSE 无缓存字段：prompt 保持 input 原值（既有语义不回归）
+    await httpx.AsyncClient().post(f"{anthropic_mock}/_test/config", json={"reset": True})
+    plain = await adapter.complete(make_request())
+    assert plain.usage.prompt_tokens == 5
+    assert plain.usage.cached_tokens == 0
+    assert plain.usage.cache_write_tokens == 0
+
+
 async def test_reuses_base_retry(anthropic_mock: str) -> None:
     """UT-07-3 复用基座：anthropic 5xx 映射为可重试错误，基座重试后成功；auth 不重试。"""
     # 5xx 一次后成功

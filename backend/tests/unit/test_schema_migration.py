@@ -142,6 +142,28 @@ CREATE TABLE models (
     await engine.dispose()
 
 
+async def test_ensure_schema_patches_model_call_logs_cache_columns() -> None:
+    """UT-41-1 model_call_logs 补列 cached_tokens/cache_write_tokens：旧行读回 0；幂等。"""
+    engine = await _build_legacy_engine()  # 旧库 model_call_logs 无缓存两列
+    async with engine.begin() as conn:
+        assert "cached_tokens" not in await _table_columns(conn, "model_call_logs")
+        assert "cache_write_tokens" not in await _table_columns(conn, "model_call_logs")
+
+    await init_db(engine)
+    await init_db(engine)  # 二次执行幂等
+
+    async with engine.begin() as conn:
+        assert "cached_tokens" in await _table_columns(conn, "model_call_logs")
+        assert "cache_write_tokens" in await _table_columns(conn, "model_call_logs")
+
+    factory = create_session_factory(engine)
+    async with factory() as s:
+        call = (await s.execute(ModelCallLog.__table__.select())).mappings().one()
+        assert call["cached_tokens"] == 0
+        assert call["cache_write_tokens"] == 0
+    await engine.dispose()
+
+
 async def test_record_call_round_no() -> None:
     """UT-32-3 round 落库：record_call 带/不带 round_no 均正确往返（经 CallOutcome 全链）。"""
     engine = create_db_engine(":memory:")

@@ -6,6 +6,7 @@ const NAV = [
   { to: "/pipelines", label: "组合（Pipeline）" },
   { to: "/playground", label: "试运行" },
   { to: "/traces", label: "调用日志" },
+  { to: "/stats", label: "用量统计" },
   { to: "/settings", label: "设置" },
 ];
 
