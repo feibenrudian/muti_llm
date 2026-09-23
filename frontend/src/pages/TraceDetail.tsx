@@ -45,12 +45,14 @@ function CallDetails({ call }: { call: TraceCall }) {
 
 /**
  * 裁判单轮折叠块：一级折叠 = 第 X 轮，二级折叠 = 输入 / 输出。
- * live（流式推进到本轮）时自动展开，完成后保持展开；历史数据默认全折叠。
+ * live（流式推进到本轮）或 errored（本轮失败落地）时自动展开，完成后保持展开；历史数据默认全折叠。
+ * errored 兜底：meta 与 done 同批到达时 live 的提交帧可能被 React 批处理吞掉，失败必须可见。
  */
 function JudgeRound({
   roundNo,
   kind,
   live,
+  errored = false,
   payload,
   stats,
   children,
@@ -58,19 +60,20 @@ function JudgeRound({
   roundNo: number;
   kind: string;
   live: boolean;
+  errored?: boolean;
   payload: TraceCall["request_payload"] | null;
   stats?: string;
   children: ReactNode;
 }) {
   const roundRef = useRef<HTMLDetailsElement>(null);
   const outputRef = useRef<HTMLDetailsElement>(null);
-  // 只在 live 由 false 变 true 时展开，不强制收起：用户手动折叠的选择不被流式重渲染覆盖
+  // 只在 live/errored 由 false 变 true 时展开，不强制收起：用户手动折叠的选择不被流式重渲染覆盖
   useEffect(() => {
-    if (live) {
+    if (live || errored) {
       if (roundRef.current) roundRef.current.open = true;
       if (outputRef.current) outputRef.current.open = true;
     }
-  }, [live]);
+  }, [live, errored]);
   return (
     <details ref={roundRef}>
       <summary className="cursor-pointer text-sm font-medium text-slate-700">
@@ -403,6 +406,7 @@ function JudgeCard({
                 roundNo={critiqueRounds[i]}
                 kind="评论"
                 live={live}
+                errored={c.status === "failed"}
                 payload={c.payload}
                 stats={
                   live
@@ -424,6 +428,7 @@ function JudgeCard({
             roundNo={finalRoundNo}
             kind="最终答案"
             live={finalPhase}
+            errored={selected.status === "failed"}
             payload={selected.payload}
             stats={
               selected.status === "streaming"
