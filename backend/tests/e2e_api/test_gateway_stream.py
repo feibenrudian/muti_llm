@@ -113,6 +113,11 @@ async def test_client_cancel(
 
     monkeypatch.setattr(settings_module.settings, "detach_on_disconnect", False)
     base_url, service_key = backend_live
+    # srs_live_seeded 默认零延迟回放，pump 会在断开被服务端感知前跑完（竞争翻车）：
+    # 拉长 chunk 间隔，保证"读首 chunk 即断开"确定落在流中段（fixture 函数级隔离，不外泄）
+    await httpx.AsyncClient().post(
+        f"{srs_live_seeded}/_test/config", json={"delay_scale": 20}
+    )
     async with httpx.AsyncClient(timeout=30) as client:
         # 种子：provider/model 指向 SRS
         resp = await client.post(
