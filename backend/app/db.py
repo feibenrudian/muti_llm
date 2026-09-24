@@ -54,15 +54,38 @@ _SCHEMA_PATCHES: dict[str, dict[str, str]] = {
     "pipelines": {
         "strategy_params": "JSON NOT NULL DEFAULT '{}'",
         "stream_process": "INTEGER NOT NULL DEFAULT 0",
+        "tool_aggregation": "INTEGER NOT NULL DEFAULT 0",
     },
     "models": {"upstream_missing": "INTEGER NOT NULL DEFAULT 0"},
     "model_call_logs": {
         "round": "INTEGER",
         "cached_tokens": "INTEGER NOT NULL DEFAULT 0",
         "cache_write_tokens": "INTEGER NOT NULL DEFAULT 0",
+        "response_tool_calls": "JSON",
     },
     "request_logs": {"first_token_ms": "INTEGER NOT NULL DEFAULT 0"},
+    # 旧库加不了 UNIQUE 约束，唯一性由生成逻辑保证（derive_slug 查重）
+    "providers": {"slug": "TEXT NOT NULL DEFAULT ''"},
 }
+
+
+async def _backfill_provider_slugs(conn: AsyncConnection) -> None:
+    """存量 Provider 的 slug 回填（补列后 slug='' 的行）：名字派生，冲突/中文兜底 provider-{id}。"""
+    from app.repos import derive_slug
+
+    rows = await conn.exec_driver_sql("SELECT id, name FROM providers WHERE slug = ''")
+    taken = {
+        row[0]
+        for row in (
+            await conn.exec_driver_sql("SELECT slug FROM providers WHERE slug != ''")
+        ).fetchall()
+    }
+    for provider_id, name in rows.fetchall():
+        slug = derive_slug(str(name), taken, fallback=f"provider-{provider_id}")
+        taken.add(slug)
+        await conn.exec_driver_sql(
+            "UPDATE providers SET slug = ? WHERE id = ?", (slug, provider_id)
+        )
 
 
 async def _ensure_schema(conn: AsyncConnection) -> None:
@@ -80,6 +103,7 @@ async def init_db(engine: AsyncEngine) -> None:
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
         await _ensure_schema(conn)
+        await _backfill_provider_slugs(conn)
 
 
 async def session_scope(factory: async_sessionmaker[AsyncSession]) -> AsyncIterator[AsyncSession]:

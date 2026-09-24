@@ -95,6 +95,7 @@
 - `POST /v1/chat/completions`，请求/响应结构兼容 OpenAI Chat Completions 规范。
 - `model` 字段取值为 Pipeline 名称（虚拟模型），如 `council-v1`；也允许直接填真实模型名做**透传**（便于对比测试，不聚合）【P1】。
 - 支持字段：`messages`、`temperature`、`max_tokens`、`stream`、`top_p`。透传给成员模型时，Pipeline 配置的默认参数与请求参数的合并规则：**请求参数优先**。
+- 工具调用（T43）：透传路径支持 `tools`/`tool_choice` 透传与 `message.tool_calls` 响应（含流式分片与 `finish_reason` 透传）；客户端默认携带的关闭态值（空 `tools`、`tool_choice: "auto"` 等）静默忽略；聚合（Pipeline）路径对非空 `tools` 明确 400（工具聚合模式见 FR-2.1，落地前为能力边界）。
 - 不支持的字段（如 `tools`、`function_call`、`logprobs` 等）：本期返回明确错误提示 `不支持的能力`，不做聚合语义。【P0】
 
 #### FR-2 流式输出（SSE）【P0】
@@ -104,9 +105,22 @@
 - 可选字段 `stream_process=true`（仅 Pipeline 流式生效，非流式与透传静默忽略）：过程流式——每个成员/评论完成即以 `delta.reasoning_content` 块（带【成员 X】/【评论】/【第 k 轮评论】标题）推送给客户端，裁判最终答案仍走 `delta.content`；首字节时间（TTFT）从"全部成员完成"提前到"首个成员完成"。上游调用载荷与默认流式完全一致。Pipeline 另有同名开关作为默认（请求体显式 `stream_process` 优先，显式 false 可覆盖 pipeline 默认开）——供无法自定义请求体的客户端（如 Unsloth Studio）使用。
 - 需正确处理客户端中断连接：**默认断连续跑**（detach）——客户端断开后上游调用仍执行到底，日志落真实终态（`success`/`failed`）与完整内容；可配置关闭（`MUTILLM_DETACH_ON_DISCONNECT=false`），关闭后断开即取消上游调用并标记日志状态为 `client_cancelled`。
 
+#### FR-2.1 council 工具聚合模式（T44 已实现）【P2】
+
+- Pipeline 级开关 `tool_aggregation`（默认关，Web UI 可配）。开启后 Pipeline 可接受 `tools`：成员并行产出调用意图 → 意图文本化进裁判上下文 → 评论（参考非约束）→ 裁判生成最终调用（可判定无需工具时输出文字回答）→ schema 程序性校验兜底，失败降级择优成员调用（响应标 `degraded`）。
+- 已知边界：裁判对工具分歧的仲裁为概率性（无执行反馈）；agent 多步任务每轮工具回填触发整场聚合，token/延迟为单模型 N 倍以上；工具聚合不支持过程流式（stream_process），流式路径无中途降级拦截。
+
 #### FR-3 模型列表接口 【P1】
 
 - `GET /v1/models` 返回所有启用的 Pipeline 虚拟模型（及可选的透传真实模型），格式兼容 OpenAI。
+- 老入口 `/v1/models` 与 `/v1/chat/completions` 永久保留（已配置服务零改动）；两类模型的对外接入可在设置页分别开关（关闭 → 该类从列表隐藏且不可调用）。
+
+#### FR-3.1 命名空间网关（虚拟模型 / 路由模型分离接入）【P1】
+
+- 虚拟模型命名空间：`GET /v1/pipeline`（说明）、`GET /v1/pipeline/models`（仅启用 Pipeline）、`POST /v1/pipeline/chat/completions`（model 只认 Pipeline 名）。
+- 路由模型命名空间：`GET /v1/route`（启用供应商列表）、`GET /v1/route/{ident}/models`、`POST /v1/route/{ident}/chat/completions`（model 只认该供应商内的短模型名）。供应商 `ident` 用 slug（创建时生成、唯一、不随显示名变化）或数字 id。
+- 路由模型列表 = 上游实时列表（TTL 30 秒缓存，上游不可达时回落库内已同步启用模型）剔除本地明确停用的模型；上游新模型本地无记录 → 默认列出且可直接调用（动态透传，不落配置行）。本地明确停用的模型不列出、调用 404。
+- 两类接入开关对命名空间同样生效：关闭 → 对应命名空间整体 404。设置页展示总入口与各命名空间 base_url（含每个供应商，可复制）。
 
 #### FR-4 服务认证 【P0】
 

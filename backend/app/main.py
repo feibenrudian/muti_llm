@@ -15,6 +15,7 @@ from app.bootstrap import KEY_LOG_RETENTION_DAYS, bootstrap
 from app.db import create_db_engine, create_session_factory
 from app.gateways.llm_gateway import openai_error
 from app.gateways.llm_gateway import router as gateway_router
+from app.gateways.namespaces import router as namespaces_router
 from app.repos import get_setting
 from app.security import verify_service_key
 from app.settings import settings
@@ -56,6 +57,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
 app = FastAPI(title="muti_llm", version="0.1.0", lifespan=lifespan)
 app.include_router(admin_router)
 app.include_router(gateway_router)
+app.include_router(namespaces_router)
 
 
 @app.middleware("http")

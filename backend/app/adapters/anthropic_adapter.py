@@ -101,6 +101,12 @@ class AnthropicAdapter(BaseAdapter):
         return self._stream_events(request)
 
     async def _stream_events(self, request: LlmRequest) -> AsyncIterator[StreamEvent]:
+        if request.tools:
+            raise AdapterError(
+                "anthropic 协议暂不支持工具透传（tools）",
+                kind="bad_request",
+                retryable=False,
+            )
         kwargs = _build_kwargs(request)
         try:
             # 迭代原始事件而非 text_stream：thinking_delta 也要产出事件（见 base.StreamEvent），

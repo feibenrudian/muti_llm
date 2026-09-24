@@ -68,6 +68,7 @@ class CallOutcome:
     provider_name: str
     request_payload: dict[str, Any]
     response_content: str = ""
+    response_tool_calls: list[dict[str, Any]] | None = None  # 工具聚合（T44）：聚合后完整调用
     status: str = "success"  # success | failed | timeout | client_cancelled
     error_message: str = ""
     duration_ms: int = 0
@@ -82,6 +83,7 @@ class CallOutcome:
             "provider_name": self.provider_name,
             "request_payload": self.request_payload,
             "response_content": self.response_content,
+            "response_tool_calls": self.response_tool_calls,
             "status": self.status,
             "error_message": self.error_message,
             "duration_ms": self.duration_ms,
@@ -102,6 +104,8 @@ class StrategyResult:
     degraded: bool = False
     calls: list[CallOutcome] = field(default_factory=list)
     final_finish_reason: str = "stop"
+    # 工具聚合（T44）：终局产出完整 tool_calls 时非空（final_content 通常为空）
+    tool_calls: list[dict[str, Any]] | None = None
 
 
 @dataclass

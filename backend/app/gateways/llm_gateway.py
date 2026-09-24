@@ -15,26 +15,26 @@ from fastapi import APIRouter, BackgroundTasks, Request
 from fastapi.responses import JSONResponse, Response, StreamingResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.adapters.base import AdapterError, LlmRequest, LlmUsage, NormalizedMessage
+from app.adapters.base import (
+    AdapterError,
+    LlmRequest,
+    LlmUsage,
+    NormalizedMessage,
+    merge_tool_call_deltas,
+)
 from app.adapters.factory import build_adapter
+from app.bootstrap import KEY_EXPOSE_ROUTED_MODELS, KEY_EXPOSE_VIRTUAL_MODELS
 from app.logging_svc import finish_request, record_call, start_request
 from app.orm import LlmModel, Provider
 from app.repos import (
     find_enabled_model_by_upstream_id,
     find_enabled_pipeline_by_name,
+    get_setting,
 )
 from app.settings import settings
 
 router = APIRouter(tags=["gateway"])
 
-UNSUPPORTED_FIELDS = (
-    "tools",
-    "tool_choice",
-    "functions",
-    "function_call",
-    "logprobs",
-    "logit_bias",
-)
 VALID_ROLES = ("system", "user", "assistant")
 
 
@@ -65,6 +65,93 @@ def ice_progress_comment(k: int, total: int) -> str:
     return f": ice round {k}/{total}\n\n"
 
 
+async def model_exposure(session: AsyncSession) -> tuple[bool, bool]:
+    """两类模型的对外接入开关（settings 页可配）：(虚拟模型, 路由模型)，缺省均开。
+
+    关闭即整体下线该类接入：/v1/models 不列出、/v1/chat/completions 不再按该类解析。
+    """
+    virtual = await get_setting(session, KEY_EXPOSE_VIRTUAL_MODELS)
+    routed = await get_setting(session, KEY_EXPOSE_ROUTED_MODELS)
+    return virtual != "0", routed != "0"
+
+
+def _is_off_state(value: Any) -> bool:
+    """客户端默认携带的"关闭态"值（None/False/空容器/"auto"/"none"）视为未启用该能力。"""
+    if value is None or value is False:
+        return True
+    if isinstance(value, (list, dict)) and not value:
+        return True
+    if isinstance(value, str) and value.lower() in ("auto", "none"):
+        return True
+    return False
+
+
+def validate_chat_body(
+    body: dict[str, Any],
+) -> tuple[JSONResponse | None, list[Any], str, dict[str, Any], bool, bool]:
+    """OpenAI 兼容请求体校验与提参（老入口与命名空间网关共用，错误契约一致）。
+
+    返回 (error, messages, model, params, stream, has_tools)；error 非 None 时其余为占位值。
+    tools 空值/关闭态字段静默忽略（Unsloth Studio 等客户端默认携带空 tools，T43）；
+    非空 tools 不在此拒绝——由调用方按路径分流：透传放行、聚合（pipeline）400。
+    """
+    messages = body.get("messages")
+    if not isinstance(messages, list) or not messages:
+        return (
+            openai_error(400, "messages 必须为非空数组", param="messages"),
+            [],
+            "",
+            {},
+            False,
+            False,
+        )
+    for m in messages:
+        if (
+            not isinstance(m, dict)
+            or m.get("role") not in VALID_ROLES
+            or not isinstance(m.get("content"), str)
+        ):
+            return (
+                openai_error(
+                    400,
+                    "每条 message 需含 role(system|user|assistant) 与字符串 content",
+                    param="messages",
+                ),
+                [],
+                "",
+                {},
+                False,
+                False,
+            )
+
+    tools = body.get("tools")
+    has_tools = isinstance(tools, list) and len(tools) > 0
+    for unsupported in ("tool_choice", "functions", "function_call", "logprobs", "logit_bias"):
+        value = body.get(unsupported)
+        if has_tools and unsupported == "tool_choice":
+            continue  # 随 tools 一并透传上游（含 "required"/对象形态）
+        if not _is_off_state(value):
+            return (
+                openai_error(400, f"不支持的能力: {unsupported}", param=unsupported),
+                [],
+                "",
+                {},
+                False,
+                False,
+            )
+
+    model_field = body.get("model")
+    if not isinstance(model_field, str) or not model_field:
+        return openai_error(400, "model 必填", param="model"), [], "", {}, False, False
+
+    params: dict[str, Any] = {}
+    for key in ("temperature", "max_tokens", "top_p"):
+        value = body.get(key)
+        if value is not None:
+            params[key] = value
+    return None, messages, model_field, params, bool(body.get("stream")), has_tools
+
+
 @router.get("/v1/models")
 async def list_models(request: Request) -> Response:
     from app.orm import LlmModel as M
@@ -73,17 +160,22 @@ async def list_models(request: Request) -> Response:
 
     factory = request.app.state.session_factory
     async with factory() as session:
+        expose_virtual, expose_routed = await model_exposure(session)
         pipelines = await Repository(session, P).list()
         models = await Repository(session, M).list()
-    data = [
-        {"id": p.name, "object": "model", "created": 0, "owned_by": "muti_llm"}
-        for p in pipelines
-        if p.enabled
-    ] + [
-        {"id": m.upstream_model_id, "object": "model", "created": 0, "owned_by": "muti_llm"}
-        for m in models
-        if m.enabled
-    ]
+    data = []
+    if expose_virtual:
+        data += [
+            {"id": p.name, "object": "model", "created": 0, "owned_by": "muti_llm"}
+            for p in pipelines
+            if p.enabled
+        ]
+    if expose_routed:
+        data += [
+            {"id": m.upstream_model_id, "object": "model", "created": 0, "owned_by": "muti_llm"}
+            for m in models
+            if m.enabled
+        ]
     return JSONResponse({"object": "list", "data": data})
 
 
@@ -116,40 +208,43 @@ async def execute_chat(
 
     request = _AppRequest(app, client_ip)  # noqa: F841 - 供下方函数签名兼容
 
-    messages = body.get("messages")
-    if not isinstance(messages, list) or not messages:
-        return openai_error(400, "messages 必须为非空数组", param="messages"), None
-    for m in messages:
-        if (
-            not isinstance(m, dict)
-            or m.get("role") not in VALID_ROLES
-            or not isinstance(m.get("content"), str)
-        ):
-            return openai_error(
-                400,
-                "每条 message 需含 role(system|user|assistant) 与字符串 content",
-                param="messages",
-            ), None
-    for unsupported in UNSUPPORTED_FIELDS:
-        if body.get(unsupported) is not None:
-            return openai_error(400, f"不支持的能力: {unsupported}", param=unsupported), None
-
-    model_field = body.get("model")
-    if not isinstance(model_field, str) or not model_field:
-        return openai_error(400, "model 必填", param="model"), None
-
-    params: dict[str, Any] = {}
-    for key in ("temperature", "max_tokens", "top_p"):
-        value = body.get(key)
-        if value is not None:
-            params[key] = value
-    stream = bool(body.get("stream"))
+    error, messages, model_field, params, stream, has_tools = validate_chat_body(body)
+    if error is not None:
+        return error, None
     # 过程流式（T38/T39）：仅 pipeline 流式生效；None=请求体未显式给 → 用 pipeline 默认
     stream_process_raw = body.get("stream_process")
 
     async with app.state.session_factory() as session:
-        pipeline = await find_enabled_pipeline_by_name(session, model_field)
+        expose_virtual, expose_routed = await model_exposure(session)
+        # 虚拟模型接入关闭时不按 Pipeline 解析（同名真实模型若存在则照常透传）
+        pipeline = (
+            await find_enabled_pipeline_by_name(session, model_field)
+            if expose_virtual
+            else None
+        )
         if pipeline is not None:
+            if has_tools and (not pipeline.tool_aggregation or pipeline.strategy != "council"):
+                # 工具聚合仅 council 实现：开关关闭或其余策略（ICE）→ 明确拒绝（不静默忽略 tools）
+                return (
+                    openai_error(
+                        400, "聚合模式（Pipeline）暂不支持工具调用: tools", param="tools"
+                    ),
+                    None,
+                )
+            stream_process = (
+                bool(stream_process_raw)
+                if stream_process_raw is not None
+                else bool(pipeline.stream_process)
+            )
+            if has_tools and pipeline.tool_aggregation and stream_process:
+                return (
+                    openai_error(
+                        400,
+                        "工具聚合模式暂不支持过程流式（stream_process）",
+                        param="stream_process",
+                    ),
+                    None,
+                )
             # 请求体显式给了（含 false）就用请求体的值，否则用 pipeline 级默认
             stream_process = (
                 bool(stream_process_raw)
@@ -170,7 +265,7 @@ async def execute_chat(
             )
 
         model_row = await find_enabled_model_by_upstream_id(session, model_field)
-        if model_row is None:
+        if model_row is None or not expose_routed:
             return (
                 openai_error(404, f"model '{model_field}' not found", code="model_not_found"),
                 None,
@@ -458,6 +553,8 @@ async def _run_pipeline(
         result.final_content,
         result.usage.prompt_tokens,
         result.usage.completion_tokens,
+        tool_calls=result.tool_calls,
+        finish_reason=result.final_finish_reason,
     )
     if result.degraded:
         response["degraded"] = True
@@ -538,18 +635,25 @@ async def _pipeline_stream(
     queue: asyncio.Queue[Any] = asyncio.Queue()
 
     async def pump() -> None:
-        outcome.status = "client_cancelled"
+        outcome.status = "client_cancelled"  # 未到终态即结束 → 视为取消
         try:
             queue.put_nowait(_sse(chunk({"role": "assistant"})))
             async for event in plan.adapter.stream_events_timed(plan.request):
                 if event.usage is not None:
                     outcome.usage = event.usage
+                if event.finish_reason:
+                    outcome.finish_reason = event.finish_reason
+                if event.tool_calls:
+                    if outcome.first_token_ms == 0:
+                        outcome.first_token_ms = _elapsed_ms(t0)
+                    outcome.tool_call_fragments.extend(event.tool_calls)
+                    queue.put_nowait(_sse(chunk({"tool_calls": event.tool_calls})))
                 if event.text:
                     if outcome.first_token_ms == 0:
                         outcome.first_token_ms = _elapsed_ms(t0)
                     outcome.parts.append(event.text)
                     queue.put_nowait(_sse(chunk({"content": event.text})))
-            queue.put_nowait(_sse(chunk({}, finish_reason="stop")))
+            queue.put_nowait(_sse(chunk({}, finish_reason=outcome.finish_reason)))
             queue.put_nowait("data: [DONE]\n\n")
             outcome.status = "success"
         except AdapterError as exc:
@@ -580,6 +684,8 @@ async def _pipeline_stream(
 
         await asyncio.gather(pump_task, return_exceptions=True)
         content = "".join(outcome.parts)
+        merged = merge_tool_call_deltas(outcome.tool_call_fragments)
+        tool_calls = [merged[i] for i in sorted(merged)] or None
         judge_usage = outcome.usage or LlmUsage()
         judge = CallOutcome(
             role="judge",
@@ -588,6 +694,7 @@ async def _pipeline_stream(
             provider_name=plan.provider_name,
             request_payload=plan.payload,
             response_content=content if outcome.status != "failed" else "",
+            response_tool_calls=tool_calls,
             status=outcome.status,
             error_message=outcome.error,
             duration_ms=outcome.duration_ms,
@@ -600,6 +707,7 @@ async def _pipeline_stream(
                 trace_id,
                 status=outcome.status,
                 response_content=content,
+                response_finish_reason=outcome.finish_reason,
                 total_duration_ms=_elapsed_ms(t0),
                 first_token_ms=outcome.first_token_ms,
                 total_prompt_tokens=plan.base_usage.prompt_tokens + judge_usage.prompt_tokens,
@@ -919,12 +1027,32 @@ def _llm_request(
         if merged.get(key) is not None:
             payload[key] = merged[key]
             setattr(llm_request, key, merged[key])
+    # 工具透传（T43）：仅透传路径到达此处（pipeline 分支已 400）； anthropic 供应商由适配器拒绝
+    if isinstance(body.get("tools"), list) and body["tools"]:
+        payload["tools"] = body["tools"]
+        llm_request.tools = body["tools"]
+        if body.get("tool_choice") is not None:
+            payload["tool_choice"] = body["tool_choice"]
+            llm_request.tool_choice = body["tool_choice"]
     return llm_request, payload
 
 
 def _completion_response(
-    model: str, content: str, prompt_tokens: int, completion_tokens: int
+    model: str,
+    content: str,
+    prompt_tokens: int,
+    completion_tokens: int,
+    *,
+    tool_calls: list[dict[str, Any]] | None = None,
+    finish_reason: str = "stop",
 ) -> dict[str, Any]:
+    message: dict[str, Any] = {
+        "role": "assistant",
+        # 纯工具调用时上游 content 为 null（OpenAI 兼容形态），仅在有 tool_calls 时允许
+        "content": content if (content or not tool_calls) else None,
+    }
+    if tool_calls:
+        message["tool_calls"] = tool_calls
     return {
         "id": f"chatcmpl-{uuid.uuid4().hex[:24]}",
         "object": "chat.completion",
@@ -933,8 +1061,8 @@ def _completion_response(
         "choices": [
             {
                 "index": 0,
-                "message": {"role": "assistant", "content": content},
-                "finish_reason": "stop",
+                "message": message,
+                "finish_reason": finish_reason,
             }
         ],
         "usage": {
@@ -1037,6 +1165,7 @@ async def _passthrough(
         provider_name=provider.name,
         request_payload=payload,
         response_content=result.content,
+        response_tool_calls=result.tool_calls,
         duration_ms=result.duration_ms,
         prompt_tokens=result.usage.prompt_tokens,
         completion_tokens=result.usage.completion_tokens,
@@ -1047,7 +1176,7 @@ async def _passthrough(
         trace.id,
         status="success",
         response_content=result.content,
-        response_finish_reason="stop",
+        response_finish_reason=result.finish_reason,
         total_duration_ms=duration,
         first_token_ms=duration,
         total_prompt_tokens=result.usage.prompt_tokens,
@@ -1060,6 +1189,8 @@ async def _passthrough(
             result.content,
             result.usage.prompt_tokens,
             result.usage.completion_tokens,
+            tool_calls=result.tool_calls,
+            finish_reason=result.finish_reason,
         )
     ), trace.id
 
@@ -1070,6 +1201,7 @@ class StreamOutcome:
 
     usage 为终局流（passthrough 为唯一调用，pipeline 为裁判调用）结束时的汇总事件，
     上游不支持 usage 时保持 None（T41：此前该事件被丢弃，流式 token 全部记 0）。
+    tool_call_fragments 为流内原样分片（T43），persist 时按 index 聚合落库。
     """
 
     status: str = "client_cancelled"
@@ -1078,6 +1210,8 @@ class StreamOutcome:
     duration_ms: int = 0
     first_token_ms: int = 0
     usage: LlmUsage | None = None
+    finish_reason: str = "stop"
+    tool_call_fragments: list[dict[str, Any]] = field(default_factory=list)
 
 
 async def _passthrough_stream(
@@ -1109,12 +1243,19 @@ async def _passthrough_stream(
             async for event in adapter.stream_events_timed(llm_request):
                 if event.usage is not None:
                     outcome.usage = event.usage
+                if event.finish_reason:
+                    outcome.finish_reason = event.finish_reason
+                if event.tool_calls:
+                    if outcome.first_token_ms == 0:
+                        outcome.first_token_ms = _elapsed_ms(t0)
+                    outcome.tool_call_fragments.extend(event.tool_calls)
+                    queue.put_nowait(_sse(chunk({"tool_calls": event.tool_calls})))
                 if event.text:
                     if outcome.first_token_ms == 0:
                         outcome.first_token_ms = _elapsed_ms(t0)
                     outcome.parts.append(event.text)
                     queue.put_nowait(_sse(chunk({"content": event.text})))
-            queue.put_nowait(_sse(chunk({}, finish_reason="stop")))
+            queue.put_nowait(_sse(chunk({}, finish_reason=outcome.finish_reason)))
             queue.put_nowait("data: [DONE]\n\n")
             outcome.status = "success"
         except AdapterError as exc:
@@ -1143,6 +1284,7 @@ async def _passthrough_stream(
         async with session_factory() as s:
             content = "".join(outcome.parts)
             usage = outcome.usage or LlmUsage()
+            merged = merge_tool_call_deltas(outcome.tool_call_fragments)
             await record_call(
                 s,
                 request_id=trace_id,
@@ -1152,6 +1294,7 @@ async def _passthrough_stream(
                 provider_name=provider.name,
                 request_payload=payload,
                 response_content=content if outcome.status != "failed" else "",
+                response_tool_calls=[merged[i] for i in sorted(merged)] or None,
                 status=outcome.status
                 if outcome.status != "client_cancelled"
                 else "client_cancelled",
@@ -1167,6 +1310,7 @@ async def _passthrough_stream(
                 trace_id,
                 status=outcome.status,
                 response_content=content,
+                response_finish_reason=outcome.finish_reason,
                 total_duration_ms=_elapsed_ms(t0),
                 first_token_ms=outcome.first_token_ms,
                 total_prompt_tokens=usage.prompt_tokens,

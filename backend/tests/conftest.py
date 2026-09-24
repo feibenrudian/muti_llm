@@ -28,6 +28,10 @@ async def asgi_client(
     from app.main import app
 
     monkeypatch.setattr(settings_module.settings, "database_path", str(tmp_path / "asgi_test.db"))
+    # 路由视图的上游列表缓存是进程级的，跨用例（临时库 id 重叠）会串味 → 每用例清空
+    from app.gateways.namespaces import clear_route_list_cache
+
+    clear_route_list_cache()
     async with LifespanManager(app) as manager:
         transport = httpx.ASGITransport(app=manager.app)
         async with httpx.AsyncClient(transport=transport, base_url="http://backend.test") as client:

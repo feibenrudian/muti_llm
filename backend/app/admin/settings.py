@@ -10,7 +10,12 @@ from fastapi import APIRouter, Depends, Request
 from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.bootstrap import KEY_LOG_RETENTION_DAYS, KEY_SERVICE_KEY_ENCRYPTED
+from app.bootstrap import (
+    KEY_EXPOSE_ROUTED_MODELS,
+    KEY_EXPOSE_VIRTUAL_MODELS,
+    KEY_LOG_RETENTION_DAYS,
+    KEY_SERVICE_KEY_ENCRYPTED,
+)
 from app.deps import get_session
 from app.logging_svc import cleanup_old_logs
 from app.repos import get_setting, set_setting
@@ -28,6 +33,13 @@ router = APIRouter(prefix="/settings", tags=["admin-settings"])
 
 class SettingsUpdate(BaseModel):
     log_retention_days: int | None = Field(default=None, ge=1, le=3650)
+    expose_virtual_models: bool | None = None
+    expose_routed_models: bool | None = None
+
+
+def _exposed(value: str | None) -> bool:
+    """接入开关缺省开启；仅显式存 "0" 视为关闭。"""
+    return value != "0"
 
 
 @router.get("")
@@ -42,6 +54,10 @@ async def get_settings_info(
         "database_path": str(db_path),
         "database_size_bytes": db_path.stat().st_size if db_path.exists() else 0,
         "log_retention_days": int(retention) if retention else app_settings.log_retention_days,
+        "expose_virtual_models": _exposed(
+            await get_setting(session, KEY_EXPOSE_VIRTUAL_MODELS)
+        ),
+        "expose_routed_models": _exposed(await get_setting(session, KEY_EXPOSE_ROUTED_MODELS)),
     }
 
 
@@ -51,7 +67,15 @@ async def update_settings(
 ) -> dict[str, Any]:
     if body.log_retention_days is not None:
         await set_setting(session, KEY_LOG_RETENTION_DAYS, str(body.log_retention_days))
-        await session.commit()
+    if body.expose_virtual_models is not None:
+        await set_setting(
+            session, KEY_EXPOSE_VIRTUAL_MODELS, "1" if body.expose_virtual_models else "0"
+        )
+    if body.expose_routed_models is not None:
+        await set_setting(
+            session, KEY_EXPOSE_ROUTED_MODELS, "1" if body.expose_routed_models else "0"
+        )
+    await session.commit()
     return {"ok": True}
 
 

@@ -88,6 +88,7 @@ async def create_pipeline(
         max_concurrency=body.max_concurrency,
         enabled=body.enabled,
         stream_process=body.stream_process,
+        tool_aggregation=body.tool_aggregation,
     )
     try:
         await session.flush()

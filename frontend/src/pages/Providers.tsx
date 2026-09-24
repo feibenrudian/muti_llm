@@ -98,6 +98,7 @@ export default function Providers() {
             <thead>
               <tr className="border-b border-slate-100">
                 <Th>名称</Th>
+                <Th>ID / 路由标识</Th>
                 <Th>协议</Th>
                 <Th>Base URL</Th>
                 <Th>API Key</Th>
@@ -112,6 +113,10 @@ export default function Providers() {
                 return (
                   <tr key={provider.id} className="border-b border-slate-50">
                     <Td>{provider.name}</Td>
+                    <Td className="font-mono text-xs">
+                      #{provider.id} · {provider.slug}
+                      <p className="mt-0.5 text-slate-400">/v1/route/{provider.slug}</p>
+                    </Td>
                     <Td>{provider.protocol}</Td>
                     <Td className="max-w-64 truncate">{provider.base_url}</Td>
                     <Td>{provider.api_key_masked || "—"}</Td>

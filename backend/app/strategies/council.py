@@ -2,13 +2,19 @@
 
 录制脚本（tests/record_scenarios.py）直接 import 本模块的渲染函数构造两段裁判请求，
 保证"录制的裁判 Prompt"与"运行时组装的裁判 Prompt"逐字节一致（快照命中前提）。
+
+T44 工具聚合模式（pipeline.tool_aggregation=true 且请求带非空 tools）：成员带 tools
+并行调用 → 各成员调用意图文本化进裁判上下文 → 评论（参考非约束）→ 裁判带 tools
+生成最终调用（或判定无需工具时输出文字回答）→ 程序性校验兜底，失败降级择优成员调用。
 """
 
 from __future__ import annotations
 
 import asyncio
+import json
 import re
 import time
+from collections import Counter
 from collections.abc import AsyncIterator, Callable, Coroutine
 from typing import Any
 
@@ -48,7 +54,77 @@ DEFAULT_CRITIQUE_TEMPLATE = """你将看到用户的问题，以及多个 AI 模
 
 DEFAULT_JUDGE_TEMPLATE = "请结合你上面给出的评论，鉴别各回答的可信度，给出一个比任何单个回答都更准确、完整的最终回答。直接输出最终回答，不要复述过程。"
 
+# T44 工具聚合终局指令（内置，不开放自定义——与文本答案模板语义不同）：裁判自由推理
+# 合成最终调用（评论是参考非约束），也可判定无需工具时输出文字回答。
+# 模板为单行字面量（折行会改变渲染输出，快照 hash 依赖逐字节一致）
+DEFAULT_TOOL_JUDGE_TEMPLATE = (  # noqa: E501
+    "请结合你上面给出的评论，从各模型的工具调用意图中综合推理出最合理的最终决策：选择最合适的工具并给出完整、正确的调用参数（可以修正各模型参数中的遗漏与错误）。做出决策后直接发起该工具调用，不要输出文字说明。若你判断无需调用工具即可回答用户，则直接输出最终文字回答，不要调用任何工具。"
+)
+
 _PLACEHOLDER = re.compile(r"\{\{(original_messages|candidate_answers|critique)\}\}")
+
+
+# ---- T44 工具聚合 -------------------------------------------------------------------
+
+
+def tool_mode(ctx: StrategyContext) -> bool:
+    """工具聚合模式生效条件：pipeline 开关开启且请求带非空 tools。"""
+    tools = ctx.body.get("tools")
+    return bool(ctx.pipeline.tool_aggregation) and isinstance(tools, list) and len(tools) > 0
+
+
+def format_tool_intent(outcome: CallOutcome) -> str:
+    """成员输出 → 裁判上下文的文本描述：调用意图列 JSON，纯文本回答原样。"""
+    if outcome.response_tool_calls:
+        calls = "; ".join(
+            f"{c['function']['name']}({c['function']['arguments']})"
+            for c in outcome.response_tool_calls
+        )
+        text = f"决定调用工具: {calls}"
+        if outcome.response_content:
+            text += f"（附说明: {outcome.response_content}）"
+        return text
+    return outcome.response_content or "（无输出）"
+
+
+def validate_tool_calls(tool_calls: list[dict[str, Any]], tools: list[dict[str, Any]]) -> bool:
+    """程序性兜底校验（防幻觉，不限制裁判判断自由）：function 名在 tools 清单内、
+    arguments 是合法 JSON 对象。"""
+    known = {
+        t["function"]["name"] for t in tools if isinstance(t, dict) and "function" in t
+    } - {None}
+    if not tool_calls:
+        return False
+    for call in tool_calls:
+        function = (call or {}).get("function") or {}
+        if function.get("name") not in known:
+            return False
+        try:
+            arguments = json.loads(function.get("arguments") or "{}")
+        except (TypeError, ValueError):
+            return False
+        if not isinstance(arguments, dict):
+            return False
+    return True
+
+
+def pick_fallback_tool_calls(
+    ok_members: list[CallOutcome],
+) -> list[dict[str, Any]] | None:
+    """降级择优：多数 function.name 派系中取第一个产出该调用工具的成员（确定性）。"""
+    calls_by_member = [o.response_tool_calls for o in ok_members if o.response_tool_calls]
+    if not calls_by_member:
+        return None
+    names = [
+        c["function"]["name"] for calls in calls_by_member for c in calls if c.get("function")
+    ]
+    if not names:
+        return None
+    top = Counter(names).most_common(1)[0][0]
+    for calls in calls_by_member:
+        if any(c.get("function", {}).get("name") == top for c in calls):
+            return calls
+    return None  # pragma: no cover
 
 
 # ---- T15 裁判 Prompt --------------------------------------------------------------
@@ -129,6 +205,8 @@ def build_call_request(
     merged: dict[str, Any],
     *,
     stream: bool,
+    tools: list[dict[str, Any]] | None = None,
+    tool_choice: str | dict[str, Any] | None = None,
 ) -> tuple[LlmRequest, dict[str, Any]]:
     """归一化请求 + 实际发出的 payload（入日志；形态与快照 hash 一致）。"""
     payload: dict[str, Any] = {
@@ -148,6 +226,12 @@ def build_call_request(
             setattr(request, key, merged[key])
     if stream:
         payload["stream_options"] = {"include_usage": True}
+    if tools:
+        payload["tools"] = tools
+        request.tools = tools
+        if tool_choice is not None:
+            payload["tool_choice"] = tool_choice
+            request.tool_choice = tool_choice
     return request, payload
 
 
@@ -204,8 +288,15 @@ async def run_one(
     TTFT/块间空闲超时预算——复杂问题生成再久也不算超时，只有等不到上游数据才超时。
     """
     merged = merge_params(spec.model.default_params, spec.member.param_overrides)
+    body_tools = ctx.body.get("tools")
+    tools = body_tools if tool_mode(ctx) else None
     request, payload = build_call_request(
-        spec.model.upstream_model_id, ctx.body["messages"], merged, stream=True
+        spec.model.upstream_model_id,
+        ctx.body["messages"],
+        merged,
+        stream=True,
+        tools=tools,
+        tool_choice=ctx.body.get("tool_choice") if tools else None,
     )
     outcome = CallOutcome(
         role="member",
@@ -225,6 +316,7 @@ async def run_one(
     outcome.duration_ms = int((time.perf_counter() - start) * 1000)
     if outcome.status == "success":
         outcome.response_content = result.content
+        outcome.response_tool_calls = result.tool_calls
         outcome.usage = result.usage
         outcome.duration_ms = result.duration_ms
     return outcome
@@ -278,10 +370,19 @@ class CouncilStrategy(Strategy):
     name = "council"
 
     def assemble_critique(
-        self, ctx: StrategyContext, ok_members: list[CallOutcome], *, stream: bool = False
+        self,
+        ctx: StrategyContext,
+        ok_members: list[CallOutcome],
+        *,
+        stream: bool = False,
+        answers: list[tuple[str, str]] | None = None,
     ) -> tuple[LlmRequest, dict[str, Any]]:
-        """裁判第一段：评论各成员答案的优劣（内置模板，不开放自定义）。"""
-        answers = [(o.upstream_model_id, o.response_content) for o in ok_members]
+        """裁判第一段：评论各成员答案的优劣（内置模板，不开放自定义）。
+
+        工具聚合模式传 answers=意图文本化结果（各成员的调用意图/文本回答）。
+        """
+        if answers is None:
+            answers = [(o.upstream_model_id, o.response_content) for o in ok_members]
         prompt = render_judge_prompt(DEFAULT_CRITIQUE_TEMPLATE, ctx.body["messages"], answers)
         merged = merge_params(ctx.judge_model.default_params, ctx.user_params)
         return build_call_request(
@@ -289,6 +390,32 @@ class CouncilStrategy(Strategy):
             [{"role": "user", "content": prompt}],
             merged,
             stream=stream,
+        )
+
+    def assemble_tool_final(
+        self,
+        ctx: StrategyContext,
+        ok_members: list[CallOutcome],
+        critique: str,
+        critique_messages: list[dict[str, str]],
+        *,
+        stream: bool = False,
+    ) -> tuple[LlmRequest, dict[str, Any]]:
+        """T44 工具聚合终局：内置工具合成指令 + 请求带 tools/tool_choice——裁判借原生
+        结构化输出产出最终调用（或判定无需工具时输出文字回答）。"""
+        answers = [(o.upstream_model_id, format_tool_intent(o)) for o in ok_members]
+        instruction = render_final_instruction(
+            DEFAULT_TOOL_JUDGE_TEMPLATE, ctx.body["messages"], answers, critique
+        )
+        messages = build_final_messages(critique_messages, critique, instruction)
+        merged = merge_params(ctx.judge_model.default_params, ctx.user_params)
+        return build_call_request(
+            ctx.judge_model.upstream_model_id,
+            messages,
+            merged,
+            stream=stream,
+            tools=ctx.body["tools"],
+            tool_choice=ctx.body.get("tool_choice") or "auto",
         )
 
     def assemble_final(
@@ -326,10 +453,17 @@ class CouncilStrategy(Strategy):
         )
 
     async def _run_critique(
-        self, ctx: StrategyContext, adapter: BaseAdapter, ok_members: list[CallOutcome]
+        self,
+        ctx: StrategyContext,
+        adapter: BaseAdapter,
+        ok_members: list[CallOutcome],
+        *,
+        answers: list[tuple[str, str]] | None = None,
     ) -> CallOutcome:
         """执行裁判第一段（评论）。上游流式（D8），complete 聚合为全文。"""
-        request, payload = self.assemble_critique(ctx, ok_members, stream=True)
+        request, payload = self.assemble_critique(
+            ctx, ok_members, stream=True, answers=answers
+        )
         critique = CallOutcome(
             role="judge_critique",
             model_id=ctx.judge_model.id,
@@ -350,7 +484,115 @@ class CouncilStrategy(Strategy):
             critique.duration_ms = result.duration_ms
         return critique
 
+    def _tool_degraded(
+        self,
+        member_outcomes: list[CallOutcome],
+        ok: list[CallOutcome],
+        *extra_calls: CallOutcome,
+    ) -> StrategyResult:
+        """工具模式降级（裁判失败/校验失败且无合成结果）：择优成员 tool_calls，无则取其文本。"""
+        fallback = pick_fallback_tool_calls(ok)
+        total = sum_usage(member_outcomes)
+        for call in extra_calls:
+            if call.status == "success":
+                total.prompt_tokens += call.usage.prompt_tokens
+                total.completion_tokens += call.usage.completion_tokens
+        if fallback is not None:
+            return StrategyResult(
+                final_content="",
+                usage=total,
+                degraded=True,
+                calls=[*member_outcomes, *extra_calls],
+                final_finish_reason="tool_calls",
+                tool_calls=fallback,
+            )
+        return StrategyResult(
+            final_content=ok[0].response_content if ok else "",
+            usage=total,
+            degraded=True,
+            calls=[*member_outcomes, *extra_calls],
+        )
+
+    async def _run_tool_aggregation(self, ctx: StrategyContext) -> StrategyResult:
+        """T44 工具聚合：成员带 tools 并行 → 意图文本化评论 → 裁判合成最终调用。
+
+        校验失败（裁判产出的 function 名不在清单/arguments 非法 JSON）→ 降级择优成员调用
+        （degraded=true）；裁判判定无需工具而输出文字时按普通文本答案返回。
+        """
+        member_outcomes = await run_members(ctx)
+        ok = [o for o in member_outcomes if o.status == "success"]
+        strict = (ctx.pipeline.fault_tolerance or {}).get("judge_failure") == "strict"
+        adapter = self._judge_adapter(ctx)
+        intents = [(o.upstream_model_id, format_tool_intent(o)) for o in ok]
+
+        critique = await self._run_critique(ctx, adapter, ok, answers=intents)
+        if critique.status != "success":
+            if strict:
+                raise StrategyExecutionError(
+                    f"裁判调用失败(strict): {critique.error_message}",
+                    members=member_outcomes,
+                    critique=critique,
+                ) from None
+            return self._tool_degraded(member_outcomes, ok, critique)
+
+        request, payload = self.assemble_tool_final(
+            ctx, ok, critique.response_content, critique.request_payload["messages"], stream=True
+        )
+        start = time.perf_counter()
+        judge = CallOutcome(
+            role="judge",
+            model_id=ctx.judge_model.id,
+            upstream_model_id=ctx.judge_model.upstream_model_id,
+            provider_name=ctx.judge_provider.name,
+            request_payload=payload,
+        )
+        try:
+            result = await adapter.complete(request)
+        except AdapterError as exc:
+            judge.status = "failed"
+            judge.error_message = str(exc)
+            judge.duration_ms = int((time.perf_counter() - start) * 1000)
+            if strict:
+                raise StrategyExecutionError(
+                    f"裁判调用失败(strict): {exc}",
+                    members=member_outcomes,
+                    critique=critique,
+                    judge=judge,
+                ) from None
+            return self._tool_degraded(member_outcomes, ok, critique, judge)
+
+        judge.response_content = result.content
+        judge.response_tool_calls = result.tool_calls
+        judge.usage = result.usage
+        judge.duration_ms = result.duration_ms
+
+        final_calls = result.tool_calls
+        finish = result.finish_reason
+        degraded = False
+        if final_calls and not validate_tool_calls(final_calls, ctx.body["tools"]):
+            fallback = pick_fallback_tool_calls(ok)
+            if fallback is not None:
+                final_calls, finish, degraded = fallback, "tool_calls", True
+            else:
+                final_calls, finish = None, "stop"
+        elif not final_calls:
+            finish = "stop"  # 裁判判定无需工具 → 文字回答
+
+        total = sum_usage(member_outcomes)
+        total.prompt_tokens += critique.usage.prompt_tokens + result.usage.prompt_tokens
+        total.completion_tokens += critique.usage.completion_tokens + result.usage.completion_tokens
+        return StrategyResult(
+            final_content=result.content,
+            usage=total,
+            degraded=degraded,
+            calls=[*member_outcomes, critique, judge],
+            final_finish_reason=finish,
+            tool_calls=final_calls,
+        )
+
     async def run(self, ctx: StrategyContext) -> StrategyResult:
+        if tool_mode(ctx):
+            return await self._run_tool_aggregation(ctx)
         member_outcomes = await run_members(ctx)
         ok = [o for o in member_outcomes if o.status == "success"]
         strict = (ctx.pipeline.fault_tolerance or {}).get("judge_failure") == "strict"
@@ -422,8 +664,13 @@ class CouncilStrategy(Strategy):
         member_outcomes = await run_members(ctx)
         ok = [o for o in member_outcomes if o.status == "success"]
         adapter = self._judge_adapter(ctx)
+        intents = (
+            [(o.upstream_model_id, format_tool_intent(o)) for o in ok]
+            if tool_mode(ctx)
+            else None
+        )
 
-        critique = await self._run_critique(ctx, adapter, ok)
+        critique = await self._run_critique(ctx, adapter, ok, answers=intents)
         if critique.status != "success":
             # 评论失败发生在开流之前：无论容错模式均按失败返回（流式无中途降级语义）
             raise StrategyExecutionError(
@@ -432,13 +679,22 @@ class CouncilStrategy(Strategy):
                 critique=critique,
             ) from None
 
-        request, payload = self.assemble_final(
-            ctx,
-            ok,
-            critique.response_content,
-            critique.request_payload["messages"],
-            stream=True,
-        )
+        if intents is not None:
+            request, payload = self.assemble_tool_final(
+                ctx,
+                ok,
+                critique.response_content,
+                critique.request_payload["messages"],
+                stream=True,
+            )
+        else:
+            request, payload = self.assemble_final(
+                ctx,
+                ok,
+                critique.response_content,
+                critique.request_payload["messages"],
+                stream=True,
+            )
         base_usage = sum_usage(member_outcomes)
         base_usage.prompt_tokens += critique.usage.prompt_tokens
         base_usage.completion_tokens += critique.usage.completion_tokens

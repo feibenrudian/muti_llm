@@ -62,6 +62,22 @@ def snapshot_usage(scenario: str) -> dict[str, int]:
     return data["non_stream_response"]["usage"]
 
 
+def snapshot_tool_calls(scenario: str) -> list[dict[str, Any]]:
+    """快照流内 tool_calls 分片按 index 聚合（T44 意图文本化的期望值来源）。"""
+    from app.adapters.base import merge_tool_call_deltas
+
+    data = load_snapshot(scenario)
+    fragments = [
+        frag
+        for c in data.get("stream_chunks", [])
+        for frag in (
+            (c["chunk"].get("choices") or [{}])[0].get("delta", {}).get("tool_calls") or []
+        )
+    ]
+    merged = merge_tool_call_deltas(fragments)
+    return [merged[i] for i in sorted(merged)]
+
+
 async def seed_provider_and_model(
     client: httpx.AsyncClient,
     srs_base_url: str,

@@ -1,5 +1,6 @@
 """基础仓储：泛型 CRUD + 特殊查询。管理 API（T08+）与策略层统一经由此层访问 ORM。"""
 
+import re
 from collections.abc import Sequence
 from typing import Any
 
@@ -7,6 +8,24 @@ from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.orm import AppSetting, LlmModel, ModelCallLog, Pipeline, PipelineMember
+
+_SLUG_CLEAN_RE = re.compile(r"-{2,}")
+
+
+def derive_slug(name: str, taken: set[str], fallback: str) -> str:
+    """供应商显示名 → 路由命名空间的 URL 标识：小写、非字母数字转连字符、去首尾、查重加序号。
+
+    派生不出可用字符（如纯中文名）时用 fallback（provider-{id}），仍冲突则继续加序号。
+    """
+    base = re.sub(r"[^a-z0-9]+", "-", name.lower()).strip("-")
+    base = _SLUG_CLEAN_RE.sub("-", base)
+    candidate = base or fallback
+    slug = candidate
+    serial = 2
+    while slug in taken:
+        slug = f"{candidate}-{serial}"
+        serial += 1
+    return slug
 
 
 class Repository[ModelT]:

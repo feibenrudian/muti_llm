@@ -49,6 +49,8 @@ class Provider(Base):
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     name: Mapped[str] = mapped_column(String(100), unique=True)
+    # 路由命名空间的 URL 标识（/v1/route/{slug}）：创建时生成、不可改，与显示名解耦
+    slug: Mapped[str] = mapped_column(String(100), unique=True, default="")
     protocol: Mapped[str] = mapped_column(String(30))  # openai_compatible | anthropic
     base_url: Mapped[str] = mapped_column(String(500))
     api_key_encrypted: Mapped[str] = mapped_column(Text, default="")
@@ -91,6 +93,8 @@ class Pipeline(Base):
     enabled: Mapped[bool] = mapped_column(Boolean, default=True)
     # 过程流式（T38）pipeline 级默认；请求体显式 stream_process 优先于此
     stream_process: Mapped[bool] = mapped_column(Boolean, default=False)
+    # 工具聚合（T44）：开启后 pipeline 接受 tools 进入聚合语义（裁判合成最终调用）
+    tool_aggregation: Mapped[bool] = mapped_column(Boolean, default=False)
     created_at: Mapped[datetime] = mapped_column(UTCDatetime, default=utcnow)
     updated_at: Mapped[datetime] = _updated_at()
 
@@ -146,6 +150,8 @@ class ModelCallLog(Base):
     provider_name: Mapped[str] = mapped_column(String(100), default="")
     request_payload: Mapped[dict] = mapped_column(JSON, default=dict)  # 实际发出的完整入参
     response_content: Mapped[str] = mapped_column(Text, default="")
+    # 工具透传（T43）：聚合后的完整 tool_calls（OpenAI 形态）；非工具调用为 NULL
+    response_tool_calls: Mapped[list | None] = mapped_column(JSON, nullable=True, default=None)
     status: Mapped[str] = mapped_column(String(30), default="success")  # success | failed | timeout
     error_message: Mapped[str] = mapped_column(Text, default="")
     duration_ms: Mapped[int] = mapped_column(Integer, default=0)

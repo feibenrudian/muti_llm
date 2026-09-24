@@ -35,6 +35,10 @@ def _optional_params(request: LlmRequest) -> dict[str, Any]:
         params["max_tokens"] = request.max_tokens
     if request.top_p is not None:
         params["top_p"] = request.top_p
+    if request.tools:
+        params["tools"] = request.tools
+        if request.tool_choice is not None:
+            params["tool_choice"] = request.tool_choice
     return params
 
 
@@ -125,11 +129,34 @@ class OpenAICompatAdapter(BaseAdapter):
                     )
                 if not chunk.choices:
                     continue
-                delta = chunk.choices[0].delta
+                choice = chunk.choices[0]
+                if choice.finish_reason:
+                    yield StreamEvent(finish_reason=choice.finish_reason)
+                delta = choice.delta
                 # 思考模型增量在 reasoning_content（SDK 未声明该字段，getattr 兜底）
                 reasoning = getattr(delta, "reasoning_content", None)
                 if reasoning:
                     yield StreamEvent(reasoning=reasoning)
+                # 工具调用分片（SDK 类型化对象 → dict 原样透传，T43）
+                raw_tool_calls = getattr(delta, "tool_calls", None)
+                if raw_tool_calls:
+                    yield StreamEvent(
+                        tool_calls=[
+                            {
+                                "index": frag.index,
+                                **({"id": frag.id} if frag.id else {}),
+                                "function": {
+                                    **({"name": frag.function.name} if frag.function.name else {}),
+                                    **(
+                                        {"arguments": frag.function.arguments}
+                                        if frag.function.arguments
+                                        else {}
+                                    ),
+                                },
+                            }
+                            for frag in raw_tool_calls
+                        ]
+                    )
                 if delta.content:
                     yield StreamEvent(text=delta.content)
         except openai.APIError as exc:

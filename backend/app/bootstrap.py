@@ -22,6 +22,9 @@ KEY_SERVICE_HASH = "service_api_key_hash"
 KEY_SERVICE_KEY_ENCRYPTED = "service_api_key_encrypted"
 KEY_FERNET = "fernet_key"
 KEY_LOG_RETENTION_DAYS = "log_retention_days"
+# 两类模型的对外接入开关（"0"=关，缺省/"1"=开）：虚拟模型=Pipeline 名寻址，路由模型=真实模型名透传
+KEY_EXPOSE_VIRTUAL_MODELS = "expose_virtual_models"
+KEY_EXPOSE_ROUTED_MODELS = "expose_routed_models"
 
 
 @dataclass

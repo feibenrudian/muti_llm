@@ -5,6 +5,8 @@ export type ProviderProtocol = "openai_compatible" | "anthropic";
 export interface Provider {
   id: number;
   name: string;
+  /** 路由命名空间的 URL 标识（/v1/route/{slug}）：创建时生成、不可改；数字 id 亦可路由。 */
+  slug: string;
   protocol: ProviderProtocol;
   base_url: string;
   api_key_masked: string;
@@ -56,6 +58,8 @@ export interface Pipeline {
   enabled: boolean;
   /** 过程流式（reasoning_content）pipeline 级默认；请求体显式 stream_process 优先。 */
   stream_process: boolean;
+  /** 工具聚合（T44）：开启后 pipeline 接受 tools 进入聚合语义（裁判合成最终调用）。 */
+  tool_aggregation: boolean;
   members: PipelineMemberRow[];
 }
 
@@ -125,6 +129,9 @@ export interface ServiceSettings {
   database_path: string;
   database_size_bytes: number;
   log_retention_days: number;
+  /** 两类模型的对外接入开关：虚拟模型=Pipeline 名寻址；路由模型=真实模型名透传。 */
+  expose_virtual_models: boolean;
+  expose_routed_models: boolean;
 }
 
 export interface ServiceKeyInfo {
@@ -366,7 +373,11 @@ export const api = {
   },
   settings: {
     get: () => req<ServiceSettings>("/api/admin/settings"),
-    update: (body: { log_retention_days?: number }) => patch<{ ok: boolean }>("/api/admin/settings", body),
+    update: (body: {
+      log_retention_days?: number;
+      expose_virtual_models?: boolean;
+      expose_routed_models?: boolean;
+    }) => patch<{ ok: boolean }>("/api/admin/settings", body),
     serviceKey: () => req<ServiceKeyInfo>("/api/admin/settings/service-key"),
     resetKey: () => post<{ service_api_key: string }>("/api/admin/settings/service-key/reset"),
   },

@@ -70,17 +70,32 @@ async def test_manual_clear_and_write_again(
 
 
 async def test_settings_and_key_reset(asgi_client: httpx.AsyncClient, service_key: str) -> None:
-    """设置 API：信息展示、保留天数更新、重置 Key 后旧 Key 401 / 新 Key 200。"""
+    """设置 API：信息展示（含接入开关默认开）、保留天数/开关更新、重置 Key 后旧 401 / 新 200。"""
     resp = await asgi_client.get("/api/admin/settings")
     assert resp.status_code == 200
     info = resp.json()
     assert info["version"] == "0.1.0"
     assert info["log_retention_days"] == 30
+    assert info["expose_virtual_models"] is True
+    assert info["expose_routed_models"] is True
     assert "started_at" in info
 
     resp = await asgi_client.patch("/api/admin/settings", json={"log_retention_days": 7})
     assert resp.status_code == 200
     assert (await asgi_client.get("/api/admin/settings")).json()["log_retention_days"] == 7
+
+    # 两类接入开关分别可配、可回读
+    resp = await asgi_client.patch(
+        "/api/admin/settings", json={"expose_virtual_models": False, "expose_routed_models": False}
+    )
+    assert resp.status_code == 200
+    info = (await asgi_client.get("/api/admin/settings")).json()
+    assert info["expose_virtual_models"] is False
+    assert info["expose_routed_models"] is False
+    resp = await asgi_client.patch("/api/admin/settings", json={"expose_routed_models": True})
+    info = (await asgi_client.get("/api/admin/settings")).json()
+    assert info["expose_virtual_models"] is False  # 未触及的开关保持原值
+    assert info["expose_routed_models"] is True
 
     resp = await asgi_client.post("/api/admin/settings/service-key/reset")
     assert resp.status_code == 200

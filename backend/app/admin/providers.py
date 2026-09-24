@@ -10,11 +10,18 @@ from app.adapters.base import AdapterError
 from app.adapters.factory import build_adapter, decrypt_provider_key
 from app.deps import get_session
 from app.orm import LlmModel, Provider
-from app.repos import Repository, delete_models_cascade
+from app.repos import Repository, delete_models_cascade, derive_slug
 from app.schemas import ProviderCreate, ProviderOut, ProviderUpdate
 from app.security import encrypt_secret, mask_key
 
 router = APIRouter(prefix="/providers", tags=["admin-providers"])
+
+
+def _invalidate_route_list(provider_id: int) -> None:
+    """路由视图的上游列表缓存随供应商配置变更失效（避免跨模块常驻导入，延迟导入）。"""
+    from app.gateways.namespaces import invalidate_route_list
+
+    invalidate_route_list(provider_id)
 
 
 def to_out(row: Provider, fernet_key: bytes) -> ProviderOut:
@@ -27,6 +34,7 @@ def to_out(row: Provider, fernet_key: bytes) -> ProviderOut:
     return ProviderOut(
         id=row.id,
         name=row.name,
+        slug=row.slug,
         protocol=row.protocol,
         base_url=row.base_url,
         api_key_masked=masked,
@@ -84,12 +92,16 @@ async def create_provider(
     fernet_key: bytes = request.app.state.fernet_key
     row = await Repository(session, Provider).create(
         name=body.name,
+        slug="",  # 占位：flush 拿到 id 后立即回填（派生不出时兜底 provider-{id}）
         protocol=body.protocol,
         base_url=body.base_url,
         api_key_encrypted=encrypt_secret(body.api_key, fernet_key) if body.api_key else "",
         remark=body.remark,
         enabled=body.enabled,
     )
+    taken = set((await session.execute(select(Provider.slug))).scalars())
+    row.slug = derive_slug(body.name, taken, fallback=f"provider-{row.id}")
+    await session.flush()
     await session.commit()
     # 建好即按上游模型列表自动同步（best-effort）：上游不可达不阻塞创建，之后点"测试"会再同步
     try:
@@ -137,6 +149,7 @@ async def update_provider(
     if row is None:
         raise HTTPException(status_code=404, detail="provider not found")
     await session.commit()
+    _invalidate_route_list(provider_id)
     return to_out(row, fernet_key)
 
 
@@ -155,6 +168,7 @@ async def delete_provider(provider_id: int, session: AsyncSession = Depends(get_
     await delete_models_cascade(session, model_ids)
     await session.execute(delete(Provider).where(Provider.id == provider_id))
     await session.commit()
+    _invalidate_route_list(provider_id)
 
 
 @router.post("/{provider_id}/test")
@@ -178,6 +192,7 @@ async def test_provider(
         model_ids = await adapter.probe()
         synced, removed = await _sync_models(session, row, model_ids)
         await session.commit()
+        _invalidate_route_list(provider_id)  # 上游列表变了，路由视图缓存即时失效
         return {
             "ok": True,
             "latency_ms": int((time.perf_counter() - start) * 1000),

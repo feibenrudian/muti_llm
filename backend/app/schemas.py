@@ -31,6 +31,7 @@ class ProviderOut(BaseModel):
 
     id: int
     name: str
+    slug: str
     protocol: str
     base_url: str
     api_key_masked: str
@@ -92,6 +93,7 @@ class PipelineCreate(BaseModel):
     max_concurrency: int = Field(default=10, ge=1, le=100)
     enabled: bool = True
     stream_process: bool = False
+    tool_aggregation: bool = False
     members: list[PipelineMemberIn] = Field(min_length=1)
 
 
@@ -106,6 +108,7 @@ class PipelineUpdate(BaseModel):
     max_concurrency: int | None = Field(default=None, ge=1, le=100)
     enabled: bool | None = None
     stream_process: bool | None = None
+    tool_aggregation: bool | None = None
     members: list[PipelineMemberIn] | None = None
 
 
@@ -132,6 +135,7 @@ class PipelineOut(BaseModel):
     max_concurrency: int
     enabled: bool
     stream_process: bool
+    tool_aggregation: bool
     created_at: datetime
     updated_at: datetime
     members: list[PipelineMemberOut]

@@ -347,6 +347,138 @@ def base_scenarios(model: str) -> list[tuple[str, dict]]:
     return base
 
 
+# T43 工具透传场景的确定性常量：录制器与 AE 用例共用，保证请求体逐字节一致
+TOOL_QUESTION = "广州现在多少度？请用工具查询实时天气"
+TOOL_WEATHER = [
+    {
+        "type": "function",
+        "function": {
+            "name": "get_weather",
+            "description": "查询指定城市当前的实时天气（温度、天气现象）",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "city": {"type": "string", "description": "城市名，如 广州"},
+                    "unit": {"type": "string", "enum": ["celsius", "fahrenheit"]},
+                },
+                "required": ["city"],
+            },
+        },
+    }
+]
+
+
+def tool_scenarios(model: str) -> list[tuple[str, dict]]:
+    """T43 工具透传：确定性请求（温度 0 + 强工具相关性问题）→ 上游稳定产出 tool_calls。"""
+    body = {
+        **STREAM_BODY(
+            model=model,
+            messages=[{"role": "user", "content": TOOL_QUESTION}],
+        ),
+        "temperature": 0.0,
+        "tools": TOOL_WEATHER,
+        "tool_choice": "auto",
+    }
+    return [("passthrough_tool_calls", body)]
+
+
+def _tool_intent(model: str, scenario: str) -> str:
+    """快照成员输出 → 运行时同构的意图文本（复用 council.format_tool_intent 保证逐字节一致）。
+
+    content 与 tool_calls 都取自快照：混合输出（文本+调用）的成员意图带"附说明"部分，
+    与运行时 format_tool_intent 的输入形态完全一致。
+    """
+    from app.strategies.base import CallOutcome
+    from app.strategies.council import format_tool_intent
+    from tests.helpers import snapshot_content, snapshot_tool_calls
+
+    return format_tool_intent(
+        CallOutcome(
+            role="member",
+            model_id=0,
+            upstream_model_id=model,
+            provider_name="",
+            request_payload={},
+            response_content=snapshot_content(scenario),
+            response_tool_calls=snapshot_tool_calls(scenario),
+        )
+    )
+
+
+def tool_council_member_scenarios(model: str) -> list[tuple[str, dict]]:
+    """T44 工具 council 成员（无参数变体，与 passthrough_tool_calls 的温度 0 变体互补）。"""
+    return [
+        (
+            "tool_council_member",
+            {
+                **STREAM_BODY(
+                    model=model,
+                    messages=[{"role": "user", "content": TOOL_QUESTION}],
+                ),
+                "tools": TOOL_WEATHER,
+                "tool_choice": "auto",
+            },
+        )
+    ]
+
+
+def tool_council_critique_scenarios(model: str) -> list[tuple[str, dict]]:
+    """T44 工具 council 评论段：输入=两成员调用意图文本（快照聚合，须在成员场景录制后运行）。"""
+    from app.strategies.council import DEFAULT_CRITIQUE_TEMPLATE, render_judge_prompt
+
+    question = [{"role": "user", "content": TOOL_QUESTION}]
+    intents = [
+        (model, _tool_intent(model, "tool_council_member")),
+        (model, _tool_intent(model, "passthrough_tool_calls")),
+    ]
+    prompt = render_judge_prompt(DEFAULT_CRITIQUE_TEMPLATE, question, intents)
+    return [
+        (
+            "tool_council_critique",
+            {
+                **STREAM_BODY(model=model, messages=[{"role": "user", "content": prompt}]),
+                "temperature": 0.0,
+            },
+        )
+    ]
+
+
+def tool_council_final_scenarios(model: str) -> list[tuple[str, dict]]:
+    """T44 工具 council 终局：同会话 + 内置工具合成指令 + tools（裁判产出合成调用）。"""
+    from app.strategies.council import (
+        DEFAULT_CRITIQUE_TEMPLATE,
+        DEFAULT_TOOL_JUDGE_TEMPLATE,
+        build_final_messages,
+        render_final_instruction,
+        render_judge_prompt,
+    )
+
+    question = [{"role": "user", "content": TOOL_QUESTION}]
+    intents = [
+        (model, _tool_intent(model, "tool_council_member")),
+        (model, _tool_intent(model, "passthrough_tool_calls")),
+    ]
+    critique_prompt = render_judge_prompt(DEFAULT_CRITIQUE_TEMPLATE, question, intents)
+    critique_text = snapshot_content("tool_council_critique")
+    instruction = render_final_instruction(
+        DEFAULT_TOOL_JUDGE_TEMPLATE, question, intents, critique_text
+    )
+    messages = build_final_messages(
+        [{"role": "user", "content": critique_prompt}], critique_text, instruction
+    )
+    return [
+        (
+            "tool_council_final",
+            {
+                **STREAM_BODY(model=model, messages=messages),
+                "temperature": 0.0,
+                "tools": TOOL_WEATHER,
+                "tool_choice": "auto",
+            },
+        )
+    ]
+
+
 def ice_scenario_plan() -> list[tuple[str, str, dict]]:
     """§7.2 非流式 ICE 场景：(scenario, question, strategy_params)。"""
     return [
@@ -449,8 +581,13 @@ def main() -> None:
             # 三阶段：先录基础场景；评论场景的 Prompt 需要读取已录的成员答案全文；
             # 最终场景的 Prompt 需要读取已录的评论全文（两段式依赖链）
             run_scenarios(base_scenarios(model))
+            run_scenarios(tool_scenarios(model))
             run_scenarios(council_critique_scenarios(model))
             run_scenarios(council_final_scenarios(model))
+            # T44 工具 council 依赖链：成员 → 评论（读成员意图）→ 终局（读评论全文）
+            run_scenarios(tool_council_member_scenarios(model))
+            run_scenarios(tool_council_critique_scenarios(model))
+            run_scenarios(tool_council_final_scenarios(model))
 
             # ICE 多轮依赖链（§7.2）：录制器真实走完链路，链形态由真实 verdict 决定
             refine_answers: list[str] = []

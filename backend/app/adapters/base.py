@@ -31,6 +31,9 @@ class LlmRequest:
     temperature: float | None = None
     max_tokens: int | None = None
     top_p: float | None = None
+    # 工具透传（T43）：仅透传路径使用；anthropic 适配器暂不支持（非空即拒绝）
+    tools: list[dict[str, Any]] | None = None
+    tool_choice: str | dict[str, Any] | None = None
 
 
 @dataclass
@@ -55,15 +58,18 @@ class LlmUsage:
 
 @dataclass
 class StreamEvent:
-    """流式事件：文本增量、思考增量（reasoning），或（流结束时）一次 usage 汇总。
+    """流式事件：文本增量、思考增量（reasoning）、工具调用分片，或（流结束时）usage/finish_reason。
 
     reasoning 与 text 分离：思考内容绝不混入最终回答（complete/stream 只取 text），
     但同样计为"流上的活跃事件"，用于重置 TTFT/空闲超时计时器。
+    tool_calls 为 OpenAI delta 分片形态（{index,id?,function:{name?,arguments?}} 原样透传）。
     """
 
     text: str = ""
     usage: LlmUsage | None = None
     reasoning: str = ""
+    tool_calls: list[dict[str, Any]] | None = None
+    finish_reason: str | None = None
 
 
 @dataclass
@@ -71,6 +77,31 @@ class LlmResult:
     content: str
     usage: LlmUsage
     duration_ms: int
+    # 工具调用（T43）：complete() 从流内分片按 index 聚合的完整 OpenAI tool_calls 形态
+    tool_calls: list[dict[str, Any]] | None = None
+    finish_reason: str = "stop"
+
+
+def merge_tool_call_deltas(
+    fragments: list[dict[str, Any]],
+) -> dict[int, dict[str, Any]]:
+    """按 index 合并流式 tool_calls 分片为完整调用（id/name 取首个，arguments 字符串拼接）。"""
+    merged: dict[int, dict[str, Any]] = {}
+    for frag in fragments:
+        index = int(frag.get("index", 0))
+        call = merged.setdefault(index, {"id": "", "type": "function", "function": {}})
+        if frag.get("id"):
+            call["id"] = frag["id"]
+        if frag.get("type"):
+            call["type"] = frag["type"]
+        function = frag.get("function") or {}
+        if function.get("name"):
+            call["function"]["name"] = function["name"]
+        if function.get("arguments"):
+            call["function"]["arguments"] = call["function"].get("arguments", "") + function[
+                "arguments"
+            ]
+    return merged
 
 
 class AdapterError(Exception):
@@ -156,18 +187,35 @@ class BaseAdapter(ABC):
         return self._timed_events(request)
 
     async def complete(self, request: LlmRequest) -> LlmResult:
-        """流式调用聚合为完整结果。usage 取自流内 usage 事件（上游不支持则为 0）。"""
+        """流式调用聚合为完整结果。usage 取自流内 usage 事件（上游不支持则为 0）；
+        tool_calls 按流内分片 index 聚合，finish_reason 取流内透传值（默认 stop）。"""
         start = time.perf_counter()
         parts: list[str] = []
         usage = LlmUsage()
+        fragments: list[dict[str, Any]] = []
+        finish_reason = "stop"
         for attempt in range(self.max_retries + 1):
             try:
                 async for event in self._timed_events(request):
                     if event.text:
                         parts.append(event.text)
+                    if event.tool_calls:
+                        fragments.extend(event.tool_calls)
+                    if event.finish_reason:
+                        finish_reason = event.finish_reason
                     if event.usage is not None:
                         usage = event.usage
-                return LlmResult(content="".join(parts), usage=usage, duration_ms=elapsed_ms(start))
+                merged = merge_tool_call_deltas(fragments)
+                tool_calls = (
+                    [merged[i] for i in sorted(merged)] if merged else None
+                )
+                return LlmResult(
+                    content="".join(parts),
+                    usage=usage,
+                    duration_ms=elapsed_ms(start),
+                    tool_calls=tool_calls,
+                    finish_reason=finish_reason,
+                )
             except AdapterError as err:
                 # 已产出部分内容后不再整体重试（重放会重复生成）；首事件前的失败才可重试
                 if not err.retryable or parts or attempt == self.max_retries:

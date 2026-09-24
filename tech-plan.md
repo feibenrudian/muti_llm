@@ -505,6 +505,46 @@ make seed          # 起服务+灌入演示数据(指向快照回放服务器), 
 | UE-41-1 | UE | 看板渲染 | 造数跑一次 council → 模型表 2 行、供应商表行含快照精确合计；起始=明天 → 空态，重置 → 恢复 |
 | UE-41-2 | UE | CSV 导出 | 导出触发 download，文件名/BOM/中文表头/供应商行内容正确 |
 
+#### T42 命名空间网关（增量需求）：虚拟模型 / 路由模型分离接入
+产出：设置页接入开关（T41.5 补丁，先落）`expose_virtual_models`/`expose_routed_models`（bootstrap 键、缺省开）作用于老入口：`GET /v1/models` 按开关过滤两类；`/v1/chat/completions` 的 model 解析（Pipeline 优先 → 透传）跳过被关闭的类（老入口行为兼容不变，已配置服务零改动）。新增命名空间网关 `app/gateways/namespaces.py`（1.2 未规划该文件：属对外 /v1 网关域，与 llm_gateway 平级共用执行路径 `_run_pipeline`/`_passthrough`，仅 model 解析范围不同；请求体校验抽为 `validate_chat_body` 共享）：`/v1/pipeline`（说明 JSON）、`GET /v1/pipeline/models`（仅启用 Pipeline）、`POST /v1/pipeline/chat/completions`（只认 Pipeline 名）；`GET /v1/route`（启用供应商 slug 列表）、`GET /v1/route/{ident}/models`（透传上游实时列表：TTL 30s 进程内缓存 + 上游失败回落库内已同步启用模型 + 过滤本地明确停用的行，上游新模型本地无记录 → 默认列出）、`POST /v1/route/{ident}/chat/completions`（model 只认该供应商短名：启用行正常透传；本地停用行 404；无记录行动态透传——瞬态 `LlmModel(id=0)` 不落配置行，调用日志 model_id=0，统计按冗余 upstream_model_id 呈现）。供应商定位 `ident`：数字 id 优先、其次 slug；两开关对命名空间同样生效（关闭 → 命名空间整体 404）。Provider 新增 `slug`（唯一、创建时由 `derive_slug` 生成——小写归一/冲突加序号/纯中文兜底 `provider-{id}`，一次定终身不随显示名变化；数字 id 撞全数字 slug 时 id 赢）：幂等补列（D2，旧库 UNIQUE 由生成逻辑保证）+ 存量回填；`ProviderOut.slug`；供应商更新/删除/手动测试联动失效路由列表缓存（conftest 每用例清缓存防跨库串味）。前端：Providers 页加 "ID / 路由标识" 列；设置页接入信息分两块（各带开关、启用计数、命名空间 base url 复制行，按供应商列出 `/v1/route/{slug}` 并注明可用数字 id）。测试零新快照：上游列表走 SRS 确定性 `/v1/models`（`models_override`/`models_auth_fail` 注入），动态透传复用 AE-10-1 同形态载荷快照。
+| 编号 | 类型 | 用例 | 断言要点 |
+| --- | --- | --- | --- |
+| UT-42-1 | UT | slug 名字归一 | 小写、非字母数字转连字符、折叠去首尾 |
+| UT-42-2 | UT | slug 查重 | 冲突加序号 -2/-3 递增 |
+| UT-42-3 | UT | slug 兜底 | 纯中文 → fallback（provider-{id}）；fallback 冲突同样加序号 |
+| AE-10-4 | AE | 接入开关·虚拟 | 关闭后 /v1/models 不列 Pipeline、按名调用 404；透传不受影响；重开恢复 |
+| AE-10-5 | AE | 接入开关·路由 | 关闭后不列真实模型、按名调用 404；Pipeline 不受影响 |
+| AE-42-1 | AE | slug 身份 | 创建自动生成；改名不变；/v1/route 列出；slug 与数字 id 等价路由且列表一致 |
+| AE-42-2 | AE | slug 生成 | 大小写/空格归一；冲突 -2；纯中文 → provider-{id} |
+| AE-42-3 | AE | pipeline 命名空间 | models 只列虚拟模型；chat 认 Pipeline 名（502 策略分支）、真实模型名 404 |
+| AE-42-4 | AE | route chat | 启用模型透传 200；本地停用 404；本地无记录的动态透传 200（快照回放） |
+| AE-42-5 | AE | 路由列表口径 | 过滤本地停用；上游新模型保留；上游失败回落库内启用列表 |
+| AE-42-6 | AE | 命名空间闸门 | expose_virtual_models=false → /v1/pipeline/* 404；expose_routed_models=false → /v1/route/* 404；停用供应商 → 该命名空间 404 且不出现在 /v1/route |
+
+#### T43 工具透传（增量需求）
+产出：OpenAI 兼容工具调用（tool_calls）在**透传路径**全链路支持，聚合（pipeline）路径维持明确拒绝。①校验层：`validate_chat_body` 空值容忍——客户端默认携带的"关闭态"值（`tools: []`、`tool_choice: "auto"/"none"`、`functions: []`、`function_call: "none"/"auto"`、`logprobs: false`、`logit_bias: {}`，Unsloth Studio 等）静默忽略，legacy `functions` 非空仍 400；非空 `tools` 不在校验层拒绝，由调用方分流：透传分支放行、pipeline 分支 400"聚合模式（Pipeline）暂不支持工具调用"（T44 工具聚合落地后按开关放行）。②适配器：`LlmRequest` 扩展 `tools/tool_choice`；`StreamEvent` 扩展 `tool_calls`（OpenAI delta 分片原样）与 `finish_reason`；`LlmResult` 扩展聚合后 `tool_calls`（`merge_tool_call_deltas` 按 index 合并：id/name 取首个、arguments 串接）与 `finish_reason`（默认 stop）；openai_compat 请求透传 tools/tool_choice、流内解析分片与 finish_reason；anthropic 适配器 tools 非空 → 400 级 AdapterError（协议暂不支持）。D8 语义不变：非流式 `complete()` 仍由流聚合。③网关：`_llm_request` payload/归一化请求带 tools/tool_choice（与快照 hash 一致）；非流式响应包装 `message.tool_calls`（纯工具调用时 content=null）+ 透传 finish_reason；流式 pump 原样下发 delta.tool_calls 分片、终止块 finish_reason 透传；`model_call_logs` 幂等补列 `response_tool_calls`（JSON，聚合形态落库存证），请求级 `response_finish_reason` 落透传值。快照：`passthrough_tool_calls`（真实 DeepSeek 录制，温度 0 + 强工具相关问题 → get_weather 调用分片 + finish_reason=tool_calls）；空容忍场景上游载荷不变，零新快照。 council 聚合的语义约束（裁判无法综合"调用动作"）在 T44 前保持拒绝，报错文案明确指向能力边界。
+| 编号 | 类型 | 用例 | 断言要点 |
+| --- | --- | --- | --- |
+| UT-43-1 | UT | 分片合并 | arguments 按 index 串接、id/name 取首个、多 index 互不串 |
+| UT-43-2 | UT | 空分片 | 空列表 → 空合并（调用方置 None） |
+| UT-43-3 | UT | 适配器聚合 | complete() 从真实快照流聚出完整 tool_calls + finish_reason=tool_calls，与快照分片重放聚合一致 |
+| AE-43-1 | AE | 空值容忍 | tools=[]/tool_choice=auto/logprobs=false/logit_bias={} → 照常透传（上游载荷与既有快照一致） |
+| AE-43-2 | AE | 非流式工具 | message.tool_calls 原样返回、finish_reason=tool_calls、response_tool_calls 落库；route 命名空间同路径一致 |
+| AE-43-3 | AE | 流式工具 | delta.tool_calls 分片原样下发、终止块 finish_reason=tool_calls、[DONE] 正常 |
+| AE-43-4 | AE | 聚合拒绝 | pipeline 名 + 非空 tools → 400"暂不支持工具调用"；空 tools → 放行进策略分支 |
+| AE-43-5 | AE | 协议闸门 | anthropic 供应商 + 非空 tools → 适配器 400 级错误，不打上游 |
+
+#### T44 council 工具聚合模式（增量需求，已实施）
+产出：pipeline 级开关 `tool_aggregation`（ORM 布尔列 + 幂等补列，默认关；PipelineCreate/Update/Out 与前端表单/Badge 同步）。开启后 council 对非空 `tools` 放行进入聚合语义（关闭/其余策略仍 400；工具模式 + stream_process → 400，过程流式不做工具聚合）。策略层（council.py）：`tool_mode` 判定 → 成员带 tools/tool_choice 并行调用（`run_one` 经 `build_call_request` 透传，CallOutcome 增 `response_tool_calls`）→ `format_tool_intent` 把各成员输出文本化（调用列 JSON、混合输出带"附说明"）→ 复用两段式裁判：评论段仅 answers 换为意图文本（`assemble_critique` answers 参数），终局段 `assemble_tool_final` 用内置指令模板 `DEFAULT_TOOL_JUDGE_TEMPLATE`（裁判自由推理合成最终调用，评论是参考非约束；亦允许裁判判定无需工具时输出文字回答）并携带 tools/tool_choice 借裁判模型原生结构化输出产出调用。程序性兜底校验 `validate_tool_calls`（function 名 ∈ tools、arguments 合法 JSON 对象）失败 → `pick_fallback_tool_calls` 降级择优（多数 function.name 派系中取配置序首个成员调用，degraded=true）。`StrategyResult` 增 `tool_calls`；网关非流式响应包装 `message.tool_calls`（纯调用时 content=null）+ `final_finish_reason` 透传；流式 `prepare_stream` 工具分支换用 `assemble_tool_final`，`_pipeline_stream` pump 原样转发裁判流内 tool_calls 分片与 finish_reason（流式无中途降级拦截，校验结果随落库呈现），persist 落 `response_tool_calls` 与请求级 `response_finish_reason`。快照 3 个新增真实录制（`tool_council_member` 无参成员变体 / `tool_council_critique` 意图评论 / `tool_council_final` 裁判合成——录制器 `_tool_intent` 复用 `format_tool_intent` + 快照 content/tool_calls，保证与运行时 Prompt 逐字节一致；成员 B 复用 `passthrough_tool_calls` 温度 0 变体）。已知边界（需求方接受）：裁判仲裁为概率性（无执行反馈）；agent loop 每轮回填触发整场聚合，成本为单模型 N 倍以上；流式路径无降级拦截。
+| 编号 | 类型 | 用例 | 断言要点 |
+| --- | --- | --- | --- |
+| UT-44-1 | UT | 意图文本化 | 纯调用 / 调用+附说明 / 纯文本 / 空输出 四形态 |
+| UT-44-2 | UT | schema 兜底校验 | 合法通过；未知函数名、非法 JSON、非对象、空 拒绝 |
+| UT-44-3 | UT | 降级择优 | 多数派取配置序首个；无人产出调用 → None |
+| AE-44-1 | AE | 聚合主链路 | 响应 tool_calls == 快照裁判合成（含修正后的参数）、finish_reason=tool_calls、未降级；4 行调用日志（成员带 tool_calls、裁判行 response_tool_calls） |
+| AE-44-2 | AE | 流式聚合 | 终局流 tool_calls 分片原样下发、finish_reason 透传、[DONE] 正常 |
+| AE-44-3 | AE | 开关闸门 | tool_aggregation=false → 400"暂不支持工具调用"；无 tools 的文本聚合不受开关影响 |
+
 ---
 
 ## 4. 里程碑映射（对应需求文档 M1–M4）
