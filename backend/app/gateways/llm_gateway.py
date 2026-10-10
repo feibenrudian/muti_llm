@@ -231,20 +231,6 @@ async def execute_chat(
                     ),
                     None,
                 )
-            stream_process = (
-                bool(stream_process_raw)
-                if stream_process_raw is not None
-                else bool(pipeline.stream_process)
-            )
-            if has_tools and pipeline.tool_aggregation and stream_process:
-                return (
-                    openai_error(
-                        400,
-                        "工具聚合模式暂不支持过程流式（stream_process）",
-                        param="stream_process",
-                    ),
-                    None,
-                )
             # 请求体显式给了（含 false）就用请求体的值，否则用 pipeline 级默认
             stream_process = (
                 bool(stream_process_raw)
@@ -856,8 +842,10 @@ async def _pipeline_stream_process(
     全部完成——首个成员成功即返回（TTFT 提前到首成员完成）；前置明细不做开流前预写，
     由 persist 从 ProcessEvent 累计落库。首个成功成员前 pump 失败 → 暂存异常重抛，
     走 _run_pipeline 既有 502 JSON 路径（与今日全非流式/流式失败契约一致）。
+    终局两形态（T44）：FinalPlanReady 逐字转发裁判流；FinalResultReady（工具聚合）为
+    策略内已校验/降级的完整结果，按 tool_calls/文字一次性下发。
     """
-    from app.strategies.base import FinalPlanReady, StrategyExecutionError
+    from app.strategies.base import FinalPlanReady, FinalResultReady, StrategyExecutionError
 
     await session.commit()  # 先落 pending 状态的 request_logs（pre_outcomes 由 persist 补写）
 
@@ -869,15 +857,33 @@ async def _pipeline_stream_process(
     queue: asyncio.Queue[Any] = asyncio.Queue()
     pre_outcomes: list[Any] = []
     final_plan: Any = None
+    final_result: Any = None
     first_success = asyncio.Event()
     stashed: list[Exception] = []
     role_sent = False
 
     async def pump() -> None:
-        nonlocal final_plan, role_sent
+        nonlocal final_plan, final_result, role_sent
         outcome.status = "client_cancelled"  # 未到终态即结束 → 视为取消
         try:
             async for ev in strategy.run_stream_process(ctx):
+                if isinstance(ev, FinalResultReady):
+                    # 工具聚合终局（T44）：策略内已校验/降级，按结果形态一次性下发
+                    final_result = ev
+                    queue.put_nowait(_sse(chunk({"role": "assistant"})))
+                    if outcome.first_token_ms == 0:
+                        outcome.first_token_ms = _elapsed_ms(t0)
+                    if ev.tool_calls:
+                        for i, call in enumerate(ev.tool_calls):
+                            queue.put_nowait(
+                                _sse(chunk({"tool_calls": [{**call, "index": i}]}))
+                            )
+                    elif ev.content:
+                        queue.put_nowait(_sse(chunk({"content": ev.content})))
+                    queue.put_nowait(_sse(chunk({}, finish_reason=ev.finish_reason)))
+                    queue.put_nowait("data: [DONE]\n\n")
+                    outcome.status = "success"
+                    continue
                 if isinstance(ev, FinalPlanReady):
                     final_plan = ev.plan
                     # 终局转发：与常规流式路径同形态（role → content → stop → [DONE]）
@@ -964,31 +970,47 @@ async def _pipeline_stream_process(
         for o in pre_outcomes:
             prompt_tokens += o.usage.prompt_tokens
             completion_tokens += o.usage.completion_tokens
-        final_usage = outcome.usage or LlmUsage()
-        prompt_tokens += final_usage.prompt_tokens
-        completion_tokens += final_usage.completion_tokens
+        final_judge: CallOutcome | None = None
+        response_content = content
+        response_finish = ""
+        if final_plan is not None:
+            # 逐字转发形态：judge 明细从流式 outcome 还原
+            final_usage = outcome.usage or LlmUsage()
+            prompt_tokens += final_usage.prompt_tokens
+            completion_tokens += final_usage.completion_tokens
+            final_judge = CallOutcome(
+                role="judge",
+                model_id=final_plan.model_id,
+                upstream_model_id=final_plan.upstream_model_id,
+                provider_name=final_plan.provider_name,
+                request_payload=final_plan.payload or {},
+                response_content=content if outcome.status != "failed" else "",
+                status=outcome.status,
+                error_message=outcome.error,
+                duration_ms=outcome.duration_ms,
+                usage=final_usage,
+            )
+        elif final_result is not None:
+            # 工具聚合形态（T44）：终局在策略内完成，明细随 FinalResultReady 携带
+            final_judge = final_result.judge
+            prompt_tokens += final_result.judge.usage.prompt_tokens
+            completion_tokens += final_result.judge.usage.completion_tokens
+            response_content = final_result.content
+            response_finish = final_result.finish_reason
+        status = outcome.status
+        if final_result is not None and final_result.degraded and status == "success":
+            status = "degraded"
         async with session_factory() as s:
             if pre_outcomes:
                 await _record_outcomes(s, trace_id, pre_outcomes)
-            if final_plan is not None:  # 终局已开始才落 judge 行（前置期取消则无此行）
-                judge = CallOutcome(
-                    role="judge",
-                    model_id=final_plan.model_id,
-                    upstream_model_id=final_plan.upstream_model_id,
-                    provider_name=final_plan.provider_name,
-                    request_payload=final_plan.payload or {},
-                    response_content=content if outcome.status != "failed" else "",
-                    status=outcome.status,
-                    error_message=outcome.error,
-                    duration_ms=outcome.duration_ms,
-                    usage=final_usage,
-                )
-                await _record_outcomes(s, trace_id, [judge])
+            if final_judge is not None:  # 终局已开始才落 judge 行（前置期取消则无此行）
+                await _record_outcomes(s, trace_id, [final_judge])
             await finish_request(
                 s,
                 trace_id,
-                status=outcome.status,
-                response_content=content,
+                status=status,
+                response_content=response_content,
+                response_finish_reason=response_finish,
                 total_duration_ms=_elapsed_ms(t0),
                 first_token_ms=outcome.first_token_ms,
                 total_prompt_tokens=prompt_tokens,

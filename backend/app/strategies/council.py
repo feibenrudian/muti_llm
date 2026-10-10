@@ -6,6 +6,7 @@
 T44 工具聚合模式（pipeline.tool_aggregation=true 且请求带非空 tools）：成员带 tools
 并行调用 → 各成员调用意图文本化进裁判上下文 → 评论（参考非约束）→ 裁判带 tools
 生成最终调用（或判定无需工具时输出文字回答）→ 程序性校验兜底，失败降级择优成员调用。
+过程流式（stream_process）同支持：终局在策略内完整执行后以 FinalResultReady 交付。
 """
 
 from __future__ import annotations
@@ -30,6 +31,7 @@ from app.strategies.base import (
     AllMembersFailed,
     CallOutcome,
     FinalPlanReady,
+    FinalResultReady,
     MemberSpec,
     ProcessEvent,
     Strategy,
@@ -513,6 +515,68 @@ class CouncilStrategy(Strategy):
             calls=[*member_outcomes, *extra_calls],
         )
 
+    async def _run_tool_final_round(
+        self,
+        ctx: StrategyContext,
+        ok: list[CallOutcome],
+        critique: CallOutcome,
+        adapter: BaseAdapter,
+        *,
+        members: list[CallOutcome],
+        strict: bool,
+    ) -> tuple[CallOutcome, list[dict[str, Any]] | None, str, bool, str]:
+        """T44 终局轮：裁判带 tools 合成最终调用 → 程序性校验 → 失败降级择优成员调用。
+
+        返回 (judge 明细, 最终 tool_calls, finish_reason, degraded, 交付内容)。
+        非流式（_run_tool_aggregation）与过程流式（run_stream_process）共用。
+        """
+        request, payload = self.assemble_tool_final(
+            ctx, ok, critique.response_content, critique.request_payload["messages"], stream=True
+        )
+        start = time.perf_counter()
+        judge = CallOutcome(
+            role="judge",
+            model_id=ctx.judge_model.id,
+            upstream_model_id=ctx.judge_model.upstream_model_id,
+            provider_name=ctx.judge_provider.name,
+            request_payload=payload,
+        )
+        try:
+            result = await adapter.complete(request)
+        except AdapterError as exc:
+            judge.status = "failed"
+            judge.error_message = str(exc)
+            judge.duration_ms = int((time.perf_counter() - start) * 1000)
+            if strict:
+                raise StrategyExecutionError(
+                    f"裁判调用失败(strict): {exc}",
+                    members=members,
+                    critique=critique,
+                    judge=judge,
+                ) from None
+            fallback = pick_fallback_tool_calls(ok)
+            if fallback is not None:
+                return judge, fallback, "tool_calls", True, ""
+            return judge, None, "stop", True, ok[0].response_content if ok else ""
+
+        judge.response_content = result.content
+        judge.response_tool_calls = result.tool_calls
+        judge.usage = result.usage
+        judge.duration_ms = result.duration_ms
+
+        final_calls = result.tool_calls
+        finish = result.finish_reason
+        degraded = False
+        if final_calls and not validate_tool_calls(final_calls, ctx.body["tools"]):
+            fallback = pick_fallback_tool_calls(ok)
+            if fallback is not None:
+                final_calls, finish, degraded = fallback, "tool_calls", True
+            else:
+                final_calls, finish = None, "stop"
+        elif not final_calls:
+            finish = "stop"  # 裁判判定无需工具 → 文字回答
+        return judge, final_calls, finish, degraded, result.content
+
     async def _run_tool_aggregation(self, ctx: StrategyContext) -> StrategyResult:
         """T44 工具聚合：成员带 tools 并行 → 意图文本化评论 → 裁判合成最终调用。
 
@@ -535,54 +599,14 @@ class CouncilStrategy(Strategy):
                 ) from None
             return self._tool_degraded(member_outcomes, ok, critique)
 
-        request, payload = self.assemble_tool_final(
-            ctx, ok, critique.response_content, critique.request_payload["messages"], stream=True
+        judge, final_calls, finish, degraded, content = await self._run_tool_final_round(
+            ctx, ok, critique, adapter, members=member_outcomes, strict=strict
         )
-        start = time.perf_counter()
-        judge = CallOutcome(
-            role="judge",
-            model_id=ctx.judge_model.id,
-            upstream_model_id=ctx.judge_model.upstream_model_id,
-            provider_name=ctx.judge_provider.name,
-            request_payload=payload,
-        )
-        try:
-            result = await adapter.complete(request)
-        except AdapterError as exc:
-            judge.status = "failed"
-            judge.error_message = str(exc)
-            judge.duration_ms = int((time.perf_counter() - start) * 1000)
-            if strict:
-                raise StrategyExecutionError(
-                    f"裁判调用失败(strict): {exc}",
-                    members=member_outcomes,
-                    critique=critique,
-                    judge=judge,
-                ) from None
-            return self._tool_degraded(member_outcomes, ok, critique, judge)
-
-        judge.response_content = result.content
-        judge.response_tool_calls = result.tool_calls
-        judge.usage = result.usage
-        judge.duration_ms = result.duration_ms
-
-        final_calls = result.tool_calls
-        finish = result.finish_reason
-        degraded = False
-        if final_calls and not validate_tool_calls(final_calls, ctx.body["tools"]):
-            fallback = pick_fallback_tool_calls(ok)
-            if fallback is not None:
-                final_calls, finish, degraded = fallback, "tool_calls", True
-            else:
-                final_calls, finish = None, "stop"
-        elif not final_calls:
-            finish = "stop"  # 裁判判定无需工具 → 文字回答
-
         total = sum_usage(member_outcomes)
-        total.prompt_tokens += critique.usage.prompt_tokens + result.usage.prompt_tokens
-        total.completion_tokens += critique.usage.completion_tokens + result.usage.completion_tokens
+        total.prompt_tokens += critique.usage.prompt_tokens + judge.usage.prompt_tokens
+        total.completion_tokens += critique.usage.completion_tokens + judge.usage.completion_tokens
         return StrategyResult(
-            final_content=result.content,
+            final_content=content,
             usage=total,
             degraded=degraded,
             calls=[*member_outcomes, critique, judge],
@@ -711,11 +735,13 @@ class CouncilStrategy(Strategy):
 
     async def run_stream_process(
         self, ctx: StrategyContext
-    ) -> AsyncIterator[ProcessEvent | FinalPlanReady]:
+    ) -> AsyncIterator[ProcessEvent | FinalPlanReady | FinalResultReady]:
         """过程流式（T38）：成员完成即事件（as_completed 完成序），评论与终局计划随后。
 
         上游请求与 prepare_stream 逐字节一致（同一 run_one/_run_critique/assemble_final）；
         仅观测顺序变为完成序，下游评论/终局的答案序仍按成员配置序。
+        T44 工具聚合时终局改为策略内完整执行（FinalResultReady）：tool_calls 校验需要
+        完整响应，逐字转发无意义，校验失败降级择优成员调用。
         """
         adapter_factory = default_member_adapter_factory(ctx)
         strict = (ctx.pipeline.fault_tolerance or {}).get("member_failure") == "strict"
@@ -739,7 +765,12 @@ class CouncilStrategy(Strategy):
             ok = [o for o in member_outcomes if o.status == "success"]
 
             adapter = self._judge_adapter(ctx)
-            critique = await self._run_critique(ctx, adapter, ok)
+            intents = (
+                [(o.upstream_model_id, format_tool_intent(o)) for o in ok]
+                if tool_mode(ctx)
+                else None
+            )
+            critique = await self._run_critique(ctx, adapter, ok, answers=intents)
             yield ProcessEvent(kind="critique", label="评论", outcome=critique)
             if critique.status != "success":
                 # 评论失败：成员明细已随事件落地，按 prepare_stream 同形态抛错
@@ -748,6 +779,28 @@ class CouncilStrategy(Strategy):
                     members=member_outcomes,
                     critique=critique,
                 ) from None
+
+            if intents is not None:
+                # T44 工具聚合终局：校验需完整响应，策略内跑完（含降级择优），一次性交付
+                judge, final_calls, finish, degraded, content = (
+                    await self._run_tool_final_round(
+                        ctx,
+                        ok,
+                        critique,
+                        adapter,
+                        members=member_outcomes,
+                        strict=(ctx.pipeline.fault_tolerance or {}).get("judge_failure")
+                        == "strict",
+                    )
+                )
+                yield FinalResultReady(
+                    content=content,
+                    finish_reason=finish,
+                    judge=judge,
+                    tool_calls=final_calls,
+                    degraded=degraded,
+                )
+                return
 
             request, payload = self.assemble_final(
                 ctx,

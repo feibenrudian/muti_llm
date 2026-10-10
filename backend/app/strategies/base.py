@@ -165,6 +165,19 @@ class FinalPlanReady:
     plan: StreamPlan
 
 
+@dataclass
+class FinalResultReady:
+    """工具聚合终局结果（T44 过程流式）：终局轮已在策略内完整执行（含程序性校验与
+    成员降级），网关按结果形态一次性下发 SSE（tool_calls 分片或文字回答），
+    judge 明细随事件落库。"""
+
+    content: str
+    finish_reason: str
+    judge: CallOutcome
+    tool_calls: list[dict[str, Any]] | None = None
+    degraded: bool = False
+
+
 class Strategy(ABC):
     """聚合策略接口。新策略继承本类并用 register_strategy 注册。"""
 

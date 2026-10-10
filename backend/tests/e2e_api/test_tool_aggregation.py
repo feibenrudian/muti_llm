@@ -1,11 +1,16 @@
-"""T44 工具聚合模式（council + tool_aggregation 开关）：AE-44-1..4。"""
+"""T44 工具聚合模式（council + tool_aggregation 开关）：AE-44-1..5。"""
 
+import asyncio
 import json
 
 import httpx
 
 from tests.conftest import auth_headers
-from tests.helpers import seed_provider_and_model, snapshot_tool_calls
+from tests.helpers import (
+    seed_provider_and_model,
+    snapshot_content,
+    snapshot_tool_calls,
+)
 from tests.record_scenarios import TOOL_QUESTION, TOOL_WEATHER
 
 PIPELINE = "tool-council-v1"
@@ -126,7 +131,7 @@ async def test_tool_aggregation_stream(
 async def test_tool_aggregation_gate(
     asgi_client: httpx.AsyncClient, service_key: str, srs_live_seeded: str
 ) -> None:
-    """AE-44-3/4 闸门：开关关闭 → 400；开关开启但 stream_process → 400；无 tools 不受影响。"""
+    """AE-44-3/4 闸门：开关关闭 → 400；ICE 策略误开开关 → 400；无 tools 不受影响。"""
     model_id = await _seed_tool_pipeline(asgi_client, srs_live_seeded, tool_aggregation=True)
     pipelines = (await asgi_client.get("/api/admin/pipelines")).json()
     assert pipelines[0]["tool_aggregation"] is True
@@ -142,18 +147,6 @@ async def test_tool_aggregation_gate(
     )
     assert resp.status_code == 400
     assert "暂不支持工具调用" in resp.json()["error"]["message"]
-
-    # 开关开启 + stream_process → 400（工具聚合暂不支持过程流式）
-    await asgi_client.patch(
-        f"/api/admin/pipelines/{pipeline_id}", json={"tool_aggregation": True}
-    )
-    resp = await asgi_client.post(
-        "/v1/chat/completions",
-        json={**TOOL_BODY, "stream_process": True},
-        headers=auth_headers(service_key),
-    )
-    assert resp.status_code == 400
-    assert "过程流式" in resp.json()["error"]["message"]
 
     # ICE 策略即使误开开关 → 仍 400（工具聚合仅 council 实现，不静默忽略 tools）
     resp = await asgi_client.post(
@@ -197,3 +190,76 @@ async def test_tool_aggregation_gate(
     )
     assert resp.status_code == 200
     assert resp.json()["choices"][0]["finish_reason"] == "stop"
+
+
+async def test_tool_aggregation_stream_process(
+    asgi_client: httpx.AsyncClient, service_key: str, srs_live_seeded: str
+) -> None:
+    """AE-44-5 过程流式 + 工具聚合：成员/评论 reasoning 过程块 → 终局 tool_calls 下发。"""
+    await _seed_tool_pipeline(asgi_client, srs_live_seeded, tool_aggregation=True)
+    from tests.e2e_api.test_stream_process import _chunks, _collect_payloads, _reasoning_blocks
+
+    async with asgi_client.stream(
+        "POST",
+        "/v1/chat/completions",
+        json={**TOOL_BODY, "stream": True, "stream_process": True},
+        headers=auth_headers(service_key),
+    ) as resp:
+        assert resp.status_code == 200
+        payloads = await _collect_payloads(resp)
+
+    chunks, done = _chunks(payloads)
+    assert done
+    # 过程块：成员 ×2（纯工具调用，仅标题）→ 评论（与非流式工具聚合逐字节一致）
+    blocks = _reasoning_blocks(chunks)
+    assert [b[0] for b in blocks] == ["【成员 deepseek-v4-flash】\n"] * 2 + ["【评论】\n"]
+    assert blocks[2][1] == snapshot_content("tool_council_critique")
+
+    # 终局：tool_calls 分片 + finish_reason=tool_calls；无 content 混入
+    deltas: list[dict] = []
+    finish_reason = None
+    for c in chunks:
+        choice = (c.get("choices") or [{}])[0]
+        if choice.get("delta", {}).get("tool_calls"):
+            deltas.extend(choice["delta"]["tool_calls"])
+        if choice.get("finish_reason"):
+            finish_reason = choice["finish_reason"]
+    assert deltas and finish_reason == "tool_calls"
+    expected = snapshot_tool_calls("tool_council_final")
+    assert [d["function"]["name"] for d in deltas] == [
+        call["function"]["name"] for call in expected
+    ]
+    assert [d["function"]["arguments"] for d in deltas] == [
+        call["function"]["arguments"] for call in expected
+    ]
+    assert all(not c["choices"][0]["delta"].get("content") for c in chunks)
+
+    # 落库与非流式工具聚合一致：4 行 + judge 行带 response_tool_calls + trace 终态
+    await asyncio.sleep(0.2)
+    from sqlalchemy import select
+
+    from app.main import app
+    from app.orm import ModelCallLog, RequestLog
+
+    async with app.state.session_factory() as session:
+        trace = (
+            (await session.execute(select(RequestLog).order_by(RequestLog.id.desc())))
+            .scalars()
+            .first()
+        )
+        logs = (
+            (
+                await session.execute(
+                    select(ModelCallLog)
+                    .where(ModelCallLog.request_id == trace.id)
+                    .order_by(ModelCallLog.id)
+                )
+            )
+            .scalars()
+            .all()
+        )
+    assert [log.role for log in logs] == ["member", "member", "judge_critique", "judge"]
+    assert logs[3].response_tool_calls == snapshot_tool_calls("tool_council_final")
+    assert trace.response_finish_reason == "tool_calls"
+    assert trace.status == "success"
+    assert trace.total_prompt_tokens > 0
