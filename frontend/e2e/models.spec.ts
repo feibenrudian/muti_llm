@@ -1,4 +1,4 @@
-import { expect, test } from "@playwright/test";
+import { expect, test } from "./fixtures";
 import { seedModel, seedProvider } from "./helpers";
 
 test("UE-22-1 新建模型并绑定供应商", async ({ page, request }) => {

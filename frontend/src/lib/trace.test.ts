@@ -39,6 +39,8 @@ const detail: TraceDetail = {
     total_prompt_tokens: 10,
     total_completion_tokens: 5,
     created_at: "2026-09-02T12:00:00+00:00",
+    user_id: 0,
+    user_username: "",
   },
   calls: [
     call({ id: 1, role: "member", upstream_model_id: "m-a" }),

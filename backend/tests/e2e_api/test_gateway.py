@@ -132,9 +132,9 @@ async def test_exposure_toggle_virtual(
 
     ids = [
         m["id"]
-        for m in (
-            await asgi_client.get("/v1/models", headers=auth_headers(service_key))
-        ).json()["data"]
+        for m in (await asgi_client.get("/v1/models", headers=auth_headers(service_key))).json()[
+            "data"
+        ]
     ]
     assert "council-v1" not in ids  # 虚拟模型被隐藏
     assert "deepseek-v4-flash" in ids  # 路由模型不受影响
@@ -170,9 +170,9 @@ async def test_exposure_toggle_routed(
 
     ids = [
         m["id"]
-        for m in (
-            await asgi_client.get("/v1/models", headers=auth_headers(service_key))
-        ).json()["data"]
+        for m in (await asgi_client.get("/v1/models", headers=auth_headers(service_key))).json()[
+            "data"
+        ]
     ]
     assert "deepseek-v4-flash" not in ids  # 路由模型被隐藏
     assert "council-v1" in ids  # 虚拟模型不受影响

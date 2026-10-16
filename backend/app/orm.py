@@ -11,6 +11,7 @@ from sqlalchemy import (
     Integer,
     String,
     Text,
+    UniqueConstraint,
 )
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 from sqlalchemy.types import TypeDecorator
@@ -70,7 +71,8 @@ class LlmModel(Base):
     # {temperature, max_tokens, top_p, timeout_seconds, max_retries}
     default_params: Mapped[dict] = mapped_column(JSON, default=dict)
     enabled: Mapped[bool] = mapped_column(Boolean, default=True)
-    # 模型同步发现上游列表已无此 ID（enabled 被联动置 False）；与手动停用区分，上游重新上架时自动恢复
+    # 模型同步发现上游列表已无此 ID（enabled 被联动置 False）；与手动停用区分，
+    # 上游重新上架时自动恢复
     upstream_missing: Mapped[bool] = mapped_column(Boolean, default=False)
     created_at: Mapped[datetime] = mapped_column(UTCDatetime, default=utcnow)
     updated_at: Mapped[datetime] = _updated_at()
@@ -130,6 +132,9 @@ class RequestLog(Base):
     total_prompt_tokens: Mapped[int] = mapped_column(Integer, default=0)
     total_completion_tokens: Mapped[int] = mapped_column(Integer, default=0)
     client_ip: Mapped[str] = mapped_column(String(64), default="")
+    # 归属（多用户 T48）：0/"" = 历史数据（多用户之前写入），展示与筛选均按"（历史）"处理
+    user_id: Mapped[int] = mapped_column(Integer, default=0)
+    user_username: Mapped[str] = mapped_column(String(32), default="")
     created_at: Mapped[datetime] = mapped_column(UTCDatetime, default=utcnow)
 
 
@@ -142,7 +147,9 @@ class ModelCallLog(Base):
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     request_id: Mapped[int] = mapped_column(ForeignKey("request_logs.id"))
-    role: Mapped[str] = mapped_column(String(20))  # member | judge_critique | judge | judge_rerun | passthrough
+    role: Mapped[str] = mapped_column(
+        String(20)
+    )  # member | judge_critique | judge | judge_rerun | passthrough
     # ICE 迭代轮次（0 起，D14）；终局裁决行、council/透传行均为 NULL
     round: Mapped[int | None] = mapped_column(Integer, nullable=True, default=None)
     model_id: Mapped[int] = mapped_column(Integer, default=0)
@@ -160,6 +167,9 @@ class ModelCallLog(Base):
     # 缓存拆分（T41 对账）：命中读/写入缓存的输入 token 数，均含于 prompt_tokens
     cached_tokens: Mapped[int] = mapped_column(Integer, default=0)
     cache_write_tokens: Mapped[int] = mapped_column(Integer, default=0)
+    # 归属（多用户 T48）：冗余用户名快照，用户删除后统计仍完整（需求 D22）
+    user_id: Mapped[int] = mapped_column(Integer, default=0)
+    user_username: Mapped[str] = mapped_column(String(32), default="")
     created_at: Mapped[datetime] = mapped_column(UTCDatetime, default=utcnow)
 
 
@@ -171,3 +181,89 @@ class AppSetting(Base):
     key: Mapped[str] = mapped_column(String(100), primary_key=True)
     value: Mapped[str] = mapped_column(Text)
     updated_at: Mapped[datetime] = mapped_column(UTCDatetime, default=utcnow, onupdate=utcnow)
+
+
+# ---- 多用户域（T45）----------------------------------------------------------------
+
+
+class User(Base):
+    __tablename__ = "users"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    # 登录名，创建后不可改（^[a-zA-Z0-9._-]{3,32}$，校验在 schema 层）
+    username: Mapped[str] = mapped_column(String(32), unique=True)
+    display_name: Mapped[str] = mapped_column(String(50), default="")
+    # admin | user；一般用户可有登录凭据（门户自助登录，T52），初始密码由管理员发放
+    role: Mapped[str] = mapped_column(String(10), default="user")
+    enabled: Mapped[bool] = mapped_column(Boolean, default=True)
+    # PBKDF2-HMAC-SHA256 hex；盐与哈希分列（迭代数取 settings，不随哈希串存储）
+    password_hash: Mapped[str] = mapped_column(String(200), default="")
+    password_salt: Mapped[str] = mapped_column(String(64), default="")
+    remark: Mapped[str] = mapped_column(String(500), default="")
+    created_at: Mapped[datetime] = mapped_column(UTCDatetime, default=utcnow)
+    updated_at: Mapped[datetime] = _updated_at()
+
+
+class UserApiKey(Base):
+    __tablename__ = "user_api_keys"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), index=True)
+    name: Mapped[str] = mapped_column(String(50), default="")  # 标签：家用笔记本 / 脚本 …
+    key_hash: Mapped[str] = mapped_column(String(64), unique=True)  # sha256(明文)
+    # Fernet 可解密副本：仅供掩码展示与"复制 Key"（明文只在创建响应出现一次）
+    key_encrypted: Mapped[str] = mapped_column(Text, default="")
+    enabled: Mapped[bool] = mapped_column(Boolean, default=True)
+    created_by: Mapped[int] = mapped_column(Integer, default=0)  # 操作管理员 id（审计）
+    # 最后使用时间（认证热路径节流写，见 auth_svc.touch_key_usage）
+    last_used_at: Mapped[datetime | None] = mapped_column(UTCDatetime, nullable=True, default=None)
+    created_at: Mapped[datetime] = mapped_column(UTCDatetime, default=utcnow)
+
+
+class UserGrant(Base):
+    """模型访问授权：kind=pipeline|model|provider，target_id 按 kind 指向对应表主键。
+
+    SQLite 无法对多态目标声明外键；引用存在性由授权写入时校验，被授权对象删除时级联清理（D33）。
+    """
+
+    __tablename__ = "user_grants"
+    __table_args__ = (
+        UniqueConstraint("user_id", "kind", "target_id", name="uq_user_grants"),
+        Index("ix_user_grants_user_id", "user_id"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id"))
+    kind: Mapped[str] = mapped_column(String(10))
+    target_id: Mapped[int] = mapped_column(Integer)
+    created_at: Mapped[datetime] = mapped_column(UTCDatetime, default=utcnow)
+
+
+class AdminSession(Base):
+    """用户会话（管理台与门户共用，T46/T52）：令牌只存哈希；滑动续期（校验时前移 expires_at）。"""
+
+    __tablename__ = "admin_sessions"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    token_hash: Mapped[str] = mapped_column(String(64), unique=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), index=True)
+    created_at: Mapped[datetime] = mapped_column(UTCDatetime, default=utcnow)
+    expires_at: Mapped[datetime] = mapped_column(UTCDatetime)
+    last_seen_at: Mapped[datetime] = mapped_column(UTCDatetime, default=utcnow)
+
+
+class AdminAuditLog(Base):
+    """管理动作审计流水（T51）：用户/Key/授权变更与登录事件，只增不改。"""
+
+    __tablename__ = "admin_audit_logs"
+    __table_args__ = (Index("ix_admin_audit_logs_created_at", "created_at"),)
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    actor_user_id: Mapped[int] = mapped_column(Integer, default=0)
+    actor_username: Mapped[str] = mapped_column(String(32), default="")
+    # user.create | user.update | key.create | grant.update | auth.login | auth.login_failed | …
+    action: Mapped[str] = mapped_column(String(50))
+    target_type: Mapped[str] = mapped_column(String(20), default="")
+    target_id: Mapped[str] = mapped_column(String(64), default="")
+    detail: Mapped[dict] = mapped_column(JSON, default=dict)
+    created_at: Mapped[datetime] = mapped_column(UTCDatetime, default=utcnow)

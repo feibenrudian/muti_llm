@@ -12,8 +12,8 @@ def test_merge_tool_call_deltas_by_index() -> None:
     """UT-43-1 分片合并：arguments 按 index 顺序拼接，id/name 取首个，多 index 互不串。"""
     merged = merge_tool_call_deltas(
         [
-            {"index": 0, "id": "call_a", "function": {"name": "get_weather", "arguments": "{\"ci"}},
-            {"index": 0, "function": {"arguments": "ty\": \"广州\"}"}},
+            {"index": 0, "id": "call_a", "function": {"name": "get_weather", "arguments": '{"ci'}},
+            {"index": 0, "function": {"arguments": 'ty": "广州"}'}},
             {"index": 1, "id": "call_b", "function": {"name": "get_time", "arguments": "{}"}},
         ]
     )

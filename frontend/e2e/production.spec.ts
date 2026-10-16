@@ -1,4 +1,4 @@
-import { expect, test } from "@playwright/test";
+import { expect, test } from "./fixtures";
 
 test("UE-29-1 生产模式冒烟：单进程（uvicorn + 静态托管）下全量页面可打开", async ({ page }) => {
   await page.goto("/");

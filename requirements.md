@@ -25,7 +25,7 @@
 
 ### 1.3 非目标（本期不做）
 
-- 不做用户体系、多租户、按用户计费配额。
+- 不做多租户隔离、按用户计费配额；用户体系见《多用户管理需求文档》（doc/）FR-17–FR-22（实施见 doc/多用户管理技术方案与任务拆分.md T45–T51）。
 - 不做 Embedding / Image / Audio 等非 Chat 类接口的聚合。
 - 不实现其他聚合策略（仅预留扩展点）。
 - 不做分布式部署，本期单机本地运行。
@@ -112,7 +112,7 @@
 
 #### FR-3 模型列表接口 【P1】
 
-- `GET /v1/models` 返回所有启用的 Pipeline 虚拟模型（及可选的透传真实模型），格式兼容 OpenAI。
+- `GET /v1/models` 返回所有启用的 Pipeline 虚拟模型（及可选的透传真实模型），格式兼容 OpenAI；按调用 Key 所属用户的模型授权过滤（多用户 FR-20），管理员见全集。
 - 老入口 `/v1/models` 与 `/v1/chat/completions` 永久保留（已配置服务零改动）；两类模型的对外接入可在设置页分别开关（关闭 → 该类从列表隐藏且不可调用）。
 
 #### FR-3.1 命名空间网关（虚拟模型 / 路由模型分离接入）【P1】
@@ -124,8 +124,8 @@
 
 #### FR-4 服务认证 【P0】
 
-- 服务自身签发一个 API Key（首次启动自动生成，可在 Web UI 重置）。
-- 客户端以 `Authorization: Bearer <key>` 访问；未认证返回 401，格式兼容 OpenAI 错误结构。
+- 认证：用户级 API Key（每用户可多把，`sk-mu-` 前缀）+ 兼容 Key（旧服务 Key，归属内置 admin，多用户 FR-18）。
+- 客户端以 `Authorization: Bearer <key>` 访问；未认证返回 401，格式兼容 OpenAI 错误结构；Key 有效但所属用户停用 → 403 `user_disabled`；模型存在但未授权 → 403 `model_not_authorized`（FR-20）。
 
 #### FR-5 错误处理 【P0】
 
@@ -190,7 +190,7 @@
 
 #### FR-13 调用日志 / Trace 查询页 【P0】
 
-- 列表页：按时间范围、Pipeline（虚拟模型）、成员模型、调用状态（成功/失败/降级/取消）、关键字（匹配原始输入内容）筛选；展示请求时间、虚拟模型、耗时、总 token、状态。
+- 列表页：按时间范围、Pipeline（虚拟模型）、成员模型、调用状态（成功/失败/降级/取消）、关键字（匹配原始输入内容）、归属用户筛选；展示请求时间、虚拟模型、归属用户、耗时、总 token、状态（多用户 FR-22）。
 - 详情页（单次请求 Trace 视图，按时间线展示）：
   1. **原始请求**：完整 messages 与参数；
   2. **每次成员调用卡片**：模型名、实际发出的入参（含合并后参数）、完整输出、耗时、token、状态/错误信息；
@@ -201,13 +201,15 @@
 
 #### FR-14 服务设置页 【P1】
 
-- 查看服务地址与对外 API Key（可重置）、日志保留天数、系统运行状态（版本、启动时间、存储占用）。
+- 查看服务地址与对外 API Key（兼容 Key，可重置）、日志保留天数、系统运行状态（版本、启动时间、存储占用）；管理台需管理员登录（FR-21）。
 
 #### FR-15 统计面板 【P2】
 
 - 按天/按 Pipeline / 按成员模型统计：请求数、成功率、P50/P95 延迟、token 消耗。
 - 按供应商/模型/天统计 token 用量（输入/输出、缓存命中/写入/未命中、命中率）与调用数
   （含失败数），支持时间范围与供应商/模型筛选、CSV 导出，用于与供应商对账（T41）。
+- 按用户维度统计（by-user / by-user-model），支持用户筛选：回答「谁、什么时间段、哪个模型、
+  用了多少」（多用户 FR-22，T50）。
 
 ### 4.5 日志与可观测性
 
@@ -247,9 +249,9 @@ request_logs:      id(request_id), pipeline_name, client_model_field,
                    response_content, response_finish_reason,
                    status(success|degraded|failed|client_cancelled),
                    total_duration_ms, total_prompt_tokens,
-                   total_completion_tokens, client_ip, created_at
+                   total_completion_tokens, client_ip, user_id, user_username, created_at
 
-model_call_logs:   id, request_id, role(member|judge), model_id,
+model_call_logs:   id, request_id, role(member|judge), model_id, user_id, user_username,
                    upstream_model_id, provider_name,
                    request_payload(json, 含合并后参数/裁判Prompt全文),
                    response_content, status, error_message,
@@ -264,7 +266,7 @@ model_call_logs:   id, request_id, role(member|judge), model_id,
 | --- | --- | --- |
 | NFR-1 | 延迟 | 成员阶段并发调用，端到端延迟目标 ≈ max(成员延迟) + 裁判延迟；成员超时（TTFT/空闲，非总时长）默认 60s 可配置。 |
 | NFR-2 | 并发 | 支持至少 20 并发对外请求（本地场景）；成员调用按 Pipeline 并发上限受控。 |
-| NFR-3 | 安全 | 上游 API Key 加密存储、UI 不回显明文；服务自身 API Key 哈希比对；管理 UI 默认仅监听 127.0.0.1。 |
+| NFR-3 | 安全 | 上游 API Key 加密存储、UI 不回显明文；用户 Key/会话令牌只存哈希；管理 API 需管理员会话（多用户 FR-21）；管理 UI 默认仅监听 127.0.0.1。 |
 | NFR-4 | 可靠性 | 单上游故障不影响整体服务；上游调用支持配置重试（默认 1 次，指数退避）。 |
 | NFR-5 | 可扩展 | 策略接口、Provider 协议适配均为插件式注册；新增一种聚合策略不修改网关与 UI 主流程。 |
 | NFR-6 | 部署 | 本地一键部署：docker-compose 一条命令拉起；或提供单进程模式（内嵌 UI，SQLite 存储，零外部依赖）。 |
@@ -348,5 +350,5 @@ curl http://127.0.0.1:8000/v1/chat/completions \
 ## 10. 未来扩展（不在本期）
 
 - 更多策略：多数投票（Voting）、加权融合、级联（前一层输出作为后一层输入的 MoA）、按问题分类动态路由。
-- 多租户与按 Key 配额计费；RAG / 工具调用在聚合链路中的支持。
+- ~~用户自助门户（一般用户登录查看自己的 Key 与用量，多用户 P2）~~ → 已随 T52 落地（一般用户登录 `/portal` 自助查看本人用量/API Key/调用记录，见 tech-plan T52）；按用户/Key 配额计费；RAG / 工具调用在聚合链路中的支持。
 - 成员答案质量自动评估，反哺权重调整。

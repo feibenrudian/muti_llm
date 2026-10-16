@@ -1,4 +1,4 @@
-import { expect, test } from "@playwright/test";
+import { expect, test } from "./fixtures";
 
 test("UE-20-1 冒烟：应用可打开，导航 6 项，无控制台报错", async ({ page }) => {
   const errors: string[] = [];

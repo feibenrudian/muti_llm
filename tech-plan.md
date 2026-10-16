@@ -49,7 +49,7 @@
 | D2 | **建表用 `Base.metadata.create_all`，不引入 Alembic**（v1） | 本地单机工具，无存量数据兼容负担；结构变更成本可接受；降低 AI 开发出错面。v2 需要时再引入 |
 | D3 | **透传是一等公民而非临时功能**：`model` 字段解析顺序 = Pipeline 名优先 → 否则按真实模型名透传 | 透传即最好的对比测试工具，且网关的认证/日志/错误处理与 council 共用 |
 | D4 | **流式语义**：成员阶段并发但非流式，裁判阶段流式转发（SSE） | MoA 类系统通行做法，需求文档已确认 |
-| D5 | 管理 API `/api/admin/*` 不做认证，**整服务默认仅监听 127.0.0.1** | 本地工具，简化；对外 API 仍需 Bearer Key |
+| D5 | 管理 API `/api/admin/*` 不做认证，**整服务默认仅监听 127.0.0.1** | 本地工具，简化；对外 API 仍需 Bearer Key。（多用户后修订：管理 API 需管理员会话，见 doc/多用户管理技术方案与任务拆分.md D26/FR-21） |
 | D6 | 日志全文存储默认开启；"关闭全文"为 P1 项，随 T26 可选实现 | 控制本期范围 |
 | D7 | 上游调用的**重试/超时/错误映射放在适配器基座**统一实现 | 策略层只管编排，不重复造轮子 |
 | D8 | 上游调用**一律流式**，超时=**TTFT/块间空闲**（等不到上游数据才超时，不限制总生成时长；D4 的成员阶段同步改为流式聚合） | 复杂问题长生成不再被总时长超时杀死；首个字符前才允许整体重试，已产出内容后不重放 |
@@ -64,12 +64,17 @@ muti_llm/
 ├── backend/
 │   ├── pyproject.toml        # uv 管理; fastapi uvicorn sqlalchemy aiohttp…
 │   ├── app/
-│   │   ├── main.py           # 入口: 组装路由+静态托管+启动建表
+│   │   ├── main.py           # 入口: 组装路由+静态托管+启动建表+双平面认证中间件
 │   │   ├── settings.py       # pydantic-settings(端口/DB路径/加密密钥)
-│   │   ├── db.py             # async engine(WAL) + session
+│   │   ├── db.py             # async engine(WAL) + session + 幂等补列/补索引
 │   │   ├── orm.py            # 全部 SQLAlchemy 表模型(单文件,表不多)
 │   │   ├── schemas.py        # Pydantic 请求/响应模型(管理API+OpenAI兼容)
-│   │   ├── security.py       # Fernet 加解密 + 自身Key生成/哈希校验
+│   │   ├── security.py       # Fernet 加解密 + Key/口令/令牌原语
+│   │   ├── auth_svc.py       # 多用户认证领域服务(Caller/会话/锁定/审计) T46；T52 门户面复用(require_role 参数化)
+│   │   ├── authz.py          # 多用户数据面授权(三类授权项并集/默认拒绝) T49
+│   │   ├── keys_svc.py       # 用户 API Key 视图服务(admin/portal 共用) T52
+│   │   ├── usage_stats.py    # 用量聚合查询(admin/portal 共用口径) T52
+│   │   ├── portal/           # /api/portal: 自助门户(auth/keys/stats/traces/grants) T52
 │   │   ├── gateways/
 │   │   │   ├── llm_gateway.py     # /v1/* 认证+model解析+分发+日志
 │   │   ├── adapters/
@@ -91,10 +96,11 @@ muti_llm/
 ├── frontend/
 │   ├── package.json           # vite react tanstack-query router tailwind
 │   ├── src/
-│   │   ├── lib/api.ts         # 管理API client(带类型)
+│   │   ├── lib/api.ts         # 管理/门户API client(带类型, scope 区分两会话) T52
 │   │   ├── pages/             # Providers Models Pipelines Playground
-│   │   │                      #   Traces Settings
-│   │   └── components/        # shadcn/ui + Markdown查看器等
+│   │   │                      #   Traces Settings Users …
+│   │   │                      #   Portal*(门户: Login/App/Usage/Keys/Traces/TraceDetail) T52
+│   │   └── components/        # shadcn/ui + Markdown查看器 + usage/traceView/ChangePasswordModal 共用组件 T52
 │   └── e2e/                   # Playwright(webServer配置: 后端+快照回放服务器)
 └── scripts/
     └── seed_demo.py           # 一键造演示数据(指向快照回放服务器)
@@ -102,7 +108,7 @@ muti_llm/
 
 ### 1.3 数据表（与需求文档 5.x 一致，落地字段）
 
-`providers / models / pipelines / pipeline_members / request_logs / model_call_logs / app_settings(存自身Key哈希、日志保留天数等)` —— 共 7 张表，全部定义在 `orm.py`。建表即建索引：`request_logs.created_at`、`model_call_logs.request_id`。
+`providers / models / pipelines / pipeline_members / request_logs / model_call_logs / app_settings(存自身Key哈希、日志保留天数等)` + 多用户 4 张（`users / user_api_keys / user_grants / admin_sessions`，T45）+ 审计 `admin_audit_logs`（T51）—— 共 12 张表，全部定义在 `orm.py`。建表即建索引：`request_logs.created_at/user_id`、`model_call_logs.created_at/request_id/user_id`。
 
 ---
 
@@ -544,6 +550,30 @@ make seed          # 起服务+灌入演示数据(指向快照回放服务器), 
 | AE-44-1 | AE | 聚合主链路 | 响应 tool_calls == 快照裁判合成（含修正后的参数）、finish_reason=tool_calls、未降级；4 行调用日志（成员带 tool_calls、裁判行 response_tool_calls） |
 | AE-44-2 | AE | 流式聚合 | 终局流 tool_calls 分片原样下发、finish_reason 透传、[DONE] 正常 |
 | AE-44-3 | AE | 开关闸门 | tool_aggregation=false → 400"暂不支持工具调用"；无 tools 的文本聚合不受开关影响 |
+
+#### T45–T51 多用户管理（增量需求，见分册）
+用户与角色、用户 API Key、模型访问授权（虚拟模型/供应商/模型三类并集、默认拒绝）、数据面身份与归属落库、按用户用量统计、管理台登录（会话）与 P1 收口（登录锁定/最后使用/审计流水）。**任务拆分与验收用例（UT/AE/UE-45..51）见 [doc/多用户管理技术方案与任务拆分.md](./doc/多用户管理技术方案与任务拆分.md)**——编号、DoD、测试纪律与本文一致；落库穿参约定（新增落库路径必须携带 `caller`）见该文 §4 与 `logging_svc` 模块 docstring。
+
+#### T52 用户自助门户（一般用户登录，增量需求）
+一般用户登录 `/api/portal/*`（前端独立路由 `/portal/*`，会话与管理台同表 `admin_sessions`、前端分 storage key），自助查看与操作**仅限本人**的数据：用量统计（overview/daily/by-model，聚合口径复用 `usage_stats.py`，T52 自 admin/stats.py 抽取）、API Key 自助管理（签发/复制/启停/删除，序列化复用 `keys_svc.py`）、调用记录（列表/只读详情，行序列化复用 `logging_svc`）、授权只读视图（`/grants` 含展示名）。会话校验 `verify_session` 参数化 `require_role`（管理面 admin / 门户面 None）；管理台登录端点拒绝一般用户（403，纵深防御）；归属一律 `caller.user_id` 强制（user_id=0 历史数据天然排除），越权一律 404 防枚举。管理台配套：新建用户可对所有角色发初始密码、用户详情页可重置密码。零迁移（无新表新列；`app/portal/`、`keys_svc.py`、`usage_stats.py` 为 1.2 未规划的增量位置，理由见各文件 docstring）。
+
+| 编号 | 类型 | 用例 | 断言要点 |
+| --- | --- | --- | --- |
+| UT-52-1 | UT | 角色闸门参数化 | user 会话过管理面 403、过门户面（require_role=None）放行 |
+| AE-52-1 | AE | 门户登录/登出 | 有凭据成功；错密码/停用 401；连续失败锁定；登出后令牌失效 |
+| AE-52-2 | AE | 平面隔离 | user 会话打管理台 403；管理台登录拒 user；admin 可进门户；会话令牌不进数据面 |
+| AE-52-3 | AE | Key 自助全周期 | 明文一次/列表掩码/secret 一致/启停联动数据面/越权 404/删除 |
+| AE-52-4 | AE | 用量归属 | 门户三端点只含本人数据；他人调用不可见；user 参数被忽略；时间筛选生效 |
+| AE-52-5 | AE | Trace 归属 | 列表/详情仅本人；他人与管理员的 trace 404；关键字筛选命中 |
+| AE-52-6 | AE | 授权只读 | /grants 返回本人三类授权 id+名称；未授权为空；无写入端点 |
+| AE-52-7 | AE | 门户改密 | 旧密码错 400；成功后旧密码失效、新密码可登录、其他会话吊销 |
+| UE-52-1 | UE | 门户登录流程 | 错密码就地报错；成功进门户；登出回登录页 |
+| UE-52-2 | UE | 门户用量页 | 只显示本人调用的模型与统计；时间筛选与重置生效 |
+| UE-52-3 | UE | 门户 Key 管理 | 新建（明文一次）/掩码/停用/删除；可调用范围只读展示 |
+| UE-52-4 | UE | 门户调用日志 | 列表只含本人；详情只读；他人 trace 打不开 |
+| UE-52-5 | UE | 平面隔离 | 仅持门户会话访问管理台路由 → 跳管理台登录页 |
+| UE-52-6 | UE | 登录入口互链 | 管理台登录页常驻门户入口；普通用户在管理台登录 → 403 引导按钮 → 门户登录页预填用户名；门户页常驻管理台入口 |
+| UE-52-7 | UE | 默认入口 | 未登录进站（根路径）→ 门户登录页；门户登录后再进站 → 直达门户首页 |
 
 ---
 

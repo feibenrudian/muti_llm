@@ -1,4 +1,5 @@
-"""AE-30-1..5：Trace 换裁判重跑（快照回放；重渲染载荷与原裁判逐字节一致，复用 council_judge 快照）。"""
+"""AE-30-1..5：Trace 换裁判重跑（快照回放；重渲染载荷与原裁判逐字节一致，
+复用 council_judge 快照）。"""
 
 import asyncio
 import json
@@ -27,7 +28,8 @@ async def _create_model(client: httpx.AsyncClient, provider_id: int, display: st
 async def test_rejudge_success_versions_kept(
     asgi_client: httpx.AsyncClient, service_key: str, srs_live_seeded: str
 ) -> None:
-    """AE-30-1 重跑成功：两段式（评论+最终）重跑，载荷与原裁判逐字节一致，全部保留，原始记录不动。"""
+    """AE-30-1 重跑成功：两段式（评论+最终）重跑，载荷与原裁判逐字节一致，
+    全部保留，原始记录不动。"""
     seeded = await seed_council(asgi_client, srs_live_seeded)
     trace_id = await _run_council(asgi_client, service_key)
 
@@ -70,7 +72,9 @@ async def test_rejudge_success_versions_kept(
         c["request_payload"] == original_rows["judge_critique"]["request_payload"]
         for c in rerun_critiques
     )
-    assert all(c["response_content"] == snapshot_content("council_critique") for c in rerun_critiques)
+    assert all(
+        c["response_content"] == snapshot_content("council_critique") for c in rerun_critiques
+    )
     assert detail_after["request"] == detail_before["request"]
 
 
@@ -164,9 +168,7 @@ async def test_rejudge_rejections(
     assert resp.status_code == 409
 
 
-async def _rejudge_stream(
-    client: httpx.AsyncClient, trace_id: int, model_id: int
-) -> list[dict]:
+async def _rejudge_stream(client: httpx.AsyncClient, trace_id: int, model_id: int) -> list[dict]:
     """调用流式重跑端点并解析全部 SSE 事件。"""
     async with client.stream(
         "POST", f"/api/admin/traces/{trace_id}/rejudge/stream", json={"judge_model_id": model_id}
@@ -182,7 +184,8 @@ async def _rejudge_stream(
 async def test_rejudge_stream_success_and_parallel(
     asgi_client: httpx.AsyncClient, service_key: str, srs_live_seeded: str
 ) -> None:
-    """AE-30-4 流式两段重跑：critique/final 两 phase 事件齐全，两路并行均成功落两行，原始记录不动。"""
+    """AE-30-4 流式两段重跑：critique/final 两 phase 事件齐全，两路并行均成功落两行，
+    原始记录不动。"""
     seeded = await seed_council(asgi_client, srs_live_seeded)
     trace_id = await _run_council(asgi_client, service_key)
     detail_before = (await asgi_client.get(f"/api/admin/traces/{trace_id}")).json()

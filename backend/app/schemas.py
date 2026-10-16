@@ -139,3 +139,75 @@ class PipelineOut(BaseModel):
     created_at: datetime
     updated_at: datetime
     members: list[PipelineMemberOut]
+
+
+# ---- 多用户：用户 / API Key / 授权（T47）-------------------------------------------
+
+
+class UserCreate(BaseModel):
+    username: str = Field(min_length=3, max_length=32, pattern=r"^[a-zA-Z0-9._-]+$")
+    display_name: str = Field(default="", max_length=50)
+    role: Literal["admin", "user"] = "user"
+    remark: str = Field(default="", max_length=500)
+    # role=admin 时必填；一般用户可选（设置后即可登录自助门户，T52）
+    password: str | None = Field(default=None, min_length=8, max_length=200)
+
+
+class UserUpdate(BaseModel):
+    display_name: str | None = Field(default=None, min_length=1, max_length=50)
+    enabled: bool | None = None
+    role: Literal["admin", "user"] | None = None
+    remark: str | None = Field(default=None, max_length=500)
+    # 提升为 admin 时必填（为其设置初始登录口令）
+    password: str | None = Field(default=None, min_length=8, max_length=200)
+
+
+class UserOut(BaseModel):
+    id: int
+    username: str
+    display_name: str
+    role: str
+    enabled: bool
+    remark: str
+    key_count: int = 0
+    last_activity_at: datetime | None = None
+    created_at: datetime
+
+
+class UserPasswordReset(BaseModel):
+    new_password: str = Field(min_length=8, max_length=200)
+
+
+class KeyCreate(BaseModel):
+    name: str = Field(default="", max_length=50)
+
+
+class KeyUpdate(BaseModel):
+    name: str | None = Field(default=None, min_length=1, max_length=50)
+    enabled: bool | None = None
+
+
+class KeyOut(BaseModel):
+    id: int
+    name: str
+    masked: str
+    enabled: bool
+    is_legacy: bool = False
+    created_by: int = 0
+    last_used_at: datetime | None = None
+    created_at: datetime
+
+
+class KeyCreatedOut(KeyOut):
+    """创建响应：明文仅此一次返回（之后仅掩码 + /secret 主动复制）。"""
+
+    api_key: str
+
+
+class GrantsOut(BaseModel):
+    pipelines: list[int] = Field(default_factory=list)
+    models: list[int] = Field(default_factory=list)
+    providers: list[int] = Field(default_factory=list)
+
+
+GrantsPayload = GrantsOut  # PUT 授权请求与 GET 响应同形（覆盖式提交）

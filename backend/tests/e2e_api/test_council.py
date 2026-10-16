@@ -9,7 +9,12 @@ import httpx
 from app.orm import RequestLog
 from app.repos import Repository, list_model_calls
 from tests.conftest import auth_headers
-from tests.helpers import LEGACY_JUDGE_TEMPLATE, snapshot_content, snapshot_stream_text, snapshot_usage
+from tests.helpers import (
+    LEGACY_JUDGE_TEMPLATE,
+    snapshot_content,
+    snapshot_stream_text,
+    snapshot_usage,
+)
 
 QUANTUM = "用一句话解释量子纠缠"
 COUNCIL_BODY = {"model": "council-v1", "messages": [{"role": "user", "content": QUANTUM}]}
@@ -108,7 +113,8 @@ async def test_council_end_to_end(
 async def test_council_usage_sum(
     asgi_client: httpx.AsyncClient, service_key: str, srs_live_seeded: str
 ) -> None:
-    """AE-16-2 usage 汇总：= 2成员+评论+最终裁判 四次快照 usage 之和（期望值从快照文件精确求和）。"""
+    """AE-16-2 usage 汇总：= 2成员+评论+最终裁判 四次快照 usage 之和
+    （期望值从快照文件精确求和）。"""
     await seed_council(asgi_client, srs_live_seeded)
     resp = await asgi_client.post(
         "/v1/chat/completions", json=COUNCIL_BODY, headers=auth_headers(service_key)
@@ -162,7 +168,10 @@ async def test_judge_receives_member_answers(
     # 第二次调用与第一次同会话：首条消息逐字节相同，评论作为 assistant 轮，末轮为最终指令
     assert len(final_messages) == 3
     assert final_messages[0]["content"] == critique_prompt
-    assert final_messages[1] == {"role": "assistant", "content": snapshot_content("council_critique")}
+    assert final_messages[1] == {
+        "role": "assistant",
+        "content": snapshot_content("council_critique"),
+    }
     assert final_messages[2]["role"] == "user"
     assert "最终回答" in final_messages[2]["content"]
 
@@ -199,7 +208,8 @@ async def test_council_trace_logging(
 async def test_two_phase_judge_chain(
     asgi_client: httpx.AsyncClient, service_key: str, srs_live_seeded: str
 ) -> None:
-    """AE-31-1 两段式链路：先评论后终答，评论载荷不含评论段、最终载荷含评论全文，token 四调用求和。"""
+    """AE-31-1 两段式链路：先评论后终答，评论载荷不含评论段、最终载荷含评论全文，
+    token 四调用求和。"""
     await seed_council(asgi_client, srs_live_seeded)
     resp = await asgi_client.post(
         "/v1/chat/completions", json=COUNCIL_BODY, headers=auth_headers(service_key)
@@ -215,7 +225,10 @@ async def test_two_phase_judge_chain(
     # 同会话：最终段首条与第一次输入逐字节相同，评论为 assistant 轮，末轮为最终指令
     assert len(final_messages) == 3
     assert final_messages[0]["content"] == critique_messages[0]["content"]
-    assert final_messages[1] == {"role": "assistant", "content": snapshot_content("council_critique")}
+    assert final_messages[1] == {
+        "role": "assistant",
+        "content": snapshot_content("council_critique"),
+    }
     assert "最终回答" in final_messages[2]["content"]
     assert calls[2].response_content == snapshot_content("council_critique")
     assert trace.response_content == snapshot_content("council_judge")
@@ -230,7 +243,8 @@ async def test_two_phase_judge_chain(
 async def test_custom_template_shapes_final_instruction(
     asgi_client: httpx.AsyncClient, service_key: str, srs_live_seeded: str
 ) -> None:
-    """AE-31-2 自定义模板：作为最终指令轮渲染；评论始终以 assistant 轮在会话中，不依赖 {{critique}} 占位符。"""
+    """AE-31-2 自定义模板：作为最终指令轮渲染；评论始终以 assistant 轮在会话中，
+    不依赖 {{critique}} 占位符。"""
     await seed_council(asgi_client, srs_live_seeded)
     pipeline_id = (await asgi_client.get("/api/admin/pipelines")).json()[0]["id"]
     resp = await asgi_client.patch(
@@ -243,7 +257,9 @@ async def test_custom_template_shapes_final_instruction(
         "/v1/chat/completions", json=COUNCIL_BODY, headers=auth_headers(service_key)
     )
     assert resp.status_code == 200
-    assert resp.json()["choices"][0]["message"]["content"] == snapshot_content("council_judge_custom")
+    assert resp.json()["choices"][0]["message"]["content"] == snapshot_content(
+        "council_judge_custom"
+    )
 
     trace, calls = await latest_trace_and_calls()
     assert [c.role for c in calls] == ["member", "member", "judge_critique", "judge"]
@@ -251,7 +267,10 @@ async def test_custom_template_shapes_final_instruction(
     assert len(final_messages) == 3
     # 第一次输入逐字节相同 + 评论在 assistant 轮（模板没有 {{critique}} 也必然带上）
     assert final_messages[0]["content"] == calls[2].request_payload["messages"][0]["content"]
-    assert final_messages[1] == {"role": "assistant", "content": snapshot_content("council_critique")}
+    assert final_messages[1] == {
+        "role": "assistant",
+        "content": snapshot_content("council_critique"),
+    }
     # 旧版模板作为指令轮：重述原对话与答案（其自身渲染结果），无追加段
     assert "{{critique}}" not in LEGACY_JUDGE_TEMPLATE
     assert final_messages[2]["content"].startswith("你将看到用户的问题")
@@ -339,16 +358,20 @@ async def test_council_stream_sse(
     assert text == snapshot_stream_text("council_judge")
 
 
-async def test_council_stream_timing(backend_live: tuple[str, str], srs_live_seeded: str) -> None:
+async def test_council_stream_timing(
+    backend_live: tuple[str, str, str], srs_live_seeded: str
+) -> None:
     """AE-17-2 时序：delay_scale 放大 chunk 间隔 → 分多批收到（真流式非缓冲）。
 
     走真实 TCP（ASGITransport 会一次性收集响应体，无法测时序）。
     两段式裁判 chunk 总量更大，scale 取 5 并放宽客户端超时。
     """
-    base_url, service_key = backend_live
+    base_url, service_key, admin_token = backend_live
     from tests.e2e_api.test_council import seed_council as _seed
 
-    async with httpx.AsyncClient(timeout=180, base_url=base_url) as client:
+    async with httpx.AsyncClient(
+        timeout=180, base_url=base_url, headers=auth_headers(admin_token)
+    ) as client:
         await _seed(client, srs_live_seeded)
         resp = await client.post(f"{srs_live_seeded}/_test/config", json={"delay_scale": 5})
         assert resp.status_code == 200

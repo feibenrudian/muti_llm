@@ -145,11 +145,13 @@ async def test_upstream_failure(
 
 
 async def test_nonstream_disconnect_detached(
-    backend_live: tuple[str, str], srs_live_seeded: str
+    backend_live: tuple[str, str, str], srs_live_seeded: str
 ) -> None:
     """AE-36-1 非流式断连：work 任务续跑，trace 落终态非 pending。"""
-    base_url, service_key = backend_live
-    async with httpx.AsyncClient(timeout=60, base_url=base_url) as client:
+    base_url, service_key, admin_token = backend_live
+    async with httpx.AsyncClient(
+        timeout=60, base_url=base_url, headers=auth_headers(admin_token)
+    ) as client:
         await seed_provider_and_model(client, srs_live_seeded)
         # delay_scale=2 拉宽取消窗口：断开时上游必在生成中（同一 payload → 快照回放）
         resp = await client.post(f"{srs_live_seeded}/_test/config", json={"delay_scale": 2})

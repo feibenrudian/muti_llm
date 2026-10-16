@@ -102,7 +102,7 @@ async def _wait_terminal_trace(timeout: float = 15.0) -> RequestLog:
 
 
 async def test_client_cancel(
-    backend_live: tuple[str, str], srs_live_seeded: str, monkeypatch: pytest.MonkeyPatch
+    backend_live: tuple[str, str, str], srs_live_seeded: str, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """AE-12-3 取消：读首 chunk 后断开 → 日志 status=client_cancelled。
 
@@ -112,13 +112,11 @@ async def test_client_cancel(
     from app import settings as settings_module
 
     monkeypatch.setattr(settings_module.settings, "detach_on_disconnect", False)
-    base_url, service_key = backend_live
+    base_url, service_key, admin_token = backend_live
     # srs_live_seeded 默认零延迟回放，pump 会在断开被服务端感知前跑完（竞争翻车）：
     # 拉长 chunk 间隔，保证"读首 chunk 即断开"确定落在流中段（fixture 函数级隔离，不外泄）
-    await httpx.AsyncClient().post(
-        f"{srs_live_seeded}/_test/config", json={"delay_scale": 20}
-    )
-    async with httpx.AsyncClient(timeout=30) as client:
+    await httpx.AsyncClient().post(f"{srs_live_seeded}/_test/config", json={"delay_scale": 20})
+    async with httpx.AsyncClient(timeout=30, headers=auth_headers(admin_token)) as client:
         # 种子：provider/model 指向 SRS
         resp = await client.post(
             f"{base_url}/api/admin/providers",
@@ -163,11 +161,11 @@ async def test_client_cancel(
 
 
 async def test_client_cancel_detached(
-    backend_live: tuple[str, str], srs_live_seeded: str
+    backend_live: tuple[str, str, str], srs_live_seeded: str
 ) -> None:
     """AE-12-4 断连续跑：detach 默认开，断开后上游跑完，trace=success 且全文落库。"""
-    base_url, service_key = backend_live
-    async with httpx.AsyncClient(timeout=30) as client:
+    base_url, service_key, admin_token = backend_live
+    async with httpx.AsyncClient(timeout=30, headers=auth_headers(admin_token)) as client:
         resp = await client.post(
             f"{base_url}/api/admin/providers",
             json={

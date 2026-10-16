@@ -2,12 +2,25 @@
 
 import re
 from collections.abc import Sequence
+from datetime import UTC, datetime, timedelta
 from typing import Any
 
-from sqlalchemy import delete, select
+from sqlalchemy import delete, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.orm import AppSetting, LlmModel, ModelCallLog, Pipeline, PipelineMember
+from app.orm import (
+    AdminSession,
+    AppSetting,
+    LlmModel,
+    ModelCallLog,
+    Pipeline,
+    PipelineMember,
+    User,
+    UserApiKey,
+    UserGrant,
+    utcnow,
+)
+from app.security import hash_token
 
 _SLUG_CLEAN_RE = re.compile(r"-{2,}")
 
@@ -134,6 +147,9 @@ async def delete_models_cascade(session: AsyncSession, model_ids: Sequence[int])
     if broken:
         await session.execute(delete(PipelineMember).where(PipelineMember.pipeline_id.in_(broken)))
         await session.execute(delete(Pipeline).where(Pipeline.id.in_(broken)))
+        # 级联删除的 Pipeline 的授权行同步清理（多用户 D33）
+        await delete_grants_for_targets(session, "pipeline", sorted(broken))
+    await delete_grants_for_targets(session, "model", list(model_ids))
     await session.execute(delete(LlmModel).where(LlmModel.id.in_(model_ids)))
     return broken
 
@@ -146,3 +162,121 @@ async def list_model_calls(session: AsyncSession, request_id: int) -> list[Model
         .order_by(ModelCallLog.created_at, ModelCallLog.id)
     )
     return list(result.scalars())
+
+
+# ---- 多用户域（T45）----------------------------------------------------------------
+
+
+async def find_user_by_username(session: AsyncSession, username: str) -> User | None:
+    result = await session.execute(select(User).where(User.username == username))
+    return result.scalars().first()
+
+
+async def find_user_key_by_hash(session: AsyncSession, key_hash: str) -> UserApiKey | None:
+    result = await session.execute(select(UserApiKey).where(UserApiKey.key_hash == key_hash))
+    return result.scalars().first()
+
+
+async def count_enabled_admins(session: AsyncSession, exclude_user_id: int = 0) -> int:
+    """启用状态的管理员数（可排除指定用户）：防自锁校验用（FR-17）。"""
+    query = (
+        select(func.count()).select_from(User).where(User.role == "admin", User.enabled.is_(True))
+    )
+    if exclude_user_id:
+        query = query.where(User.id != exclude_user_id)
+    return int((await session.execute(query)).scalar_one())
+
+
+async def delete_user_cascade(session: AsyncSession, user_id: int) -> None:
+    """删除用户及其 Key / 授权 / 会话；日志表不删（冗余用户名快照保留，需求 D22）。"""
+    await session.execute(delete(UserApiKey).where(UserApiKey.user_id == user_id))
+    await session.execute(delete(UserGrant).where(UserGrant.user_id == user_id))
+    await session.execute(delete(AdminSession).where(AdminSession.user_id == user_id))
+    await session.execute(delete(User).where(User.id == user_id))
+    await session.flush()
+
+
+async def delete_grants_for_targets(
+    session: AsyncSession, kind: str, target_ids: Sequence[int]
+) -> None:
+    """被授权对象（模型/供应商/Pipeline）删除时清理对应授权行（D33）。"""
+    if not target_ids:
+        return
+    await session.execute(
+        delete(UserGrant).where(UserGrant.kind == kind, UserGrant.target_id.in_(target_ids))
+    )
+
+
+async def list_user_grants(session: AsyncSession, user_id: int) -> list[UserGrant]:
+    result = await session.execute(select(UserGrant).where(UserGrant.user_id == user_id))
+    return list(result.scalars())
+
+
+async def replace_user_grants(
+    session: AsyncSession, user_id: int, grants: dict[str, set[int]]
+) -> None:
+    """覆盖式重设授权（FR-19）：删除该用户全部授权行后按 {kind: target_ids} 重建。"""
+    await session.execute(delete(UserGrant).where(UserGrant.user_id == user_id))
+    for kind, target_ids in grants.items():
+        for target_id in sorted(target_ids):
+            session.add(UserGrant(user_id=user_id, kind=kind, target_id=target_id))
+    await session.flush()
+
+
+async def revoke_user_sessions(
+    session: AsyncSession, user_id: int, *, keep_token: str = ""
+) -> None:
+    """吊销用户全部会话（改密/停用/降级后调用）；keep_token 传当前会话明文则保留之。"""
+    keep_hash = hash_token(keep_token) if keep_token else ""
+    query = delete(AdminSession).where(AdminSession.user_id == user_id)
+    if keep_hash:
+        query = query.where(AdminSession.token_hash != keep_hash)
+    await session.execute(query)
+    await session.flush()
+
+
+async def create_admin_session(
+    session: AsyncSession, user_id: int, token: str, ttl_hours: float = 24
+) -> AdminSession:
+    row = AdminSession(
+        user_id=user_id,
+        token_hash=hash_token(token),
+        expires_at=utcnow() + timedelta(hours=ttl_hours),
+        last_seen_at=utcnow(),
+    )
+    session.add(row)
+    await session.flush()
+    return row
+
+
+async def find_valid_session(session: AsyncSession, token: str) -> tuple[AdminSession, User] | None:
+    """令牌 → 未过期会话及其用户；过期/未命中/用户停用 → None。"""
+    result = await session.execute(
+        select(AdminSession).where(AdminSession.token_hash == hash_token(token))
+    )
+    admin_session = result.scalars().first()
+    if admin_session is None:
+        return None
+    user = await session.get(User, admin_session.user_id)
+    if user is None or not user.enabled:
+        return None
+    expires = admin_session.expires_at
+    if expires.tzinfo is None:
+        expires = expires.replace(tzinfo=UTC)
+    if expires <= datetime.now(UTC):
+        return None
+    return admin_session, user
+
+
+async def user_key_usage(session: AsyncSession) -> dict[int, tuple[int, Any]]:
+    """按用户聚合（Key 数, 最后使用时间），供用户列表一次查询取数（避免 N+1）。"""
+    rows = (
+        await session.execute(
+            select(
+                UserApiKey.user_id,
+                func.count(UserApiKey.id),
+                func.max(UserApiKey.last_used_at),
+            ).group_by(UserApiKey.user_id)
+        )
+    ).all()
+    return {row[0]: (int(row[1]), row[2]) for row in rows}

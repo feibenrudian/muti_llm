@@ -7,7 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.deps import get_session
 from app.orm import LlmModel, Pipeline, PipelineMember
-from app.repos import Repository, find_pipeline_by_name
+from app.repos import Repository, delete_grants_for_targets, find_pipeline_by_name
 from app.schemas import PipelineCreate, PipelineMemberOut, PipelineOut, PipelineUpdate
 from app.strategies import StrategyNotFound, get_strategy
 
@@ -155,4 +155,5 @@ async def update_pipeline(
 async def delete_pipeline(pipeline_id: int, session: AsyncSession = Depends(get_session)) -> None:
     if not await Repository(session, Pipeline).delete(pipeline_id):
         raise HTTPException(status_code=404, detail="pipeline not found")
+    await delete_grants_for_targets(session, "pipeline", [pipeline_id])  # 多用户 D33
     await session.commit()

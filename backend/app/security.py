@@ -1,4 +1,5 @@
-"""加密与安全：上游 API Key 的 Fernet 加解密、掩码显示、服务自身 Key 的生成与哈希校验。
+"""加密与安全：上游 API Key 的 Fernet 加解密、掩码显示、服务自身 Key 的生成与哈希校验，
+以及多用户域的口令哈希（PBKDF2）、用户 Key / 会话令牌原语（T45）。
 
 Fernet 密钥由调用方传入（T05 首次启动生成并持久化于 app_settings.fernet_key）。
 """
@@ -9,6 +10,8 @@ import secrets
 from cryptography.fernet import Fernet
 
 SERVICE_KEY_PREFIX = "sk-local-"
+USER_KEY_PREFIX = "sk-mu-"
+PBKDF2_ALGORITHM = "sha256"
 
 
 def encrypt_secret(plaintext: str, fernet_key: bytes) -> str:
@@ -52,3 +55,36 @@ def hash_service_key(service_key: str) -> str:
 
 def verify_service_key(service_key: str, stored_hash: str) -> bool:
     return secrets.compare_digest(hash_service_key(service_key), stored_hash)
+
+
+# ---- 多用户域（T45）----------------------------------------------------------------
+
+
+def hash_password(password: str, salt: str, iterations: int) -> str:
+    """口令哈希（PBKDF2-HMAC-SHA256 hex）。迭代数不随哈希串存储，取值变更即失效（见方案 §10）。"""
+    return hashlib.pbkdf2_hmac(
+        PBKDF2_ALGORITHM, password.encode("utf-8"), salt.encode("ascii"), iterations
+    ).hex()
+
+
+def verify_password(password: str, salt: str, expected: str, iterations: int) -> bool:
+    return secrets.compare_digest(hash_password(password, salt, iterations), expected)
+
+
+def generate_password_salt() -> str:
+    return secrets.token_hex(16)
+
+
+def generate_user_key() -> str:
+    """生成用户 API Key（数据面 Bearer 用；与管理 Key 前缀区分便于来源识别）。"""
+    return USER_KEY_PREFIX + secrets.token_urlsafe(32)
+
+
+def generate_session_token() -> str:
+    """管理台会话令牌（明文仅签发响应返回一次，库内只存哈希）。"""
+    return secrets.token_urlsafe(32)
+
+
+def hash_token(token: str) -> str:
+    """用户 Key 与会话令牌共用的 SHA-256 哈希（校验用恒定时间比较）。"""
+    return hashlib.sha256(token.encode("utf-8")).hexdigest()

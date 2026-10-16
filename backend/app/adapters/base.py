@@ -98,9 +98,9 @@ def merge_tool_call_deltas(
         if function.get("name"):
             call["function"]["name"] = function["name"]
         if function.get("arguments"):
-            call["function"]["arguments"] = call["function"].get("arguments", "") + function[
-                "arguments"
-            ]
+            call["function"]["arguments"] = (
+                call["function"].get("arguments", "") + function["arguments"]
+            )
     return merged
 
 
@@ -150,9 +150,7 @@ class BaseAdapter(ABC):
             try:
                 while True:
                     try:
-                        event = await asyncio.wait_for(
-                            anext(source, exhausted), timeout=timeout
-                        )
+                        event = await asyncio.wait_for(anext(source, exhausted), timeout=timeout)
                     except TimeoutError:
                         stage = "首个响应" if not got_event else "后续数据"
                         raise AdapterError(
@@ -206,9 +204,7 @@ class BaseAdapter(ABC):
                     if event.usage is not None:
                         usage = event.usage
                 merged = merge_tool_call_deltas(fragments)
-                tool_calls = (
-                    [merged[i] for i in sorted(merged)] if merged else None
-                )
+                tool_calls = [merged[i] for i in sorted(merged)] if merged else None
                 return LlmResult(
                     content="".join(parts),
                     usage=usage,

@@ -2,7 +2,7 @@
 
 import { type ReactNode } from "react";
 
-type ButtonVariant = "primary" | "secondary" | "danger" | "ghost";
+type ButtonVariant = "primary" | "secondary" | "danger" | "ghost" | "success";
 
 export function Button({
   variant = "primary",
@@ -15,6 +15,8 @@ export function Button({
     secondary: "bg-white text-slate-700 border border-slate-300 hover:bg-slate-100",
     danger: "bg-red-600 text-white hover:bg-red-500",
     ghost: "text-slate-600 hover:bg-slate-100",
+    // 用户门户主操作色（T52）：与管理台主色（primary 深灰）形成入口区分
+    success: "bg-emerald-600 text-white hover:bg-emerald-500",
   };
   return (
     <button
@@ -147,10 +149,25 @@ export function EmptyState({ children }: { children: ReactNode }) {
   return <p className="py-8 text-center text-sm text-slate-400">{children}</p>;
 }
 
-export function Th({ children }: { children?: ReactNode }) {
-  return <th className="px-3 py-2 text-left text-xs font-semibold uppercase text-slate-400">{children}</th>;
+export function Th({
+  children,
+  ...rest
+}: { children?: ReactNode } & React.ThHTMLAttributes<HTMLTableCellElement>) {
+  return (
+    <th className="px-3 py-2 text-left text-xs font-semibold uppercase text-slate-400" {...rest}>
+      {children}
+    </th>
+  );
 }
 
-export function Td({ children, className }: { children: ReactNode; className?: string }) {
-  return <td className={`px-3 py-2 text-sm text-slate-700 ${className ?? ""}`}>{children}</td>;
+export function Td({
+  children,
+  className,
+  ...rest
+}: { children?: ReactNode; className?: string } & React.TdHTMLAttributes<HTMLTableCellElement>) {
+  return (
+    <td className={`px-3 py-2 text-sm text-slate-700 ${className ?? ""}`} {...rest}>
+      {children}
+    </td>
+  );
 }

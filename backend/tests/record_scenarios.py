@@ -59,7 +59,8 @@ def council_critique_scenarios(model: str) -> list[tuple[str, dict]]:
                 "temperature": 0.7,
             },
         ),
-        # AE-16-5：请求参数仅作用裁判——成员按覆盖 0.9 实发（答案=param_merge_09），裁判带请求 temp 0.7
+        # AE-16-5：请求参数仅作用裁判——成员按覆盖 0.9 实发（答案=param_merge_09），
+        # 裁判带请求 temp 0.7
         (
             "council_critique_single_b_07",
             {
@@ -71,7 +72,8 @@ def council_critique_scenarios(model: str) -> list[tuple[str, dict]]:
 
 
 def council_final_scenarios(model: str) -> list[tuple[str, dict]]:
-    """两段式裁判第二段（最终答案）：与第一次同会话（输入 → 评论 → 最终指令），须在评论场景录制后运行。"""
+    """两段式裁判第二段（最终答案）：与第一次同会话（输入 → 评论 → 最终指令），
+    须在评论场景录制后运行。"""
     from app.strategies.council import (
         DEFAULT_CRITIQUE_TEMPLATE,
         DEFAULT_JUDGE_TEMPLATE,

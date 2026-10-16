@@ -1,9 +1,11 @@
 import { defineConfig } from "@playwright/test";
 
 const production = process.env.E2E_MODE === "production";
+// 内置 admin 初始密码经环境变量注入（bootstrap 支持，多用户 T46）：e2e 用真实登录端点换取会话
 const backendCmd =
   "cd ../backend && rm -f /tmp/muti_llm_e2e.db && " +
-  "MUTILLM_DATABASE_PATH=/tmp/muti_llm_e2e.db uv run uvicorn app.main:app --host 127.0.0.1 --port 9802";
+  "MUTILLM_DATABASE_PATH=/tmp/muti_llm_e2e.db MUTILLM_ADMIN_PASSWORD=e2e-admin-pass " +
+  "uv run uvicorn app.main:app --host 127.0.0.1 --port 9802";
 
 export default defineConfig({
   testDir: "./e2e",

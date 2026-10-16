@@ -121,10 +121,12 @@ CREATE TABLE models (
 """
         )
         await conn.exec_driver_sql(
-            "INSERT INTO providers (id, name, protocol, base_url) VALUES (1, 'p', 'openai_compatible', 'http://x')"
+            "INSERT INTO providers (id, name, protocol, base_url)"
+            " VALUES (1, 'p', 'openai_compatible', 'http://x')"
         )
         await conn.exec_driver_sql(
-            "INSERT INTO models (id, provider_id, display_name, upstream_model_id) VALUES (1, 1, 'm', 'm-up')"
+            "INSERT INTO models (id, provider_id, display_name, upstream_model_id)"
+            " VALUES (1, 1, 'm', 'm-up')"
         )
         assert "upstream_missing" not in await _table_columns(conn, "models")
 

@@ -10,7 +10,7 @@ from app.adapters.base import AdapterError
 from app.adapters.factory import build_adapter, decrypt_provider_key
 from app.deps import get_session
 from app.orm import LlmModel, Provider
-from app.repos import Repository, delete_models_cascade, derive_slug
+from app.repos import Repository, delete_grants_for_targets, delete_models_cascade, derive_slug
 from app.schemas import ProviderCreate, ProviderOut, ProviderUpdate
 from app.security import encrypt_secret, mask_key
 
@@ -78,9 +78,7 @@ async def _sync_models(
                     row.id, upstream_missing=False, enabled=True
                 )
         elif not row.upstream_missing:  # 尚未标记 → 本次新下线；已标记不动（用户手动启用不被覆盖）
-            await Repository(session, LlmModel).update(
-                row.id, upstream_missing=True, enabled=False
-            )
+            await Repository(session, LlmModel).update(row.id, upstream_missing=True, enabled=False)
             removed.append(row.upstream_model_id)
     return added, removed
 
@@ -166,6 +164,7 @@ async def delete_provider(provider_id: int, session: AsyncSession = Depends(get_
         ).scalars()
     )
     await delete_models_cascade(session, model_ids)
+    await delete_grants_for_targets(session, "provider", [provider_id])  # 多用户 D33
     await session.execute(delete(Provider).where(Provider.id == provider_id))
     await session.commit()
     _invalidate_route_list(provider_id)

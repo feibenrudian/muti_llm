@@ -1,4 +1,5 @@
-"""Trace 重跑裁判（两段式）：复用已存成员答案重跑"评论 + 最终答案"两次调用，输出作为新版本追加（不回写原始记录）。"""
+"""Trace 重跑裁判（两段式）：复用已存成员答案重跑"评论 + 最终答案"两次调用，
+输出作为新版本追加（不回写原始记录）。"""
 
 from __future__ import annotations
 
@@ -141,6 +142,9 @@ async def rejudge_trace(
         model_id=prepared.judge_model.id,
         upstream_model_id=prepared.judge_model.upstream_model_id,
         provider_name=prepared.judge_provider.name,
+        # 归属继承原 trace（一条 trace 一个归属，不随重跑发起人变化）
+        user_id=trace.user_id,
+        user_username=trace.user_username,
     )
 
     # 第一段：评论

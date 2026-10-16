@@ -1,5 +1,6 @@
-import { expect, test } from "@playwright/test";
+import { expect, test } from "./fixtures";
 import { injectSrs, seedCouncilPipeline, seedModel, seedProvider } from "./helpers";
+import { issueKey, createUser } from "./multiuser_helpers";
 
 const QUANTUM = "用一句话解释量子纠缠";
 
@@ -214,4 +215,41 @@ test("UE-31-1 两段式裁判：裁判卡展示评论（第一次调用），换
   await expect(page.getByText("裁判聚合（2 个版本）")).toBeVisible({ timeout: 30_000 });
   await expect(critiqueBlock.locator("p")).toContainText("【回答 1】");
   await expect(judgeCard.locator("p.text-sm")).toContainText("量子纠缠");
+});
+
+
+test("UE-48-1 Trace 归属可见：用户列显示发起用户，详情显示归属", async ({ page, request }) => {
+  const providerId = await seedProvider(request, "E2E-归属");
+  const m1 = await seedModel(request, providerId, "attr-m1");
+  const m2 = await seedModel(request, providerId, "attr-m2");
+  await seedCouncilPipeline(request, m1, m2, "council-attr");
+
+  const user = await createUser(request, `ue-attr-${Date.now()}`);
+  const key = await issueKey(request, user.id);
+  // T49 后数据面默认拒绝：授予现存全部 pipeline/model/provider
+  const pipelines = await (await request.get("/api/admin/pipelines")).json();
+  const models = await (await request.get("/api/admin/models")).json();
+  const providers = await (await request.get("/api/admin/providers")).json();
+  await request.put(`/api/admin/users/${user.id}/grants`, {
+    data: {
+      pipelines: pipelines.map((p: { id: number }) => p.id),
+      models: models.map((m: { id: number }) => m.id),
+      providers: providers.map((p: { id: number }) => p.id),
+    },
+  });
+
+  // 用户 Key 经 /v1 发起一次真实调用（SRS 回放）
+  const resp = await request.post("/v1/chat/completions", {
+    data: { model: "council-attr", messages: [{ role: "user", content: QUANTUM }] },
+    headers: { Authorization: `Bearer ${key.api_key}` },
+  });
+  expect(resp.status()).toBe(200);
+
+  await page.goto("/traces");
+  const row = page.locator("tbody tr").first();
+  await expect(row.getByTestId("trace-user")).toHaveText(user.username);
+
+  // 详情显示归属
+  await row.getByRole("link", { name: "详情" }).click();
+  await expect(page.getByText(`发起用户 ${user.username}`)).toBeVisible();
 });

@@ -1,178 +1,36 @@
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { api, type StatsDailyRow, type StatsFilters, type UsageMetrics } from "../lib/api";
 import {
-  downloadCsv,
-  formatRate,
-  formatTokens,
-  hitRate,
-  missTokens,
-  toCsv,
-  type CsvColumn,
-} from "../lib/stats";
-import { Button, Card, EmptyState, Field, Input, Select, Td, Th } from "../components/ui";
+  api,
+  type StatsFilters,
+  type StatsUserModelRow,
+  type StatsUserRow,
+} from "../lib/api";
+import { downloadCsv, formatRate, formatTokens, hitRate, toCsv } from "../lib/stats";
+import { Badge, Button, Card, EmptyState, Field, Input, Select, Td, Th } from "../components/ui";
+import { DailyChart, KpiCard, MetricsTable } from "../components/usage";
+import { userLabel } from "../lib/users";
 
-/** 用量统计看板（T41）：按供应商/模型/天的 token 对账统计，支持 CSV 导出。 */
+/** 用量统计看板（T41 + T50 按用户维度）：token 对账统计，支持 CSV 导出。 */
 
 interface FiltersState {
   start: string;
   end: string;
   provider: string;
   model: string;
+  user: string;
 }
 
-const EMPTY_FILTERS: FiltersState = { start: "", end: "", provider: "", model: "" };
+const EMPTY_FILTERS: FiltersState = { start: "", end: "", provider: "", model: "", user: "" };
 
 function toParams(f: FiltersState): StatsFilters {
-  return { start: f.start || undefined, end: f.end || undefined, provider: f.provider || undefined, model: f.model || undefined };
-}
-
-function KpiCard({ label, value, sub }: { label: string; value: string; sub?: string }) {
-  return (
-    <div className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
-      <p className="text-xs font-medium uppercase text-slate-400">{label}</p>
-      <p className="mt-1 text-xl font-bold text-slate-800">{value}</p>
-      {sub ? <p className="mt-0.5 text-xs text-slate-400">{sub}</p> : null}
-    </div>
-  );
-}
-
-const SEGMENTS = [
-  { key: "cached", label: "缓存命中", color: "bg-emerald-500" },
-  { key: "write", label: "缓存写入", color: "bg-amber-400" },
-  { key: "miss", label: "未命中输入", color: "bg-sky-500" },
-  { key: "completion", label: "输出", color: "bg-slate-400" },
-] as const;
-
-function DailyChart({ data }: { data: StatsDailyRow[] }) {
-  const totals = data.map((d) => d.total_tokens);
-  const max = Math.max(...totals, 1);
-  return (
-    <div>
-      <div className="flex h-40 items-end justify-center gap-1">
-        {data.map((d) => {
-          const seg = (value: number) => (value / max) * 100;
-          const miss = missTokens(d);
-          return (
-            <div
-              key={d.date}
-              className="flex h-full min-w-3 max-w-12 flex-1 flex-col justify-end"
-              title={`${d.date}：输入 ${formatTokens(d.prompt_tokens)}（命中 ${formatTokens(d.cached_tokens)} / 写入 ${formatTokens(d.cache_write_tokens)} / 未命中 ${formatTokens(miss)}），输出 ${formatTokens(d.completion_tokens)}`}
-            >
-              {(["cached", "write", "miss", "completion"] as const).map((key) => {
-                const value =
-                  key === "cached" ? d.cached_tokens : key === "write" ? d.cache_write_tokens : key === "miss" ? miss : d.completion_tokens;
-                if (value <= 0) return null;
-                return (
-                  <div
-                    key={key}
-                    className={`${SEGMENTS.find((s) => s.key === key)!.color} w-full`}
-                    style={{ height: `${seg(value)}%` }}
-                  />
-                );
-              })}
-            </div>
-          );
-        })}
-      </div>
-      <div className="mt-2 flex items-center gap-4 text-xs text-slate-500">
-        {SEGMENTS.map((s) => (
-          <span key={s.key} className="inline-flex items-center gap-1">
-            <span className={`inline-block h-2.5 w-2.5 rounded-sm ${s.color}`} />
-            {s.label}
-          </span>
-        ))}
-      </div>
-    </div>
-  );
-}
-
-function metricsColumns<T extends UsageMetrics & { provider_name: string }>(
-  nameHeader: string,
-  nameOf: (row: T) => string,
-): CsvColumn<T>[] {
-  return [
-    { header: nameHeader, value: nameOf },
-    { header: "调用数", value: (r) => r.calls },
-    { header: "失败数", value: (r) => r.failed_calls },
-    { header: "输入tokens", value: (r) => r.prompt_tokens },
-    { header: "缓存命中tokens", value: (r) => r.cached_tokens },
-    { header: "缓存写入tokens", value: (r) => r.cache_write_tokens },
-    { header: "未命中tokens", value: (r) => missTokens(r) },
-    { header: "输出tokens", value: (r) => r.completion_tokens },
-    { header: "合计tokens", value: (r) => r.total_tokens },
-  ];
-}
-
-function MetricsTable<T extends UsageMetrics & { provider_name: string; upstream_model_id?: string }>({
-  rows,
-  nameHeader,
-  nameOf,
-  subNameOf,
-  csvName,
-  emptyText,
-}: {
-  rows: T[];
-  nameHeader: string;
-  nameOf: (row: T) => string;
-  subNameOf?: (row: T) => string | null | undefined;
-  csvName: string;
-  emptyText: string;
-}) {
-  const columns = metricsColumns(nameHeader, nameOf);
-  const exportCsv = () => downloadCsv(csvName, toCsv(columns, rows));
-  return (
-    <Card
-      title={`共 ${rows.length} 行`}
-      actions={
-        <Button variant="secondary" onClick={exportCsv} disabled={rows.length === 0} data-testid="export-csv">
-          导出 CSV
-        </Button>
-      }
-    >
-      {rows.length === 0 ? (
-        <EmptyState>{emptyText}</EmptyState>
-      ) : (
-        <table className="w-full">
-          <thead>
-            <tr className="border-b border-slate-100">
-              <Th>{nameHeader}</Th>
-              <Th>调用</Th>
-              <Th>失败</Th>
-              <Th>输入</Th>
-              <Th>缓存命中</Th>
-              <Th>缓存写入</Th>
-              <Th>未命中</Th>
-              <Th>输出</Th>
-              <Th>命中率</Th>
-              <Th>合计</Th>
-            </tr>
-          </thead>
-          <tbody>
-            {rows.map((row) => (
-              <tr key={`${row.provider_name}-${nameOf(row)}`} className="border-b border-slate-50">
-                <Td>
-                  <span className="font-medium">{nameOf(row)}</span>
-                  {subNameOf ? (
-                    <span className="ml-2 text-xs text-slate-400">{subNameOf(row) || ""}</span>
-                  ) : null}
-                </Td>
-                <Td>{row.calls}</Td>
-                <Td>{row.failed_calls}</Td>
-                <Td className="whitespace-nowrap">{formatTokens(row.prompt_tokens)}</Td>
-                <Td className="whitespace-nowrap">{formatTokens(row.cached_tokens)}</Td>
-                <Td className="whitespace-nowrap">{formatTokens(row.cache_write_tokens)}</Td>
-                <Td className="whitespace-nowrap">{formatTokens(missTokens(row))}</Td>
-                <Td className="whitespace-nowrap">{formatTokens(row.completion_tokens)}</Td>
-                <Td>{formatRate(hitRate(row))}</Td>
-                <Td className="font-semibold whitespace-nowrap">{formatTokens(row.total_tokens)}</Td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      )}
-    </Card>
-  );
+  return {
+    start: f.start || undefined,
+    end: f.end || undefined,
+    provider: f.provider || undefined,
+    model: f.model || undefined,
+    user: f.user || undefined,
+  };
 }
 
 export default function Stats() {
@@ -181,6 +39,11 @@ export default function Stats() {
 
   const { data: providers } = useQuery({ queryKey: ["providers"], queryFn: api.providers.list });
   const { data: models } = useQuery({ queryKey: ["models"], queryFn: api.models.list });
+  const { data: users } = useQuery({
+    queryKey: ["users"],
+    queryFn: () => api.users.list({ page: 1, page_size: 200 }),
+    select: (data) => data.items,
+  });
   const overview = useQuery({
     queryKey: ["stats", "overview", params],
     queryFn: () => api.stats.overview(params),
@@ -191,6 +54,11 @@ export default function Stats() {
     queryFn: () => api.stats.byProvider(params),
   });
   const byModel = useQuery({ queryKey: ["stats", "by-model", params], queryFn: () => api.stats.byModel(params) });
+  const byUser = useQuery({ queryKey: ["stats", "by-user", params], queryFn: () => api.stats.byUser(params) });
+  const byUserModel = useQuery({
+    queryKey: ["stats", "by-user-model", params],
+    queryFn: () => api.stats.byUserModel(params),
+  });
 
   const metrics = overview.data;
 
@@ -199,7 +67,7 @@ export default function Stats() {
       <h1 className="text-lg font-bold">用量统计</h1>
 
       <Card title="筛选（每日分组为 UTC 日）">
-        <div className="grid grid-cols-5 items-end gap-3">
+        <div className="grid grid-cols-6 items-end gap-3">
           <Field label="起始日期">
             <Input type="date" value={filters.start} onChange={(e) => setFilters({ ...filters, start: e.target.value })} />
           </Field>
@@ -222,6 +90,16 @@ export default function Stats() {
               {(models ?? []).map((m) => (
                 <option key={m.id} value={m.upstream_model_id}>
                   {m.display_name}
+                </option>
+              ))}
+            </Select>
+          </Field>
+          <Field label="用户">
+            <Select value={filters.user} onChange={(e) => setFilters({ ...filters, user: e.target.value })} data-testid="stats-user-filter">
+              <option value="">全部</option>
+              {(users ?? []).map((u) => (
+                <option key={u.id} value={String(u.id)}>
+                  {u.display_name || u.username}
                 </option>
               ))}
             </Select>
@@ -277,6 +155,163 @@ export default function Stats() {
         csvName="usage-by-model.csv"
         emptyText={byModel.isPending ? "加载中…" : "所选时间范围内没有调用"}
       />
+
+      <ByUserTables
+        byUser={byUser.data ?? []}
+        byUserPending={byUser.isPending}
+        byUserModel={byUserModel.data ?? []}
+        byUserModelPending={byUserModel.isPending}
+      />
     </div>
+  );
+}
+
+function ByUserTables({
+  byUser,
+  byUserPending,
+  byUserModel,
+  byUserModelPending,
+}: {
+  byUser: StatsUserRow[];
+  byUserPending: boolean;
+  byUserModel: StatsUserModelRow[];
+  byUserModelPending: boolean;
+}) {
+  const emptyText = (pending: boolean) => (pending ? "加载中…" : "所选时间范围内没有调用");
+  return (
+    <>
+      <Card
+        title={`按用户（共 ${byUser.length} 行）`}
+        actions={
+          <Button
+            variant="secondary"
+            disabled={byUser.length === 0}
+            onClick={() =>
+              downloadCsv(
+                "usage-by-user.csv",
+                toCsv(
+                  [
+                    { header: "用户", value: (r: StatsUserRow) => userLabel(r) },
+                    { header: "调用数", value: (r: StatsUserRow) => r.calls },
+                    { header: "失败数", value: (r: StatsUserRow) => r.failed_calls },
+                    { header: "输入tokens", value: (r: StatsUserRow) => r.prompt_tokens },
+                    { header: "输出tokens", value: (r: StatsUserRow) => r.completion_tokens },
+                    { header: "合计tokens", value: (r: StatsUserRow) => r.total_tokens },
+                  ],
+                  byUser,
+                ),
+              )
+            }
+            data-testid="export-user-csv"
+          >
+            导出 CSV
+          </Button>
+        }
+      >
+        {byUser.length === 0 ? (
+          <EmptyState>{emptyText(byUserPending)}</EmptyState>
+        ) : (
+          <table className="w-full">
+            <thead>
+              <tr className="border-b border-slate-100">
+                <Th>用户</Th>
+                <Th>调用</Th>
+                <Th>失败</Th>
+                <Th>输入</Th>
+                <Th>输出</Th>
+                <Th>合计</Th>
+              </tr>
+            </thead>
+            <tbody>
+              {byUser.map((row) => (
+                <tr key={row.user_id} className="border-b border-slate-50" data-testid="stats-user-row">
+                  <Td>
+                    <span className="font-medium">{userLabel(row)}</span>
+                    {row.user_id === 0 ? null : <Badge>{`#${row.user_id}`}</Badge>}
+                  </Td>
+                  <Td>{row.calls}</Td>
+                  <Td>{row.failed_calls}</Td>
+                  <Td className="whitespace-nowrap">{formatTokens(row.prompt_tokens)}</Td>
+                  <Td className="whitespace-nowrap">{formatTokens(row.completion_tokens)}</Td>
+                  <Td className="font-semibold whitespace-nowrap">{formatTokens(row.total_tokens)}</Td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
+      </Card>
+
+      <Card
+        title={`按用户 × 模型（共 ${byUserModel.length} 行）`}
+        actions={
+          <Button
+            variant="secondary"
+            disabled={byUserModel.length === 0}
+            onClick={() =>
+              downloadCsv(
+                "usage-by-user-model.csv",
+                toCsv(
+                  [
+                    { header: "用户", value: (r: StatsUserModelRow) => userLabel(r) },
+                    { header: "供应商", value: (r: StatsUserModelRow) => r.provider_name },
+                    { header: "模型", value: (r: StatsUserModelRow) => r.upstream_model_id },
+                    { header: "调用数", value: (r: StatsUserModelRow) => r.calls },
+                    { header: "失败数", value: (r: StatsUserModelRow) => r.failed_calls },
+                    { header: "输入tokens", value: (r: StatsUserModelRow) => r.prompt_tokens },
+                    { header: "输出tokens", value: (r: StatsUserModelRow) => r.completion_tokens },
+                    { header: "合计tokens", value: (r: StatsUserModelRow) => r.total_tokens },
+                  ],
+                  byUserModel,
+                ),
+              )
+            }
+            data-testid="export-user-model-csv"
+          >
+            导出 CSV
+          </Button>
+        }
+      >
+        {byUserModel.length === 0 ? (
+          <EmptyState>{emptyText(byUserModelPending)}</EmptyState>
+        ) : (
+          <table className="w-full">
+            <thead>
+              <tr className="border-b border-slate-100">
+                <Th>用户</Th>
+                <Th>供应商</Th>
+                <Th>模型</Th>
+                <Th>调用</Th>
+                <Th>失败</Th>
+                <Th>输入</Th>
+                <Th>输出</Th>
+                <Th>合计</Th>
+              </tr>
+            </thead>
+            <tbody>
+              {byUserModel.map((row) => (
+                <tr
+                  key={`${row.user_id}-${row.provider_name}-${row.upstream_model_id}`}
+                  className="border-b border-slate-50"
+                >
+                  <Td>{userLabel(row)}</Td>
+                  <Td>{row.provider_name}</Td>
+                  <Td>
+                    {row.upstream_model_id}
+                    {row.display_name ? (
+                      <span className="ml-2 text-xs text-slate-400">{row.display_name}</span>
+                    ) : null}
+                  </Td>
+                  <Td>{row.calls}</Td>
+                  <Td>{row.failed_calls}</Td>
+                  <Td className="whitespace-nowrap">{formatTokens(row.prompt_tokens)}</Td>
+                  <Td className="whitespace-nowrap">{formatTokens(row.completion_tokens)}</Td>
+                  <Td className="font-semibold whitespace-nowrap">{formatTokens(row.total_tokens)}</Td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
+      </Card>
+    </>
   );
 }

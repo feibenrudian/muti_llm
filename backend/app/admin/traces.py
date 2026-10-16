@@ -6,44 +6,23 @@ import json
 import time
 from collections.abc import AsyncIterator
 from dataclasses import dataclass, field
-from datetime import UTC, datetime, timedelta
 from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
-from sqlalchemy import delete, func, or_, select
+from sqlalchemy import delete, false, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from starlette.background import BackgroundTask
 
 from app.adapters.base import AdapterError, LlmUsage
 from app.deps import get_session
-from app.logging_svc import record_call
+from app.logging_svc import parse_end_exclusive, parse_start, record_call, row_to_dict
 from app.orm import ModelCallLog, RequestLog
-from app.rejudge_svc import PreparedRejudge, RejudgeRejected, prepare_rejudge, rejudge_trace
+from app.rejudge_svc import RejudgeRejected, prepare_rejudge, rejudge_trace
 from app.repos import list_model_calls
 
 router = APIRouter(prefix="/traces", tags=["admin-traces"])
-
-
-def row_to_dict(row: Any) -> dict[str, Any]:
-    data = {column.name: getattr(row, column.name) for column in row.__table__.columns}
-    for key, value in data.items():
-        if isinstance(value, datetime):
-            data[key] = value.isoformat()
-    return data
-
-
-def _parse_start(value: str) -> datetime:
-    return datetime.fromisoformat(value).astimezone(UTC)
-
-
-def _parse_end_exclusive(value: str) -> datetime:
-    """end 视为日期时含当天全天（次日 0 点为界）。"""
-    dt = datetime.fromisoformat(value)
-    if len(value) <= 10:
-        dt += timedelta(days=1)
-    return dt.astimezone(UTC)
 
 
 @router.get("")
@@ -55,6 +34,7 @@ async def list_traces(
     model: str | None = None,
     status: str | None = None,
     keyword: str | None = None,
+    user: str | None = None,
     page: int = Query(default=1, ge=1),
     page_size: int = Query(default=20, ge=1, le=100),
 ) -> dict[str, Any]:
@@ -69,15 +49,23 @@ async def list_traces(
     if status:
         conditions.append(RequestLog.status == status)
     if start:
-        conditions.append(RequestLog.created_at >= _parse_start(start))
+        conditions.append(RequestLog.created_at >= parse_start(start))
     if end:
-        conditions.append(RequestLog.created_at < _parse_end_exclusive(end))
+        conditions.append(RequestLog.created_at < parse_end_exclusive(end))
     if keyword:
         conditions.append(RequestLog.request_messages.like(f"%{keyword}%"))
     if model:
         conditions.append(
             RequestLog.id.in_(
                 select(ModelCallLog.request_id).where(ModelCallLog.upstream_model_id == model)
+            )
+        )
+    if user:
+        # 数字视为 user_id、非数字视为用户名，取并集（与统计端点同口径）
+        conditions.append(
+            or_(
+                RequestLog.user_id == int(user) if user.isdigit() else false(),
+                RequestLog.user_username == user,
             )
         )
 
@@ -188,7 +176,7 @@ async def rejudge_stream(
     request: Request,
     session: AsyncSession = Depends(get_session),
 ) -> StreamingResponse:
-    """换裁判两段式重跑（流式）：SSE 依次发 meta/delta(phase=critique) → meta/delta(phase=final) → done。"""
+    """换裁判两段式重跑（流式）：SSE 依次发 meta/delta(critique) → meta/delta(final) → done。"""
     trace = await session.get(RequestLog, trace_id)
     if trace is None:
         raise HTTPException(status_code=404, detail="trace not found")
@@ -253,7 +241,8 @@ async def rejudge_stream(
                 "error": outcome.error,
                 "duration_ms": outcome.duration_ms,
                 "prompt_tokens": critique_usage.prompt_tokens + final_usage.prompt_tokens,
-                "completion_tokens": critique_usage.completion_tokens + final_usage.completion_tokens,
+                "completion_tokens": critique_usage.completion_tokens
+                + final_usage.completion_tokens,
                 "critique_duration_ms": outcome.critique_duration_ms,
                 "critique_prompt_tokens": critique_usage.prompt_tokens,
                 "critique_completion_tokens": critique_usage.completion_tokens,
@@ -268,6 +257,9 @@ async def rejudge_stream(
             model_id=prepared.judge_model.id,
             upstream_model_id=prepared.judge_model.upstream_model_id,
             provider_name=prepared.judge_provider.name,
+            # 归属继承原 trace（与 rejudge_svc 同口径）
+            user_id=trace.user_id,
+            user_username=trace.user_username,
         )
         async with session_factory() as s:
             await record_call(

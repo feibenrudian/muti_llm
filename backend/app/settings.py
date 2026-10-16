@@ -15,6 +15,10 @@ class Settings(BaseSettings):
     sse_heartbeat_seconds: float = 15.0
     # 客户端断开后上游任务是否续跑到底（默认开）；关闭则取消上游并标记 client_cancelled
     detach_on_disconnect: bool = True
+    # 管理员口令 PBKDF2 迭代数（多用户 T45）；测试经 conftest 调低避免用例变慢
+    pbkdf2_iterations: int = 600_000
+    # 内置 admin 初始密码（缺省空=随机生成并打印启动日志）；e2e/脚本部署可显式指定
+    admin_password: str = ""
 
 
 settings = Settings()

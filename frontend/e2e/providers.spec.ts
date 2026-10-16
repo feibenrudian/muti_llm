@@ -1,4 +1,4 @@
-import { expect, test } from "@playwright/test";
+import { expect, test } from "./fixtures";
 import { seedModel, seedProvider } from "./helpers";
 
 test("UE-21-1 新建：列表出现且 Key 只显示尾 4 位掩码", async ({ page }) => {

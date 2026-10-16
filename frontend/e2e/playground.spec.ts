@@ -1,4 +1,4 @@
-import { expect, test } from "@playwright/test";
+import { expect, test } from "./fixtures";
 import { injectSrs, seedCouncilPipeline, seedModel, seedProvider } from "./helpers";
 
 const QUANTUM = "用一句话解释量子纠缠";

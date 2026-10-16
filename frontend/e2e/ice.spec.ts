@@ -1,4 +1,4 @@
-import { expect, test, type APIRequestContext } from "@playwright/test";
+import { expect, test, type APIRequestContext } from "./fixtures";
 import { ICE_REFINE_QUESTION, injectSrs, seedIcePipeline, seedModel, seedProvider } from "./helpers";
 
 test.beforeEach(async ({ request }) => {

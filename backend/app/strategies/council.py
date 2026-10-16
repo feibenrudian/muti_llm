@@ -54,7 +54,9 @@ DEFAULT_CRITIQUE_TEMPLATE = """你将看到用户的问题，以及多个 AI 模
 
 请按【回答 1】【回答 2】… 的顺序逐条评论，不要复述回答原文。"""
 
-DEFAULT_JUDGE_TEMPLATE = "请结合你上面给出的评论，鉴别各回答的可信度，给出一个比任何单个回答都更准确、完整的最终回答。直接输出最终回答，不要复述过程。"
+DEFAULT_JUDGE_TEMPLATE = (  # noqa: E501  # 单行字面量（折行会改变渲染输出，快照 hash 依赖逐字节一致）
+    "请结合你上面给出的评论，鉴别各回答的可信度，给出一个比任何单个回答都更准确、完整的最终回答。直接输出最终回答，不要复述过程。"
+)
 
 # T44 工具聚合终局指令（内置，不开放自定义——与文本答案模板语义不同）：裁判自由推理
 # 合成最终调用（评论是参考非约束），也可判定无需工具时输出文字回答。
@@ -92,9 +94,9 @@ def format_tool_intent(outcome: CallOutcome) -> str:
 def validate_tool_calls(tool_calls: list[dict[str, Any]], tools: list[dict[str, Any]]) -> bool:
     """程序性兜底校验（防幻觉，不限制裁判判断自由）：function 名在 tools 清单内、
     arguments 是合法 JSON 对象。"""
-    known = {
-        t["function"]["name"] for t in tools if isinstance(t, dict) and "function" in t
-    } - {None}
+    known = {t["function"]["name"] for t in tools if isinstance(t, dict) and "function" in t} - {
+        None
+    }
     if not tool_calls:
         return False
     for call in tool_calls:
@@ -117,9 +119,7 @@ def pick_fallback_tool_calls(
     calls_by_member = [o.response_tool_calls for o in ok_members if o.response_tool_calls]
     if not calls_by_member:
         return None
-    names = [
-        c["function"]["name"] for calls in calls_by_member for c in calls if c.get("function")
-    ]
+    names = [c["function"]["name"] for calls in calls_by_member for c in calls if c.get("function")]
     if not names:
         return None
     top = Counter(names).most_common(1)[0][0]
@@ -463,9 +463,7 @@ class CouncilStrategy(Strategy):
         answers: list[tuple[str, str]] | None = None,
     ) -> CallOutcome:
         """执行裁判第一段（评论）。上游流式（D8），complete 聚合为全文。"""
-        request, payload = self.assemble_critique(
-            ctx, ok_members, stream=True, answers=answers
-        )
+        request, payload = self.assemble_critique(ctx, ok_members, stream=True, answers=answers)
         critique = CallOutcome(
             role="judge_critique",
             model_id=ctx.judge_model.id,
@@ -689,9 +687,7 @@ class CouncilStrategy(Strategy):
         ok = [o for o in member_outcomes if o.status == "success"]
         adapter = self._judge_adapter(ctx)
         intents = (
-            [(o.upstream_model_id, format_tool_intent(o)) for o in ok]
-            if tool_mode(ctx)
-            else None
+            [(o.upstream_model_id, format_tool_intent(o)) for o in ok] if tool_mode(ctx) else None
         )
 
         critique = await self._run_critique(ctx, adapter, ok, answers=intents)
@@ -757,9 +753,7 @@ class CouncilStrategy(Strategy):
             for fut in asyncio.as_completed(tasks):
                 i, outcome = await fut
                 ordered[i] = outcome
-                yield ProcessEvent(
-                    kind="member", label=outcome.upstream_model_id, outcome=outcome
-                )
+                yield ProcessEvent(kind="member", label=outcome.upstream_model_id, outcome=outcome)
             member_outcomes = [o for o in ordered if o is not None]
             check_member_failures(member_outcomes, strict=strict)
             ok = [o for o in member_outcomes if o.status == "success"]
@@ -782,16 +776,13 @@ class CouncilStrategy(Strategy):
 
             if intents is not None:
                 # T44 工具聚合终局：校验需完整响应，策略内跑完（含降级择优），一次性交付
-                judge, final_calls, finish, degraded, content = (
-                    await self._run_tool_final_round(
-                        ctx,
-                        ok,
-                        critique,
-                        adapter,
-                        members=member_outcomes,
-                        strict=(ctx.pipeline.fault_tolerance or {}).get("judge_failure")
-                        == "strict",
-                    )
+                judge, final_calls, finish, degraded, content = await self._run_tool_final_round(
+                    ctx,
+                    ok,
+                    critique,
+                    adapter,
+                    members=member_outcomes,
+                    strict=(ctx.pipeline.fault_tolerance or {}).get("judge_failure") == "strict",
                 )
                 yield FinalResultReady(
                     content=content,

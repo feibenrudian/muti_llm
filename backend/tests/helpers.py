@@ -129,3 +129,37 @@ async def seed_provider_and_model(
     assert resp.status_code == 201, resp.text
     model_id = resp.json()["id"]
     return provider_id, model_id
+
+
+# ---- 多用户测试辅助（T47）----------------------------------------------------------
+
+
+async def create_user(
+    client: httpx.AsyncClient,
+    *,
+    username: str,
+    display_name: str = "",
+    role: str = "user",
+    password: str | None = None,
+) -> dict[str, Any]:
+    payload: dict[str, Any] = {"username": username, "display_name": display_name, "role": role}
+    if password is not None:
+        payload["password"] = password
+    resp = await client.post("/api/admin/users", json=payload)
+    assert resp.status_code == 201, resp.text
+    return resp.json()
+
+
+async def issue_key(client: httpx.AsyncClient, user_id: int, *, name: str = "") -> dict[str, Any]:
+    """签发用户 Key：明文仅出现在本响应（api_key 字段）。"""
+    resp = await client.post(f"/api/admin/users/{user_id}/keys", json={"name": name})
+    assert resp.status_code == 201, resp.text
+    return resp.json()
+
+
+async def login_user(client: httpx.AsyncClient, username: str, password: str) -> dict[str, Any]:
+    resp = await client.post(
+        "/api/admin/auth/login", json={"username": username, "password": password}
+    )
+    assert resp.status_code == 200, resp.text
+    return resp.json()

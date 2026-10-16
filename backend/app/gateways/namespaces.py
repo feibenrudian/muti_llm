@@ -17,6 +17,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.adapters.factory import build_adapter
+from app.authz import AccessScope, filter_pipelines, load_scope, visible_provider_ids
 from app.gateways.llm_gateway import (
     _passthrough,
     _run_pipeline,
@@ -89,7 +90,9 @@ async def pipeline_models(request: Request) -> Response:
             .scalars()
             .all()
         )
-    return JSONResponse({"object": "list", "data": [_model_entry(p.name) for p in pipelines]})
+        scope: AccessScope = await load_scope(session, request.state.caller)
+    allowed = filter_pipelines(scope, list(pipelines))
+    return JSONResponse({"object": "list", "data": [_model_entry(p.name) for p in allowed]})
 
 
 @router.post("/v1/pipeline/chat/completions")
@@ -115,15 +118,14 @@ async def pipeline_chat(request: Request, background: BackgroundTasks) -> Respon
             return openai_error(404, f"model '{model_field}' not found", code="model_not_found")
         if has_tools and (not pipeline.tool_aggregation or pipeline.strategy != "council"):
             # 工具聚合仅 council 实现：开关关闭或其余策略（ICE）→ 明确拒绝（不静默忽略 tools）
-            return openai_error(
-                400, "聚合模式（Pipeline）暂不支持工具调用: tools", param="tools"
-            )
+            return openai_error(400, "聚合模式（Pipeline）暂不支持工具调用: tools", param="tools")
         stream_process_raw = body.get("stream_process")
         stream_process = (
             bool(stream_process_raw)
             if stream_process_raw is not None
             else bool(pipeline.stream_process)
         )
+        caller = request.state.caller
         response, _ = await _run_pipeline(
             app,
             background,
@@ -134,6 +136,7 @@ async def pipeline_chat(request: Request, background: BackgroundTasks) -> Respon
             pipeline,
             client_ip,
             t0,
+            caller,
             stream_process=stream_process,
         )
         return response
@@ -154,11 +157,13 @@ async def route_namespace_info(request: Request) -> Response:
             .scalars()
             .all()
         )
+        visible = await _visible_providers(session, request.state.caller, list(providers))
     return JSONResponse(
         {
             "routes": [
                 {"id": p.id, "slug": p.slug, "name": p.name}
                 for p in sorted(providers, key=lambda r: r.id)
+                if p.id in visible
             ]
         }
     )
@@ -178,14 +183,25 @@ async def _upstream_model_ids(app: Any, provider: Provider) -> list[str]:
     return ids
 
 
-async def _local_model_map(session: AsyncSession, provider_id: int) -> dict[str, bool]:
-    """该供应商的本地模型：upstream_model_id → enabled（上游新模型不在表内 → 默认可工作）。"""
+async def _local_model_rows(session: AsyncSession, provider_id: int) -> dict[str, LlmModel]:
+    """本地模型 upstream_model_id → 行；上游新模型无行 → 动态透传（看供应商级授权）。"""
     rows = (
         (await session.execute(select(LlmModel).where(LlmModel.provider_id == provider_id)))
         .scalars()
         .all()
     )
-    return {row.upstream_model_id: row.enabled for row in rows}
+    return {row.upstream_model_id: row for row in rows}
+
+
+async def _visible_providers(
+    session: AsyncSession, caller: Any, providers: list[Provider]
+) -> set[int]:
+    """调用者可见的供应商 id 集合（供应商级授权，或其下存在被授权模型）。"""
+    scope = await load_scope(session, caller)
+    if scope.unrestricted:
+        return {p.id for p in providers}
+    models = (await session.execute(select(LlmModel))).scalars().all()
+    return visible_provider_ids(scope, providers, list(models))
 
 
 @router.get("/v1/route/{ident}/models")
@@ -197,17 +213,27 @@ async def route_models(ident: str, request: Request) -> Response:
             return openai_error(404, "namespace 'route' not found", code="model_not_found")
         provider = await _resolve_provider(session, ident)
         if provider is None or not provider.enabled:
-            return openai_error(
-                404, f"route '{ident}' not found", code="model_not_found"
-            )
-        local = await _local_model_map(session, provider.id)
+            return openai_error(404, f"route '{ident}' not found", code="model_not_found")
+        scope = await load_scope(session, request.state.caller)
+        if not scope.unrestricted and provider.id not in await _visible_providers(
+            session, request.state.caller, [provider]
+        ):
+            return openai_error(404, f"route '{ident}' not found", code="model_not_found")
+        local = await _local_model_rows(session, provider.id)
 
     try:
         ids = await _upstream_model_ids(request.app, provider)
     except Exception:  # 上游不可达/不支持列表：回落库内已同步的启用模型
-        ids = [model_id for model_id, enabled in local.items() if enabled]
+        ids = [mid for mid, row in local.items() if row.enabled]
 
-    visible = [model_id for model_id in ids if local.get(model_id, True)]
+    visible = []
+    for model_id in ids:
+        row = local.get(model_id)
+        if row is None:
+            if scope.allows_dynamic(provider.id):  # 上游新模型：仅供应商级授权覆盖
+                visible.append(model_id)
+        elif row.enabled and scope.allows_model_row(row):
+            visible.append(model_id)
     return JSONResponse({"object": "list", "data": [_model_entry(m) for m in visible]})
 
 
@@ -228,14 +254,15 @@ async def route_chat(ident: str, request: Request, background: BackgroundTasks) 
     async with app.state.session_factory() as session:
         _, expose_routed = await model_exposure(session)
         if not expose_routed:
-            return openai_error(
-                404, f"model '{model_field}' not found", code="model_not_found"
-            )
+            return openai_error(404, f"model '{model_field}' not found", code="model_not_found")
         provider = await _resolve_provider(session, ident)
         if provider is None or not provider.enabled:
-            return openai_error(
-                404, f"route '{ident}' not found", code="model_not_found"
-            )
+            return openai_error(404, f"route '{ident}' not found", code="model_not_found")
+        scope = await load_scope(session, request.state.caller)
+        if not scope.unrestricted and provider.id not in await _visible_providers(
+            session, request.state.caller, [provider]
+        ):
+            return openai_error(404, f"route '{ident}' not found", code="model_not_found")
 
         rows = (
             (
@@ -251,10 +278,23 @@ async def route_chat(ident: str, request: Request, background: BackgroundTasks) 
         )
         enabled_row = next((r for r in rows if r.enabled), None)
         if enabled_row is not None:
+            if not scope.allows_model_row(enabled_row):
+                return openai_error(
+                    403,
+                    f"model '{model_field}' 未授权：请联系管理员开通",
+                    code="model_not_authorized",
+                )
             model_row = enabled_row
         elif rows:
             # 本地明确停用（手动停用或同步下线）→ 拒绝；与列表过滤口径一致
             return openai_error(404, f"model '{model_field}' not found", code="model_not_found")
+        elif not scope.allows_dynamic(provider.id):
+            # 上游新模型（库内无行）：仅供应商级授权覆盖动态透传
+            return openai_error(
+                403,
+                f"model '{model_field}' 未授权：请联系管理员开通",
+                code="model_not_authorized",
+            )
         else:
             # 上游新模型本地无记录 → 动态透传（默认参数；model_id=0 仅入日志，不落配置行）
             model_row = LlmModel(
@@ -267,6 +307,16 @@ async def route_chat(ident: str, request: Request, background: BackgroundTasks) 
             )
 
         response, _ = await _passthrough(
-            app, background, session, body, model_row, provider, params, stream, client_ip, t0
+            app,
+            background,
+            session,
+            body,
+            model_row,
+            provider,
+            params,
+            stream,
+            client_ip,
+            t0,
+            request.state.caller,
         )
         return response

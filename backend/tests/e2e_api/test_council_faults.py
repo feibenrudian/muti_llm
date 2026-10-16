@@ -140,7 +140,7 @@ async def test_judge_failure_strict(
 
 
 async def test_stream_client_cancel_propagates(
-    backend_live: tuple[str, str], srs_live_seeded: str, monkeypatch: pytest.MonkeyPatch
+    backend_live: tuple[str, str, str], srs_live_seeded: str, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """UT-18-1 取消传播：流式断开后成员/评论 success、judge call 与请求终态 client_cancelled。
 
@@ -149,8 +149,10 @@ async def test_stream_client_cancel_propagates(
     from app import settings as settings_module
 
     monkeypatch.setattr(settings_module.settings, "detach_on_disconnect", False)
-    base_url, service_key = backend_live
-    async with httpx.AsyncClient(timeout=60, base_url=base_url) as client:
+    base_url, service_key, admin_token = backend_live
+    async with httpx.AsyncClient(
+        timeout=60, base_url=base_url, headers=auth_headers(admin_token)
+    ) as client:
         await _seed_council(client, srs_live_seeded)
         # fixture 默认即时回放，恢复自然 chunk 间隔，确保断开能在流中段被服务端感知
         resp = await client.post(f"{srs_live_seeded}/_test/config", json={"delay_scale": 1})
@@ -181,11 +183,13 @@ async def test_stream_client_cancel_propagates(
 
 
 async def test_stream_client_cancel_detached(
-    backend_live: tuple[str, str], srs_live_seeded: str
+    backend_live: tuple[str, str, str], srs_live_seeded: str
 ) -> None:
     """UT-18-2 断连续跑(council)：judge 流跑完，trace 与全部 4 行 success。"""
-    base_url, service_key = backend_live
-    async with httpx.AsyncClient(timeout=60, base_url=base_url) as client:
+    base_url, service_key, admin_token = backend_live
+    async with httpx.AsyncClient(
+        timeout=60, base_url=base_url, headers=auth_headers(admin_token)
+    ) as client:
         await _seed_council(client, srs_live_seeded)
         # 与 UT-18-1 同一 payload/延迟配置（快照回放）；区别仅在 detach 默认开
         resp = await client.post(f"{srs_live_seeded}/_test/config", json={"delay_scale": 1})

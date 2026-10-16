@@ -1,7 +1,7 @@
 """AE-41-1..3：用量统计 API（T41 对账看板）+ 流式 usage 落库修复。"""
 
 import asyncio
-from datetime import UTC, datetime, timedelta
+from datetime import datetime, timedelta
 
 import httpx
 from sqlalchemy import select
@@ -103,8 +103,10 @@ async def test_filters(
     assert (await overview(model="deepseek-v4-flash"))["calls"] == 4
     assert (await overview(model="other-model"))["calls"] == 0
 
-    today = datetime.now(UTC).date().isoformat()
-    tomorrow = (datetime.now(UTC) + timedelta(days=1)).date().isoformat()
+    # date-only 参数按本地时区解释（与 _stats_filters 的 astimezone 语义一致）；
+    # 用 UTC 日期会在本地时区跨日时段（00:00-08:00 CST）出现 tomorrow-UTC 仍含当天调用的假失败
+    today = datetime.now().astimezone().date().isoformat()
+    tomorrow = (datetime.now().astimezone() + timedelta(days=1)).date().isoformat()
     assert (await overview(start=today))["calls"] == 4
     assert (await overview(start=tomorrow))["calls"] == 0
     assert (await overview(end=today))["calls"] == 4
@@ -114,9 +116,7 @@ async def test_filters(
         await asgi_client.get("/api/admin/stats/by-model", params={"provider": "srs-provider"})
     ).json()
     assert len(by_model) == 2  # 两个配置模型（同上游 ID，不同 model_id）
-    daily = (
-        await asgi_client.get("/api/admin/stats/daily", params={"model": "no-such"})
-    ).json()
+    daily = (await asgi_client.get("/api/admin/stats/daily", params={"model": "no-such"})).json()
     assert daily == []
 
 

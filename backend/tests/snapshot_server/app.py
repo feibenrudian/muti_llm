@@ -266,7 +266,9 @@ def create_app(
                     }
                 },
             )
-        ids = state.models_override if state.models_override is not None else state.store.model_ids()
+        ids = (
+            state.models_override if state.models_override is not None else state.store.model_ids()
+        )
         data = [{"id": mid, "object": "model", "owned_by": "srs"} for mid in ids]
         return JSONResponse({"object": "list", "data": data})
 

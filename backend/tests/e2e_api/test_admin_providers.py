@@ -241,7 +241,9 @@ async def test_auto_sync_models(asgi_client: httpx.AsyncClient, srs_live_seeded:
     assert (await asgi_client.get("/api/admin/models")).json().__len__() == 1
 
 
-async def test_sync_marks_removed_models_offline(asgi_client: httpx.AsyncClient, srs_live: str) -> None:
+async def test_sync_marks_removed_models_offline(
+    asgi_client: httpx.AsyncClient, srs_live: str
+) -> None:
     """AE-40-1 下线同步：上游列表缩小时消失的模型被标记 upstream_missing 并联动停用
     （重复测试不重复上报）；用户手动停用不被同步覆盖；上游重新上架自动恢复。"""
     http = httpx.AsyncClient()
@@ -281,7 +283,9 @@ async def test_sync_marks_removed_models_offline(asgi_client: httpx.AsyncClient,
 
     # 用户手动停用仍在上游的模型：同步不覆盖其 enabled，也不打上游下线标
     stay_id = rows["m-stay"]["id"]
-    assert (await asgi_client.patch(f"/api/admin/models/{stay_id}", json={"enabled": False})).status_code == 200
+    assert (
+        await asgi_client.patch(f"/api/admin/models/{stay_id}", json={"enabled": False})
+    ).status_code == 200
     data = (await asgi_client.post(f"/api/admin/providers/{pid}/test")).json()
     assert data["removed"] == []
     rows = await models_of_provider()

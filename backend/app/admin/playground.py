@@ -34,7 +34,9 @@ async def playground_run(
     }
     if body.temperature is not None:
         payload["temperature"] = body.temperature
-    response, trace_id = await execute_chat(request.app, background, payload, "playground", t0)
+    response, trace_id = await execute_chat(
+        request.app, background, payload, "playground", t0, request.state.caller
+    )
 
     data: dict[str, Any] | None = None
     if isinstance(response.body, (bytes, bytearray)):

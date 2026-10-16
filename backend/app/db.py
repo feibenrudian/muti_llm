@@ -62,11 +62,23 @@ _SCHEMA_PATCHES: dict[str, dict[str, str]] = {
         "cached_tokens": "INTEGER NOT NULL DEFAULT 0",
         "cache_write_tokens": "INTEGER NOT NULL DEFAULT 0",
         "response_tool_calls": "JSON",
+        "user_id": "INTEGER NOT NULL DEFAULT 0",
+        "user_username": "TEXT NOT NULL DEFAULT ''",
     },
-    "request_logs": {"first_token_ms": "INTEGER NOT NULL DEFAULT 0"},
+    "request_logs": {
+        "first_token_ms": "INTEGER NOT NULL DEFAULT 0",
+        "user_id": "INTEGER NOT NULL DEFAULT 0",
+        "user_username": "TEXT NOT NULL DEFAULT ''",
+    },
     # 旧库加不了 UNIQUE 约束，唯一性由生成逻辑保证（derive_slug 查重）
     "providers": {"slug": "TEXT NOT NULL DEFAULT ''"},
 }
+
+# 归属列的查询索引（多用户 T48）：create_all 只对新建表建索引，存量表需显式补（幂等）
+_INDEX_PATCHES = (
+    "CREATE INDEX IF NOT EXISTS ix_request_logs_user_id ON request_logs(user_id)",
+    "CREATE INDEX IF NOT EXISTS ix_model_call_logs_user_id ON model_call_logs(user_id)",
+)
 
 
 async def _backfill_provider_slugs(conn: AsyncConnection) -> None:
@@ -89,13 +101,15 @@ async def _backfill_provider_slugs(conn: AsyncConnection) -> None:
 
 
 async def _ensure_schema(conn: AsyncConnection) -> None:
-    """旧库补列：PRAGMA table_info 检测缺列 → ALTER TABLE ADD COLUMN（幂等）。"""
+    """旧库补列/补索引：缺列 ALTER ADD COLUMN，索引 CREATE IF NOT EXISTS（均幂等）。"""
     for table, columns in _SCHEMA_PATCHES.items():
         rows = await conn.exec_driver_sql(f"PRAGMA table_info({table})")
         existing = {row[1] for row in rows.fetchall()}
         for name, ddl in columns.items():
             if name not in existing:
                 await conn.exec_driver_sql(f"ALTER TABLE {table} ADD COLUMN {name} {ddl}")
+    for ddl in _INDEX_PATCHES:
+        await conn.exec_driver_sql(ddl)
 
 
 async def init_db(engine: AsyncEngine) -> None:

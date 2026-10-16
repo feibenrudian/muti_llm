@@ -1,15 +1,38 @@
-"""调用日志：request_logs / model_call_logs 的写入、终态更新与保留期清理（Trace 链路）。
+"""调用日志：request_logs / model_call_logs 的写入、终态更新、读取辅助与保留期清理（Trace 链路）。
 
 status 生命周期：pending → success | degraded | failed | client_cancelled。
+归属（多用户 T48）：写入方必须显式携带 user_id/user_username（来自 Caller，D27）——
+新增任何落库路径都要传，漏传即出现"无归属"行。
 """
 
-from datetime import timedelta
+from datetime import UTC, datetime, timedelta
 from typing import Any
 
 from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.orm import ModelCallLog, RequestLog, utcnow
+
+
+def row_to_dict(row: Any) -> dict[str, Any]:
+    """日志行 → API dict（datetime 转 ISO；request/response 大字段由端点自行裁剪）。"""
+    data = {column.name: getattr(row, column.name) for column in row.__table__.columns}
+    for key, value in data.items():
+        if isinstance(value, datetime):
+            data[key] = value.isoformat()
+    return data
+
+
+def parse_start(value: str) -> datetime:
+    return datetime.fromisoformat(value).astimezone(UTC)
+
+
+def parse_end_exclusive(value: str) -> datetime:
+    """end 视为日期时含当天全天（次日 0 点为界）。"""
+    dt = datetime.fromisoformat(value)
+    if len(value) <= 10:
+        dt += timedelta(days=1)
+    return dt.astimezone(UTC)
 
 
 async def cleanup_old_logs(session: AsyncSession, retention_days: int) -> int:
@@ -29,6 +52,8 @@ async def start_request(
     messages: list[dict[str, Any]],
     params: dict[str, Any],
     client_ip: str = "",
+    user_id: int = 0,
+    user_username: str = "",
 ) -> RequestLog:
     log = RequestLog(
         pipeline_name=pipeline_name,
@@ -36,6 +61,8 @@ async def start_request(
         request_messages=messages,
         request_params=params,
         client_ip=client_ip,
+        user_id=user_id,
+        user_username=user_username,
         status="pending",
     )
     session.add(log)
@@ -63,6 +90,8 @@ async def record_call(
     cached_tokens: int = 0,
     cache_write_tokens: int = 0,
     round_no: int | None = None,
+    user_id: int = 0,
+    user_username: str = "",
 ) -> ModelCallLog:
     log = ModelCallLog(
         request_id=request_id,
@@ -81,6 +110,8 @@ async def record_call(
         cached_tokens=cached_tokens,
         cache_write_tokens=cache_write_tokens,
         round=round_no,
+        user_id=user_id,
+        user_username=user_username,
     )
     session.add(log)
     await session.flush()

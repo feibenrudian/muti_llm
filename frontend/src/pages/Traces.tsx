@@ -8,7 +8,7 @@ import { Badge, Button, Card, EmptyState, Field, Input, Select, Td, Th } from ".
 const PAGE_SIZE = 20;
 
 export default function Traces() {
-  const [filters, setFilters] = useState({ pipeline: "", status: "", model: "", keyword: "" });
+  const [filters, setFilters] = useState({ pipeline: "", status: "", model: "", keyword: "", user: "" });
   const [page, setPage] = useState(1);
   const { data, isPending } = useQuery({
     queryKey: ["traces", filters, page],
@@ -40,11 +40,19 @@ export default function Traces() {
           <Field label="关键字（匹配原始输入）">
             <Input value={filters.keyword} onChange={(e) => { setFilters({ ...filters, keyword: e.target.value }); setPage(1); }} placeholder="量子" />
           </Field>
+          <Field label="用户">
+            <Input
+              value={filters.user}
+              onChange={(e) => { setFilters({ ...filters, user: e.target.value }); setPage(1); }}
+              placeholder="用户名或 id"
+              data-testid="trace-user-filter"
+            />
+          </Field>
           <div className="flex items-end gap-2">
             <Button
               variant="secondary"
               onClick={() => {
-                setFilters({ pipeline: "", status: "", model: "", keyword: "" });
+                setFilters({ pipeline: "", status: "", model: "", keyword: "", user: "" });
                 setPage(1);
               }}
             >
@@ -64,6 +72,7 @@ export default function Traces() {
                 <tr className="border-b border-slate-100">
                   <Th>ID</Th>
                   <Th>时间</Th>
+                  <Th>用户</Th>
                   <Th>model 字段</Th>
                   <Th>Pipeline</Th>
                   <Th>状态</Th>
@@ -78,6 +87,9 @@ export default function Traces() {
                   <tr key={item.id} className="border-b border-slate-50">
                     <Td>#{item.id}</Td>
                     <Td className="whitespace-nowrap">{formatDateTime(item.created_at)}</Td>
+                    <Td data-testid="trace-user">
+                      {item.user_username || "（历史）"}
+                    </Td>
                     <Td className="font-mono text-xs">{item.client_model_field}</Td>
                     <Td>{item.pipeline_name || "—"}</Td>
                     <Td>

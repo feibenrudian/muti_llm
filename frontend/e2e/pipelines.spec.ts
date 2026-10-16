@@ -1,4 +1,4 @@
-import { expect, test } from "@playwright/test";
+import { expect, test } from "./fixtures";
 import { seedModel, seedProvider } from "./helpers";
 
 test("UE-23-1 新建 Pipeline 全流程：2 成员排序 + 裁判 + 默认模板，保存后回显", async ({ page, request }) => {

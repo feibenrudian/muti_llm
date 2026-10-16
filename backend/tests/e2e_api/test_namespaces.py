@@ -29,9 +29,7 @@ async def _seed_named_provider(
     return resp.json()
 
 
-async def _models_ids(
-    asgi_client: httpx.AsyncClient, service_key: str, path: str
-) -> list[str]:
+async def _models_ids(asgi_client: httpx.AsyncClient, service_key: str, path: str) -> list[str]:
     resp = await asgi_client.get(path, headers=auth_headers(service_key))
     assert resp.status_code == 200, resp.text
     return [m["id"] for m in resp.json()["data"]]
@@ -56,9 +54,7 @@ async def test_slug_identity(
     assert {"id": provider["id"], "slug": "srs-provider", "name": "改名后的供应商"} in routes
 
     await seed_provider_and_model(asgi_client, srs_live_seeded)
-    by_slug = await _models_ids(
-        asgi_client, service_key, "/v1/route/srs-provider/models"
-    )
+    by_slug = await _models_ids(asgi_client, service_key, "/v1/route/srs-provider/models")
     by_id = await _models_ids(asgi_client, service_key, f"/v1/route/{provider['id']}/models")
     assert by_slug == by_id == ["deepseek-v4-flash"]
 
@@ -121,9 +117,7 @@ async def test_route_chat_resolution(
 ) -> None:
     """AE-42-4 route chat：启用模型透传；本地停用拒绝；上游新模型（本地无记录）动态透传。"""
     provider_id, model_id = await seed_provider_and_model(asgi_client, srs_live_seeded)
-    provider = (
-        await asgi_client.get("/api/admin/providers")
-    ).json()[0]
+    provider = (await asgi_client.get("/api/admin/providers")).json()[0]
 
     # 1) 启用模型 → 正常透传（复用 AE-10-1 形态的快照）
     resp = await asgi_client.post(
@@ -135,9 +129,7 @@ async def test_route_chat_resolution(
     assert resp.json()["choices"][0]["message"]["content"] == "pong"
 
     # 2) 本地停用 → 404（明确停用的模型不可调用）
-    resp = await asgi_client.patch(
-        f"/api/admin/models/{model_id}", json={"enabled": False}
-    )
+    resp = await asgi_client.patch(f"/api/admin/models/{model_id}", json={"enabled": False})
     assert resp.status_code == 200
     resp = await asgi_client.post(
         f"/v1/route/{provider['id']}/chat/completions",
@@ -186,9 +178,7 @@ async def test_route_models_filtering_and_fallback(
     ids = await _models_ids(asgi_client, service_key, f"/v1/route/{slug}/models")
     assert sorted(ids) == ["brand-new", "deepseek-v4-flash"]  # 上游新模型默认可工作
 
-    resp = await asgi_client.patch(
-        f"/api/admin/models/{model_id}", json={"enabled": False}
-    )
+    resp = await asgi_client.patch(f"/api/admin/models/{model_id}", json={"enabled": False})
     assert resp.status_code == 200
     ids = await _models_ids(asgi_client, service_key, f"/v1/route/{slug}/models")
     assert ids == ["brand-new"]  # 本地明确停用的被过滤
@@ -221,9 +211,7 @@ async def test_namespace_exposure_and_provider_gate(
         )
         await session.commit()
 
-    resp = await asgi_client.patch(
-        "/api/admin/settings", json={"expose_virtual_models": False}
-    )
+    resp = await asgi_client.patch("/api/admin/settings", json={"expose_virtual_models": False})
     assert resp.status_code == 200
     for path, method in (
         ("/v1/pipeline", "get"),
@@ -243,26 +231,18 @@ async def test_namespace_exposure_and_provider_gate(
         assert resp.status_code == 404, f"{path} 应整体 404"
     # 路由命名空间不受虚拟开关影响
     assert (
-        await asgi_client.get(
-            "/v1/route/srs-provider/models", headers=auth_headers(service_key)
-        )
+        await asgi_client.get("/v1/route/srs-provider/models", headers=auth_headers(service_key))
     ).status_code == 200
 
     resp = await asgi_client.patch("/api/admin/settings", json={"expose_routed_models": False})
     assert resp.status_code == 200
-    resp = await asgi_client.get(
-        "/v1/route/srs-provider/models", headers=auth_headers(service_key)
-    )
+    resp = await asgi_client.get("/v1/route/srs-provider/models", headers=auth_headers(service_key))
     assert resp.status_code == 404
 
     # 恢复开关后，停用供应商同样整体 404
     await asgi_client.patch("/api/admin/settings", json={"expose_routed_models": True})
-    await asgi_client.patch(
-        f"/api/admin/providers/{provider_id}", json={"enabled": False}
-    )
+    await asgi_client.patch(f"/api/admin/providers/{provider_id}", json={"enabled": False})
     resp = await asgi_client.get("/v1/route", headers=auth_headers(service_key))
     assert resp.json()["routes"] == []
-    resp = await asgi_client.get(
-        "/v1/route/srs-provider/models", headers=auth_headers(service_key)
-    )
+    resp = await asgi_client.get("/v1/route/srs-provider/models", headers=auth_headers(service_key))
     assert resp.status_code == 404

@@ -23,6 +23,8 @@ from app.adapters.base import (
     merge_tool_call_deltas,
 )
 from app.adapters.factory import build_adapter
+from app.auth_svc import Caller
+from app.authz import AccessScope, filter_models, filter_pipelines, load_scope
 from app.bootstrap import KEY_EXPOSE_ROUTED_MODELS, KEY_EXPOSE_VIRTUAL_MODELS
 from app.logging_svc import finish_request, record_call, start_request
 from app.orm import LlmModel, Provider
@@ -163,17 +165,18 @@ async def list_models(request: Request) -> Response:
         expose_virtual, expose_routed = await model_exposure(session)
         pipelines = await Repository(session, P).list()
         models = await Repository(session, M).list()
+        scope: AccessScope = await load_scope(session, request.state.caller)
     data = []
     if expose_virtual:
         data += [
             {"id": p.name, "object": "model", "created": 0, "owned_by": "muti_llm"}
-            for p in pipelines
+            for p in filter_pipelines(scope, pipelines)
             if p.enabled
         ]
     if expose_routed:
         data += [
             {"id": m.upstream_model_id, "object": "model", "created": 0, "owned_by": "muti_llm"}
-            for m in models
+            for m in filter_models(scope, models)
             if m.enabled
         ]
     return JSONResponse({"object": "list", "data": data})
@@ -187,16 +190,23 @@ async def chat_completions(request: Request, background: BackgroundTasks) -> Res
     except Exception:
         return openai_error(400, "请求体不是合法 JSON")
     client_ip = request.client.host if request.client else ""
-    response, _ = await execute_chat(request.app, background, body, client_ip, t0)
+    caller: Caller = request.state.caller
+    response, _ = await execute_chat(request.app, background, body, client_ip, t0, caller)
     return response
 
 
 async def execute_chat(
-    app: Any, background: BackgroundTasks, body: dict[str, Any], client_ip: str, t0: float
+    app: Any,
+    background: BackgroundTasks,
+    body: dict[str, Any],
+    client_ip: str,
+    t0: float,
+    caller: Caller,
 ) -> tuple[Response, int | None]:
     """网关核心执行（校验 → Pipeline/透传路由 → 响应）。返回 (response, trace_id)。
 
-    /v1/chat/completions（认证后）与 Playground（管理 API）共用同一执行路径。
+    /v1/chat/completions（认证后）与 Playground（管理 API）共用同一执行路径；
+    caller 为认证身份，贯穿归属落库（D25/D27）。
     """
 
     class _AppRequest:
@@ -218,17 +228,23 @@ async def execute_chat(
         expose_virtual, expose_routed = await model_exposure(session)
         # 虚拟模型接入关闭时不按 Pipeline 解析（同名真实模型若存在则照常透传）
         pipeline = (
-            await find_enabled_pipeline_by_name(session, model_field)
-            if expose_virtual
-            else None
+            await find_enabled_pipeline_by_name(session, model_field) if expose_virtual else None
         )
+        scope = await load_scope(session, caller)
         if pipeline is not None:
+            if not scope.allows_pipeline(pipeline.id):
+                return (
+                    openai_error(
+                        403,
+                        f"model '{model_field}' 未授权：请联系管理员开通",
+                        code="model_not_authorized",
+                    ),
+                    None,
+                )
             if has_tools and (not pipeline.tool_aggregation or pipeline.strategy != "council"):
                 # 工具聚合仅 council 实现：开关关闭或其余策略（ICE）→ 明确拒绝（不静默忽略 tools）
                 return (
-                    openai_error(
-                        400, "聚合模式（Pipeline）暂不支持工具调用: tools", param="tools"
-                    ),
+                    openai_error(400, "聚合模式（Pipeline）暂不支持工具调用: tools", param="tools"),
                     None,
                 )
             # 请求体显式给了（含 false）就用请求体的值，否则用 pipeline 级默认
@@ -247,6 +263,7 @@ async def execute_chat(
                 pipeline,
                 client_ip,
                 t0,
+                caller,
                 stream_process=stream_process,
             )
 
@@ -254,6 +271,15 @@ async def execute_chat(
         if model_row is None or not expose_routed:
             return (
                 openai_error(404, f"model '{model_field}' not found", code="model_not_found"),
+                None,
+            )
+        if not scope.allows_model_row(model_row):
+            return (
+                openai_error(
+                    403,
+                    f"model '{model_field}' 未授权：请联系管理员开通",
+                    code="model_not_authorized",
+                ),
                 None,
             )
         provider = await session.get(Provider, model_row.provider_id)
@@ -266,7 +292,17 @@ async def execute_chat(
             )
 
         return await _passthrough(
-            app, background, session, body, model_row, provider, params, stream, client_ip, t0
+            app,
+            background,
+            session,
+            body,
+            model_row,
+            provider,
+            params,
+            stream,
+            client_ip,
+            t0,
+            caller,
         )
 
 
@@ -329,11 +365,19 @@ async def _build_strategy_context(
     )
 
 
-async def _record_outcomes(session: AsyncSession, request_id: int, outcomes: list) -> None:
+async def _record_outcomes(
+    session: AsyncSession, request_id: int, outcomes: list, caller: Caller | None = None
+) -> None:
     from app.logging_svc import record_call
 
     for outcome in outcomes:
-        await record_call(session, request_id=request_id, **outcome.to_log_kwargs())
+        await record_call(
+            session,
+            request_id=request_id,
+            user_id=caller.user_id if caller else 0,
+            user_username=caller.username if caller else "",
+            **outcome.to_log_kwargs(),
+        )
 
 
 async def _detached_pipeline_persist(
@@ -341,6 +385,7 @@ async def _detached_pipeline_persist(
     trace_id: int,
     work: asyncio.Future[Any],
     t0: float,
+    caller: Caller | None = None,
 ) -> None:
     """断连续跑（pipeline 非流式）：等待策略任务收尾，按真实终态落库，绝不留 pending。"""
     from app.strategies.base import StrategyExecutionError
@@ -354,22 +399,18 @@ async def _detached_pipeline_persist(
         if exc.judge is not None:
             failed_calls.append(exc.judge)
         async with session_factory() as s:
-            await _record_outcomes(s, trace_id, failed_calls)
-            await finish_request(
-                s, trace_id, status="failed", total_duration_ms=_elapsed_ms(t0)
-            )
+            await _record_outcomes(s, trace_id, failed_calls, caller)
+            await finish_request(s, trace_id, status="failed", total_duration_ms=_elapsed_ms(t0))
             await s.commit()
         return
     except Exception:
         # 兜底：非预期异常也必须落终态，避免 trace 永远 pending
         async with session_factory() as s:
-            await finish_request(
-                s, trace_id, status="failed", total_duration_ms=_elapsed_ms(t0)
-            )
+            await finish_request(s, trace_id, status="failed", total_duration_ms=_elapsed_ms(t0))
             await s.commit()
         return
     async with session_factory() as s:
-        await _record_outcomes(s, trace_id, result.calls)
+        await _record_outcomes(s, trace_id, result.calls, caller)
         duration = _elapsed_ms(t0)
         await finish_request(
             s,
@@ -394,6 +435,7 @@ async def _detached_passthrough_persist(
     provider: Provider,
     start: float,
     t0: float,
+    caller: Caller | None = None,
 ) -> None:
     """断连续跑（透传非流式）：等待上游任务收尾，按真实终态落库，绝不留 pending。"""
     try:
@@ -404,6 +446,8 @@ async def _detached_passthrough_persist(
             await record_call(
                 s,
                 request_id=trace_id,
+                user_id=caller.user_id if caller else 0,
+                user_username=caller.username if caller else "",
                 role="passthrough",
                 model_id=model_row.id,
                 upstream_model_id=model_row.upstream_model_id,
@@ -418,15 +462,15 @@ async def _detached_passthrough_persist(
         return
     except Exception:
         async with session_factory() as s:
-            await finish_request(
-                s, trace_id, status="failed", total_duration_ms=_elapsed_ms(t0)
-            )
+            await finish_request(s, trace_id, status="failed", total_duration_ms=_elapsed_ms(t0))
             await s.commit()
         return
     async with session_factory() as s:
         await record_call(
             s,
             request_id=trace_id,
+            user_id=caller.user_id,
+            user_username=caller.username,
             role="passthrough",
             model_id=model_row.id,
             upstream_model_id=model_row.upstream_model_id,
@@ -462,6 +506,7 @@ async def _run_pipeline(
     pipeline: Any,
     client_ip: str,
     t0: float,
+    caller: Caller,
     *,
     stream_process: bool = False,
 ) -> tuple[Response, int]:
@@ -475,6 +520,8 @@ async def _run_pipeline(
         messages=body["messages"],
         params=params,
         client_ip=client_ip,
+        user_id=caller.user_id,
+        user_username=caller.username,
     )
 
     try:
@@ -483,9 +530,11 @@ async def _run_pipeline(
         if stream:
             if stream_process:
                 return await _pipeline_stream_process(
-                    app, background, session, trace, ctx, strategy, t0
+                    app, background, session, trace, ctx, strategy, t0, caller
                 )
-            return await _pipeline_stream(app, background, session, trace, ctx, strategy, t0)
+            return await _pipeline_stream(
+                app, background, session, trace, ctx, strategy, t0, caller
+            )
         await session.commit()  # 落 pending 并固定 ctx 内 ORM 属性：断连后续跑/取消才可写终态
         work = asyncio.ensure_future(strategy.run(ctx))
         try:
@@ -494,7 +543,9 @@ async def _run_pipeline(
             if settings.detach_on_disconnect:
                 # 断连续跑：响应已无法再交付，上游跑完由后台任务落真实终态
                 asyncio.create_task(
-                    _detached_pipeline_persist(app.state.session_factory, trace.id, work, t0)
+                    _detached_pipeline_persist(
+                        app.state.session_factory, trace.id, work, t0, caller
+                    )
                 )
             else:
                 work.cancel()
@@ -510,14 +561,12 @@ async def _run_pipeline(
             failed_calls.append(exc.critique)
         if exc.judge is not None:
             failed_calls.append(exc.judge)
-        await _record_outcomes(session, trace.id, failed_calls)
-        await finish_request(
-            session, trace.id, status="failed", total_duration_ms=_elapsed_ms(t0)
-        )
+        await _record_outcomes(session, trace.id, failed_calls, caller)
+        await finish_request(session, trace.id, status="failed", total_duration_ms=_elapsed_ms(t0))
         await session.commit()
         return openai_error(502, f"策略执行失败: {exc}", err_type="upstream_error"), trace.id
 
-    await _record_outcomes(session, trace.id, result.calls)
+    await _record_outcomes(session, trace.id, result.calls, caller)
     status = "degraded" if result.degraded else "success"
     duration = _elapsed_ms(t0)
     await finish_request(
@@ -574,9 +623,7 @@ def _sanitize_reasoning(text: str) -> str:
     return _THINK_TAG_RE.sub(lambda m: f"{m.group(1)}​think{m.group(3) or ''}>", text)
 
 
-async def _drain_with_heartbeat(
-    queue: asyncio.Queue[Any], interval: float
-) -> AsyncIterator[str]:
+async def _drain_with_heartbeat(queue: asyncio.Queue[Any], interval: float) -> AsyncIterator[str]:
     """queue.get() 带超时：超时发 ': ping'，收到 _END 结束；interval<=0 时纯透传。"""
     if interval <= 0:
         while (item := await queue.get()) is not _END:
@@ -601,16 +648,17 @@ async def _pipeline_stream(
     ctx: Any,
     strategy: Any,
     t0: float,
+    caller: Caller,
 ) -> tuple[Response, int]:
     plan = await strategy.prepare_stream(ctx)
 
     # 成员阶段已定：先落库
-    await _record_outcomes(session, trace.id, plan.pre_outcomes)
+    await _record_outcomes(session, trace.id, plan.pre_outcomes, caller)
     await session.commit()
 
     if plan.iteration is not None:
         # ICE 迭代路径（D15）：注释行保活 → 逐轮执行 → 终局流式转发
-        return await _pipeline_stream_iterative(app, background, trace, ctx, plan, t0)
+        return await _pipeline_stream_iterative(app, background, trace, ctx, plan, t0, caller)
 
     session_factory = app.state.session_factory
     response_id = f"chatcmpl-{uuid.uuid4().hex[:24]}"
@@ -687,7 +735,7 @@ async def _pipeline_stream(
             usage=judge_usage,
         )
         async with session_factory() as s:
-            await _record_outcomes(s, trace_id, [judge])
+            await _record_outcomes(s, trace_id, [judge], caller)
             await finish_request(
                 s,
                 trace_id,
@@ -713,6 +761,7 @@ async def _pipeline_stream_iterative(
     ctx: Any,
     plan: Any,
     t0: float,
+    caller: Caller,
 ) -> tuple[Response, int]:
     """ICE 迭代流式路径（D15）：注释行保活 → 逐轮执行（策略迭代状态）→ 终局裁决 SSE 转发。
 
@@ -796,7 +845,7 @@ async def _pipeline_stream_iterative(
         completion_tokens += final_usage.completion_tokens
         async with session_factory() as s:
             if iter_outcomes:
-                await _record_outcomes(s, trace_id, iter_outcomes)
+                await _record_outcomes(s, trace_id, iter_outcomes, caller)
             if final_plan is not None:  # 终局已开始才落 judge 行（迭代期取消则无此行）
                 judge = CallOutcome(
                     role="judge",
@@ -810,7 +859,7 @@ async def _pipeline_stream_iterative(
                     duration_ms=outcome.duration_ms,
                     usage=final_usage,
                 )
-                await _record_outcomes(s, trace_id, [judge])
+                await _record_outcomes(s, trace_id, [judge], caller)
             await finish_request(
                 s,
                 trace_id,
@@ -835,6 +884,7 @@ async def _pipeline_stream_process(
     ctx: Any,
     strategy: Any,
     t0: float,
+    caller: Caller,
 ) -> tuple[Response, int]:
     """过程流式路径（T38 stream_process=true）：成员/评论完成即发 reasoning chunk，终局照旧。
 
@@ -875,9 +925,7 @@ async def _pipeline_stream_process(
                         outcome.first_token_ms = _elapsed_ms(t0)
                     if ev.tool_calls:
                         for i, call in enumerate(ev.tool_calls):
-                            queue.put_nowait(
-                                _sse(chunk({"tool_calls": [{**call, "index": i}]}))
-                            )
+                            queue.put_nowait(_sse(chunk({"tool_calls": [{**call, "index": i}]})))
                     elif ev.content:
                         queue.put_nowait(_sse(chunk({"content": ev.content})))
                     queue.put_nowait(_sse(chunk({}, finish_reason=ev.finish_reason)))
@@ -1002,9 +1050,9 @@ async def _pipeline_stream_process(
             status = "degraded"
         async with session_factory() as s:
             if pre_outcomes:
-                await _record_outcomes(s, trace_id, pre_outcomes)
+                await _record_outcomes(s, trace_id, pre_outcomes, caller)
             if final_judge is not None:  # 终局已开始才落 judge 行（前置期取消则无此行）
-                await _record_outcomes(s, trace_id, [final_judge])
+                await _record_outcomes(s, trace_id, [final_judge], caller)
             await finish_request(
                 s,
                 trace_id,
@@ -1106,6 +1154,7 @@ async def _passthrough(
     stream: bool,
     client_ip: str,
     t0: float,
+    caller: Caller,
 ) -> tuple[Response, int]:
     trace = await start_request(
         session,
@@ -1114,6 +1163,8 @@ async def _passthrough(
         messages=body["messages"],
         params=params,
         client_ip=client_ip,
+        user_id=caller.user_id,
+        user_username=caller.username,
     )
 
     merged = _merged_params(model_row, params)
@@ -1128,7 +1179,17 @@ async def _passthrough(
 
     if stream:
         return await _passthrough_stream(
-            app, background, session, trace, model_row, provider, payload, llm_request, adapter, t0
+            app,
+            background,
+            session,
+            trace,
+            model_row,
+            provider,
+            payload,
+            llm_request,
+            adapter,
+            t0,
+            caller,
         )
 
     start = time.perf_counter()  # 调用行本地计时：仅供 passthrough 调用行 duration_ms
@@ -1148,6 +1209,7 @@ async def _passthrough(
                     provider,
                     start,
                     t0,
+                    caller,
                 )
             )
         else:
@@ -1163,6 +1225,8 @@ async def _passthrough(
         await record_call(
             session,
             request_id=trace.id,
+            user_id=caller.user_id,
+            user_username=caller.username,
             role="passthrough",
             model_id=model_row.id,
             upstream_model_id=model_row.upstream_model_id,
@@ -1172,15 +1236,15 @@ async def _passthrough(
             error_message=str(exc),
             duration_ms=duration,
         )
-        await finish_request(
-            session, trace.id, status="failed", total_duration_ms=_elapsed_ms(t0)
-        )
+        await finish_request(session, trace.id, status="failed", total_duration_ms=_elapsed_ms(t0))
         await session.commit()
         return openai_error(502, f"上游调用失败: {exc}", err_type="upstream_error"), trace.id
 
     await record_call(
         session,
         request_id=trace.id,
+        user_id=caller.user_id,
+        user_username=caller.username,
         role="passthrough",
         model_id=model_row.id,
         upstream_model_id=model_row.upstream_model_id,
@@ -1247,6 +1311,7 @@ async def _passthrough_stream(
     llm_request: LlmRequest,
     adapter: Any,
     t0: float,
+    caller: Caller,
 ) -> tuple[Response, int]:
     await session.commit()  # 先落 pending 状态的 request_logs
 
@@ -1310,6 +1375,8 @@ async def _passthrough_stream(
             await record_call(
                 s,
                 request_id=trace_id,
+                user_id=caller.user_id if caller else 0,
+                user_username=caller.username if caller else "",
                 role="passthrough",
                 model_id=model_row.id,
                 upstream_model_id=model_row.upstream_model_id,

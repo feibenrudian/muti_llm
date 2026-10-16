@@ -1,4 +1,4 @@
-import { expect, test } from "@playwright/test";
+import { expect, test } from "./fixtures";
 
 // 剪贴板读取用于 UE-28-3 的复制断言（仅本文件内的用例生效）
 test.use({ permissions: ["clipboard-read", "clipboard-write"] });

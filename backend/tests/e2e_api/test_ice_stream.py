@@ -167,7 +167,7 @@ async def test_ice_stream_round0_critique_failure(
 
 
 async def test_ice_stream_iteration_cancel(
-    backend_live: tuple[str, str], srs_live_seeded: str, monkeypatch: pytest.MonkeyPatch
+    backend_live: tuple[str, str, str], srs_live_seeded: str, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """AE-35-7 迭代期取消：客户端断开 → 在飞轮次任务取消、client_cancelled；已完成轮次行已落库。
 
@@ -179,8 +179,10 @@ async def test_ice_stream_iteration_cancel(
     from app import settings as settings_module
 
     monkeypatch.setattr(settings_module.settings, "detach_on_disconnect", False)
-    base_url, service_key = backend_live
-    async with httpx.AsyncClient(timeout=120, base_url=base_url) as client:
+    base_url, service_key, admin_token = backend_live
+    async with httpx.AsyncClient(
+        timeout=120, base_url=base_url, headers=auth_headers(admin_token)
+    ) as client:
         await seed_ice(
             client,
             srs_live_seeded,
@@ -218,11 +220,13 @@ async def test_ice_stream_iteration_cancel(
 
 
 async def test_ice_stream_iteration_detached(
-    backend_live: tuple[str, str], srs_live_seeded: str
+    backend_live: tuple[str, str, str], srs_live_seeded: str
 ) -> None:
     """AE-35-8 迭代期断连续跑：轮次与终局全部完成落库，trace=success。"""
-    base_url, service_key = backend_live
-    async with httpx.AsyncClient(timeout=120, base_url=base_url) as client:
+    base_url, service_key, admin_token = backend_live
+    async with httpx.AsyncClient(
+        timeout=120, base_url=base_url, headers=auth_headers(admin_token)
+    ) as client:
         await seed_ice(
             client,
             srs_live_seeded,

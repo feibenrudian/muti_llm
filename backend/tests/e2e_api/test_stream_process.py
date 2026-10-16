@@ -94,9 +94,7 @@ async def test_council_stream_process(
     }
     assert blocks[2][1] == snapshot_content("council_critique")
     # content 阶段全部位于过程块之后
-    first_content = next(
-        i for i, c in enumerate(chunks) if c["choices"][0]["delta"].get("content")
-    )
+    first_content = next(i for i, c in enumerate(chunks) if c["choices"][0]["delta"].get("content"))
     last_reasoning = max(
         i for i, c in enumerate(chunks) if "reasoning_content" in c["choices"][0]["delta"]
     )

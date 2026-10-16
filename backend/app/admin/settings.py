@@ -54,9 +54,7 @@ async def get_settings_info(
         "database_path": str(db_path),
         "database_size_bytes": db_path.stat().st_size if db_path.exists() else 0,
         "log_retention_days": int(retention) if retention else app_settings.log_retention_days,
-        "expose_virtual_models": _exposed(
-            await get_setting(session, KEY_EXPOSE_VIRTUAL_MODELS)
-        ),
+        "expose_virtual_models": _exposed(await get_setting(session, KEY_EXPOSE_VIRTUAL_MODELS)),
         "expose_routed_models": _exposed(await get_setting(session, KEY_EXPOSE_ROUTED_MODELS)),
     }
 

@@ -1,4 +1,4 @@
-"""FastAPI 入口。lifespan：建表、首次初始化、启动清理；/v1/* 需 Bearer 认证；托管前端静态资源。"""
+"""FastAPI 入口。lifespan：建表、首次初始化、启动清理；/v1/* 与 /api/* 需认证；托管前端产物。"""
 
 import logging
 from collections.abc import AsyncIterator
@@ -16,14 +16,27 @@ from app.db import create_db_engine, create_session_factory
 from app.gateways.llm_gateway import openai_error
 from app.gateways.llm_gateway import router as gateway_router
 from app.gateways.namespaces import router as namespaces_router
+from app.portal import router as portal_router
 from app.repos import get_setting
-from app.security import verify_service_key
 from app.settings import settings
 
 logger = logging.getLogger("muti_llm")
+# uvicorn 只给自己的 logger 配 handler，根日志器保持默认 WARNING——不在这里放开 INFO，
+# bootstrap 的「管理员初始密码」「启动清理」等一次性信息会被静默丢弃（真实事故：初始密码无法找回）
+logging.basicConfig(level=logging.INFO)
 
 # main.py 位于 <root>/backend/app/ → 前端产物在 <root>/frontend/dist（Dockerfile 保持同构布局）
 FRONTEND_DIST = Path(__file__).resolve().parents[2] / "frontend" / "dist"
+
+# 无需管理会话的端点（多用户 T46）：登录自不必说；登出容忍无效令牌（幂等 200）
+ADMIN_AUTH_WHITELIST = ("/api/admin/auth/login", "/api/admin/auth/logout")
+# 门户面白名单（T52）：语义同上
+PORTAL_AUTH_WHITELIST = ("/api/portal/auth/login", "/api/portal/auth/logout")
+
+
+def _bearer_token(request: Request) -> str:
+    auth = request.headers.get("authorization", "")
+    return auth[7:] if auth.startswith("Bearer ") else ""
 
 
 @asynccontextmanager
@@ -32,23 +45,33 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     result = await bootstrap(engine)
     if result.service_api_key:
         logger.info("服务 API Key 首次生成（仅存哈希）；如需明文请到 Web UI 设置页重置")
+    if result.initial_admin_password:
+        logger.info(
+            "管理员初始密码：%s（仅首次启动打印一次，请登录后修改）", result.initial_admin_password
+        )
     app.state.engine = engine
     app.state.session_factory = create_session_factory(engine)
     app.state.fernet_key = result.fernet_key
     app.state.service_api_key = result.service_api_key  # 首次明文，仅内存
     app.state.service_api_key_hash = result.service_api_key_hash
+    app.state.admin_user_id = result.admin_user_id
+    app.state.initial_admin_password = result.initial_admin_password  # 首次明文，仅内存
     app.state.started_at = datetime.now(UTC)
 
-    # 启动时按保留期清理旧日志
+    # 启动时按保留期清理旧日志与过期会话
+    from app.auth_svc import purge_expired_sessions
     from app.logging_svc import cleanup_old_logs
 
     async with app.state.session_factory() as session:
         retention = await get_setting(session, KEY_LOG_RETENTION_DAYS)
         days = int(retention) if retention else settings.log_retention_days
         deleted = await cleanup_old_logs(session, days)
+        purged = await purge_expired_sessions(session)
         await session.commit()
     if deleted:
         logger.info("启动清理：%d 条过期日志（保留 %d 天）", deleted, days)
+    if purged:
+        logger.info("启动清理：%d 条过期管理会话", purged)
 
     yield
     await engine.dispose()
@@ -56,18 +79,45 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
 
 app = FastAPI(title="muti_llm", version="0.1.0", lifespan=lifespan)
 app.include_router(admin_router)
+app.include_router(portal_router)
 app.include_router(gateway_router)
 app.include_router(namespaces_router)
 
 
 @app.middleware("http")
-async def require_service_key(request: Request, call_next):  # type: ignore[no-untyped-def]
-    if request.url.path.startswith("/v1/"):
-        auth = request.headers.get("authorization", "")
-        token = auth[7:] if auth.startswith("Bearer ") else ""
-        stored = getattr(request.app.state, "service_api_key_hash", "")
-        if not stored or not token or not verify_service_key(token, stored):
-            return openai_error(401, "Invalid API key", code="invalid_api_key")
+async def authenticate(request: Request, call_next):  # type: ignore[no-untyped-def]
+    """三平面认证（多用户 T46/T52）：按路径前缀分流，令牌空间互不通用。
+
+    - /v1/*：用户 Key 或兼容 Key（旧服务 Key → 内置 admin）；错误返回 OpenAI error 结构。
+    - /api/admin/*：管理台会话令牌（login/logout 白名单），要求 admin 角色；错误返回 {"detail"}。
+    - /api/portal/*（T52）：同一会话体系，任何有登录凭据的启用用户；错误返回 {"detail"} 结构。
+    身份写入 request.state.caller，供网关执行路径显式穿参（D25）。
+    """
+    from app import auth_svc
+
+    path = request.url.path
+    token = _bearer_token(request)
+    if path.startswith("/v1/"):
+        result = await auth_svc.resolve_data_plane_identity(request.app, token)
+        if isinstance(result, auth_svc.AuthError):
+            return openai_error(result.status, result.message, code=result.code)
+        request.state.caller = result
+    elif path.startswith("/api/admin/") and path not in ADMIN_AUTH_WHITELIST:
+        async with request.app.state.session_factory() as session:
+            result = await auth_svc.verify_session(session, token)
+            if isinstance(result, auth_svc.AuthError):
+                await session.rollback()
+                return JSONResponse({"detail": result.message}, status_code=result.status)
+            await session.commit()  # 滑动续期落库
+        request.state.caller = result
+    elif path.startswith("/api/portal/") and path not in PORTAL_AUTH_WHITELIST:
+        async with request.app.state.session_factory() as session:
+            result = await auth_svc.verify_session(session, token, require_role=None)
+            if isinstance(result, auth_svc.AuthError):
+                await session.rollback()
+                return JSONResponse({"detail": result.message}, status_code=result.status)
+            await session.commit()  # 滑动续期落库
+        request.state.caller = result
     return await call_next(request)
 
 

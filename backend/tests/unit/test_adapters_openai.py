@@ -205,8 +205,17 @@ CACHE_REQUEST: dict[str, Any] = {
 def _cache_chunks(usage: dict[str, Any]) -> list[dict[str, Any]]:
     return [
         _thinking_chunk({"content": "你好"}, delay_ms=0),
-        {"chunk": {"id": "chatcmpl-cache", "object": "chat.completion.chunk", "created": 1,
-                   "model": "mock-cache", "choices": [], "usage": usage}, "delay_ms": 0},
+        {
+            "chunk": {
+                "id": "chatcmpl-cache",
+                "object": "chat.completion.chunk",
+                "created": 1,
+                "model": "mock-cache",
+                "choices": [],
+                "usage": usage,
+            },
+            "delay_ms": 0,
+        },
     ]
 
 

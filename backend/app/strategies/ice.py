@@ -390,8 +390,13 @@ class IceStrategy(Strategy):
             await asyncio.gather(
                 *(
                     self._refine_one(
-                        ctx, specs[prev.model_id], prev, refine_prompt, round_no,
-                        adapter_factory, semaphore,
+                        ctx,
+                        specs[prev.model_id],
+                        prev,
+                        refine_prompt,
+                        round_no,
+                        adapter_factory,
+                        semaphore,
                     )
                     for prev in ok
                 )
@@ -707,8 +712,13 @@ class IceStrategy(Strategy):
                         indexed_outcome(
                             i,
                             self._refine_one(
-                                ctx, specs[prev.model_id], prev, refine_prompt, round_no,
-                                adapter_factory, semaphore,
+                                ctx,
+                                specs[prev.model_id],
+                                prev,
+                                refine_prompt,
+                                round_no,
+                                adapter_factory,
+                                semaphore,
                             ),
                         )
                     )
