@@ -4,6 +4,8 @@ import type { APIRequestContext } from "@playwright/test";
 import { expect, primePortalSession, portalToken, test } from "./fixtures";
 import { injectSrs, seedModel, seedProvider } from "./helpers";
 
+test.use({ permissions: ["clipboard-read", "clipboard-write"] });
+
 const PASSWORD = "portal-pass-123";
 const QUESTION = "用一句话解释量子纠缠";
 
@@ -102,7 +104,7 @@ test("UE-52-2 门户用量页：只显示本人调用的模型与统计；时间
   await expect(table).toContainText("共 1 行");
 });
 
-test("UE-52-3 门户 Key 管理：新建（明文一次）→ 列表掩码 → 停用 → 删除；可调用范围只读展示", async ({
+test("UE-52-3 门户 Key 管理：弹窗创建（名称可选）→ 列表复制取明文 → 停用 → 删除；可调用范围只读", async ({
   page,
   request,
 }) => {
@@ -114,16 +116,29 @@ test("UE-52-3 门户 Key 管理：新建（明文一次）→ 列表掩码 → �
   // 管理端签发的既有 Key 在列表
   await expect(page.getByTestId("portal-key-row").first()).toContainText("k");
 
-  // 新建 Key：明文仅弹窗一次
+  // 弹窗创建：取消不产 Key
+  await page.getByTestId("portal-btn-new-key").click();
+  await expect(page.getByTestId("modal")).toBeVisible();
+  await page.getByTestId("portal-btn-cancel-create").click();
+  await expect(page.getByTestId("portal-key-row")).toHaveCount(1);
+
+  // 名称可选：填"笔记本"创建 → 弹窗关闭，列表出现
+  await page.getByTestId("portal-btn-new-key").click();
   await page.getByTestId("portal-input-key-name").fill("笔记本");
   await page.getByTestId("portal-btn-create-key").click();
-  const plaintext = await page.getByTestId("portal-new-key-plaintext").textContent();
-  expect(plaintext).toMatch(/^sk-mu-/);
-  await page.getByTestId("portal-btn-key-saved").click();
   const newRow = page.getByTestId("portal-key-row").filter({ hasText: "笔记本" });
   await expect(newRow).toHaveCount(1);
-  await expect(newRow).toContainText("****"); // 列表只显示掩码
-  expect(await newRow.textContent()).not.toContain(plaintext!);
+
+  // 列表"复制"随时取回明文（与 /secret 一致，不依赖创建时刻）
+  const keys = await (await request.get(`/api/admin/users/${alice.user.id}/keys`)).json();
+  const created = keys.find((k: { name: string }) => k.name === "笔记本");
+  await newRow.getByTestId(`portal-btn-copy-key-${created.id}`).click();
+  await expect(newRow.getByTestId(`portal-btn-copy-key-${created.id}`)).toContainText("已复制");
+  const clip = await page.evaluate(() => navigator.clipboard.readText());
+  const secret = await (
+    await request.get(`/api/admin/users/${alice.user.id}/keys/${created.id}/secret`)
+  ).json();
+  expect(clip).toBe(secret.api_key);
 
   // 停用 → 徽标变化；再启用
   await newRow.getByRole("button", { name: "停用" }).click();

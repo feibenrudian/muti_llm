@@ -1,4 +1,7 @@
-/** 门户 API Key 自助管理（T52）：签发（明文一次）/ 复制 / 启停 / 删除 + 只读"可调用范围"。 */
+/** 门户 API Key 自助管理（T52）：弹窗签发（名称可选）/ 复制 / 启停 / 删除 + 只读"可调用范围"。
+ *
+ * 明文不单独弹窗展示：列表"复制"随时可经 Fernet 副本取回明文（产品决策，创建流程从简）。
+ */
 
 import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
@@ -11,6 +14,7 @@ import {
   Card,
   EmptyState,
   ErrorText,
+  Field,
   Input,
   Modal,
   Td,
@@ -20,8 +24,7 @@ import {
 export default function PortalKeys() {
   const queryClient = useQueryClient();
   const [error, setError] = useState("");
-  const [newKeyName, setNewKeyName] = useState("");
-  const [created, setCreated] = useState<UserKeyRow & { api_key: string } | null>(null);
+  const [createOpen, setCreateOpen] = useState(false);
   const { data: keys = [], isPending } = useQuery({
     queryKey: ["portal-keys"],
     queryFn: api.portal.keys.list,
@@ -29,15 +32,6 @@ export default function PortalKeys() {
   const { data: grants } = useQuery({ queryKey: ["portal-grants"], queryFn: api.portal.grants });
 
   const invalidate = () => void queryClient.invalidateQueries({ queryKey: ["portal-keys"] });
-  const createKey = useMutation({
-    mutationFn: () => api.portal.keys.create(newKeyName),
-    onSuccess: (row) => {
-      setCreated(row);
-      setNewKeyName("");
-      invalidate();
-    },
-    onError: (err) => setError(err instanceof ApiError ? err.message : String(err)),
-  });
   const updateKey = useMutation({
     mutationFn: ({ keyId, body }: { keyId: number; body: { enabled?: boolean } }) =>
       api.portal.keys.update(keyId, body),
@@ -56,22 +50,9 @@ export default function PortalKeys() {
         <Card
           title="我的 API Key"
           actions={
-            <span className="flex items-center gap-2">
-              <Input
-                placeholder="Key 名称（如：家用笔记本）"
-                value={newKeyName}
-                onChange={(e) => setNewKeyName(e.target.value)}
-                className="!w-56"
-                data-testid="portal-input-key-name"
-              />
-              <Button
-                onClick={() => createKey.mutate()}
-                disabled={createKey.isPending}
-                data-testid="portal-btn-create-key"
-              >
-                新建 Key
-              </Button>
-            </span>
+            <Button onClick={() => setCreateOpen(true)} data-testid="portal-btn-new-key">
+              新建 Key
+            </Button>
           }
         >
           <ErrorText>{error}</ErrorText>
@@ -141,27 +122,6 @@ export default function PortalKeys() {
               </tbody>
             </table>
           )}
-
-          <Modal open={created !== null} title="新 API Key（仅显示一次）">
-            <p className="mb-2 text-sm text-red-600">请立即复制保存，关闭后将无法再次查看明文。</p>
-            <pre
-              className="break-all rounded bg-slate-900 p-3 text-sm text-emerald-300"
-              data-testid="portal-new-key-plaintext"
-            >
-              {created?.api_key}
-            </pre>
-            <div className="mt-3 flex justify-end gap-2">
-              <Button
-                variant="secondary"
-                onClick={() => created && void navigator.clipboard?.writeText(created.api_key)}
-              >
-                复制
-              </Button>
-              <Button onClick={() => setCreated(null)} data-testid="portal-btn-key-saved">
-                我已保存，关闭
-              </Button>
-            </div>
-          </Modal>
         </Card>
       </div>
 
@@ -173,7 +133,56 @@ export default function PortalKeys() {
         <GrantSection label="模型" items={grants?.models ?? []} testId="portal-grant-models" />
         <GrantSection label="供应商" items={grants?.providers ?? []} testId="portal-grant-providers" />
       </Card>
+
+      <CreateKeyModal open={createOpen} onClose={() => setCreateOpen(false)} />
     </div>
+  );
+}
+
+/** 创建弹窗：名称可选；成功后回列表（明文随时点"复制"获取）。 */
+function CreateKeyModal({ open, onClose }: { open: boolean; onClose: () => void }) {
+  const queryClient = useQueryClient();
+  const [name, setName] = useState("");
+  const [error, setError] = useState("");
+
+  const create = useMutation({
+    mutationFn: () => api.portal.keys.create(name),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ["portal-keys"] });
+      close();
+    },
+    onError: (err) => setError(err instanceof ApiError ? err.message : String(err)),
+  });
+
+  const close = () => {
+    setName("");
+    setError("");
+    onClose();
+  };
+
+  return (
+    <Modal open={open} title="新建 API Key" onClose={close}>
+      <div className="space-y-3">
+        <ErrorText>{error}</ErrorText>
+        <Field label="名称（可选）" hint="便于识别用途，如：家用笔记本、CI 脚本">
+          <Input
+            value={name}
+            placeholder="家用笔记本"
+            onChange={(e) => setName(e.target.value)}
+            data-testid="portal-input-key-name"
+          />
+        </Field>
+        <p className="text-xs text-slate-400">创建后可随时在列表点"复制"获取 Key 明文。</p>
+        <div className="flex justify-end gap-2">
+          <Button variant="secondary" onClick={close} data-testid="portal-btn-cancel-create">
+            取消
+          </Button>
+          <Button onClick={() => create.mutate()} disabled={create.isPending} data-testid="portal-btn-create-key">
+            {create.isPending ? "创建中…" : "创建"}
+          </Button>
+        </div>
+      </div>
+    </Modal>
   );
 }
 

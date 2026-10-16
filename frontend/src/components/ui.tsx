@@ -7,6 +7,7 @@ type ButtonVariant = "primary" | "secondary" | "danger" | "ghost" | "success";
 export function Button({
   variant = "primary",
   type = "button",
+  className = "",
   children,
   ...rest
 }: React.ButtonHTMLAttributes<HTMLButtonElement> & { variant?: ButtonVariant }) {
@@ -21,7 +22,7 @@ export function Button({
   return (
     <button
       type={type}
-      className={`inline-flex items-center gap-1 rounded-md px-3 py-1.5 text-sm font-medium disabled:opacity-50 ${styles[variant]}`}
+      className={`inline-flex items-center gap-1 rounded-md px-3 py-1.5 text-sm font-medium disabled:opacity-50 ${styles[variant]} ${className}`}
       {...rest}
     >
       {children}
@@ -29,28 +30,31 @@ export function Button({
   );
 }
 
-export function Input(props: React.InputHTMLAttributes<HTMLInputElement>) {
+export function Input({ className = "", ...props }: React.InputHTMLAttributes<HTMLInputElement>) {
   return (
     <input
-      className="w-full rounded-md border border-slate-300 px-2.5 py-1.5 text-sm focus:border-slate-500 focus:outline-none"
+      className={`w-full rounded-md border border-slate-300 px-2.5 py-1.5 text-sm focus:border-slate-500 focus:outline-none ${className}`}
       {...props}
     />
   );
 }
 
-export function Select(props: React.SelectHTMLAttributes<HTMLSelectElement>) {
+export function Select({ className = "", ...props }: React.SelectHTMLAttributes<HTMLSelectElement>) {
   return (
     <select
-      className="w-full rounded-md border border-slate-300 bg-white px-2.5 py-1.5 text-sm focus:border-slate-500 focus:outline-none"
+      className={`w-full rounded-md border border-slate-300 bg-white px-2.5 py-1.5 text-sm focus:border-slate-500 focus:outline-none ${className}`}
       {...props}
     />
   );
 }
 
-export function Textarea(props: React.TextareaHTMLAttributes<HTMLTextAreaElement>) {
+export function Textarea({
+  className = "",
+  ...props
+}: React.TextareaHTMLAttributes<HTMLTextAreaElement>) {
   return (
     <textarea
-      className="w-full rounded-md border border-slate-300 px-2.5 py-1.5 font-mono text-xs focus:border-slate-500 focus:outline-none"
+      className={`w-full rounded-md border border-slate-300 px-2.5 py-1.5 font-mono text-xs focus:border-slate-500 focus:outline-none ${className}`}
       {...props}
     />
   );

@@ -37,7 +37,7 @@ test("UE-47-1 用户管理页：新建 → 列表出现 → 编辑显示名 → 
   ).toContainText("停用");
 });
 
-test("UE-47-2 Key 全流程：新建 → 明文弹窗一次 → 列表掩码 → 复制得到明文", async ({
+test("UE-47-2 Key 全流程：弹窗创建（名称可选）→ 列表掩码 → 复制得到明文", async ({
   page,
   request,
 }) => {
@@ -45,30 +45,37 @@ test("UE-47-2 Key 全流程：新建 → 明文弹窗一次 → 列表掩码 →
   const user = await (await request.post("/api/admin/users", { data: { username } })).json();
 
   await page.goto(`/users/${user.id}`);
+
+  // 弹窗创建：取消不产 Key
+  await page.getByTestId("btn-new-key").click();
+  await expect(page.getByTestId("modal")).toBeVisible();
+  await page.getByTestId("btn-cancel-create").click();
+  await expect(page.getByTestId("key-row")).toHaveCount(0);
+
+  // 名称可选：填名称创建 → 弹窗关闭，列表出现
+  await page.getByTestId("btn-new-key").click();
   await page.getByTestId("input-key-name").fill("测试机");
   await page.getByTestId("btn-create-key").click();
-
-  const modal = page.getByTestId("modal");
-  await expect(modal).toBeVisible();
-  const plaintext = (await modal.getByTestId("new-key-plaintext").textContent()) ?? "";
-  expect(plaintext).toMatch(/^sk-mu-/);
-
-  // 关闭后列表显示掩码（非明文）
-  await modal.getByTestId("btn-key-saved").click();
+  await expect(page.getByTestId("modal")).toHaveCount(0);
   const keyRow = page.getByTestId("key-row").first();
-  await expect(keyRow).toContainText(`****${plaintext.slice(-4)}`);
-  await expect(keyRow).not.toContainText(plaintext);
+  await expect(keyRow).toContainText("测试机");
 
-  // 复制 → 剪贴板得到完整明文（等按钮进入"已复制"态再读，避免异步竞态）
+  // 复制 → 剪贴板完整明文，与 /secret 一致（明文可随时取回，不依赖创建时刻）
+  const keys = await (await request.get(`/api/admin/users/${user.id}/keys`)).json();
+  const keyId = keys[0].id as number;
   await keyRow.getByRole("button", { name: "复制" }).click();
   await expect(keyRow.getByRole("button", { name: "已复制 ✓" })).toBeVisible();
   const clip = await page.evaluate(() => navigator.clipboard.readText());
-  expect(clip).toBe(plaintext);
+  const secret = await (
+    await request.get(`/api/admin/users/${user.id}/keys/${keyId}/secret`)
+  ).json();
+  expect(clip).toBe(secret.api_key);
+  await expect(keyRow).toContainText(`****${clip.slice(-4)}`);
+  await expect(keyRow).not.toContainText(clip);
 
-  // 第二把 Key：关闭明文弹窗后列表两行（互不影响）
-  await page.getByTestId("input-key-name").fill("第二把");
+  // 第二把 Key：名称留空（可选）→ 创建 → 列表两行（互不影响）
+  await page.getByTestId("btn-new-key").click();
   await page.getByTestId("btn-create-key").click();
-  await page.getByTestId("modal").getByTestId("btn-key-saved").click();
   await expect(page.getByTestId("key-row")).toHaveCount(2);
 });
 
