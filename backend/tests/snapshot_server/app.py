@@ -99,6 +99,7 @@ async def _record_stream(
     request = client.build_request("POST", "/chat/completions", json=body)
     resp = await client.send(request, stream=True)
     if resp.status_code != 200:
+        await resp.aread()  # 流式响应需先读完才能 .json()（T53 录制上游 4xx 时暴露）
         data = resp.json()
         await resp.aclose()
         if own_client:

@@ -384,6 +384,22 @@ def tool_scenarios(model: str) -> list[tuple[str, dict]]:
     return [("passthrough_tool_calls", body)]
 
 
+def tool_replay_scenarios(model: str) -> list[tuple[str, dict]]:
+    """T53 工具协议多轮回放：assistant.tool_calls 历史取自 passthrough_tool_calls 快照
+    （确定性），请求体不含 tools——被测对象是消息形态的放行与字段透传。"""
+    from tests.helpers import tool_replay_messages
+
+    return [
+        (
+            "passthrough_tool_replay",
+            {
+                **STREAM_BODY(model=model, messages=tool_replay_messages()),
+                "temperature": 0.0,
+            },
+        )
+    ]
+
+
 def _tool_intent(model: str, scenario: str) -> str:
     """快照成员输出 → 运行时同构的意图文本（复用 council.format_tool_intent 保证逐字节一致）。
 
@@ -584,6 +600,8 @@ def main() -> None:
             # 最终场景的 Prompt 需要读取已录的评论全文（两段式依赖链）
             run_scenarios(base_scenarios(model))
             run_scenarios(tool_scenarios(model))
+            # T53 回放场景依赖 passthrough_tool_calls 快照（tool_calls id 确定性来源）
+            run_scenarios(tool_replay_scenarios(model))
             run_scenarios(council_critique_scenarios(model))
             run_scenarios(council_final_scenarios(model))
             # T44 工具 council 依赖链：成员 → 评论（读成员意图）→ 终局（读评论全文）

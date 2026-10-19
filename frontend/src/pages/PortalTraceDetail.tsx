@@ -82,6 +82,12 @@ export default function PortalTraceDetail() {
                   <span className="text-slate-400">参数：</span>
                   <span className="font-mono text-xs">{JSON.stringify(request.request_params)}</span>
                 </p>
+                {request.error_message ? (
+                  <p className="text-red-600">
+                    <span className="text-slate-400">拒绝原因：</span>
+                    {request.error_message}
+                  </p>
+                ) : null}
               </div>
               <pre className="mt-2 max-h-56 overflow-auto rounded bg-slate-50 p-2 text-xs">
                 {JSON.stringify(request.request_messages, null, 2)}

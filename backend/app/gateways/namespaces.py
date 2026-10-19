@@ -19,10 +19,12 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.adapters.factory import build_adapter
 from app.authz import AccessScope, filter_pipelines, load_scope, visible_provider_ids
 from app.gateways.llm_gateway import (
+    _error_reason,
     _passthrough,
     _run_pipeline,
     model_exposure,
     openai_error,
+    record_rejected_request,
     validate_chat_body,
 )
 from app.orm import LlmModel, Pipeline, Provider
@@ -104,8 +106,13 @@ async def pipeline_chat(request: Request, background: BackgroundTasks) -> Respon
         return openai_error(400, "请求体不是合法 JSON")
     client_ip = request.client.host if request.client else ""
 
-    error, _messages, model_field, params, stream, has_tools = validate_chat_body(body)
+    error, _messages, model_field, params, stream, has_tools, tool_history = validate_chat_body(
+        body
+    )
     if error is not None:
+        await record_rejected_request(
+            request.app, body, client_ip, request.state.caller, _error_reason(error)
+        )
         return error
 
     app = request.app
@@ -119,6 +126,13 @@ async def pipeline_chat(request: Request, background: BackgroundTasks) -> Respon
         if has_tools and (not pipeline.tool_aggregation or pipeline.strategy != "council"):
             # 工具聚合仅 council 实现：开关关闭或其余策略（ICE）→ 明确拒绝（不静默忽略 tools）
             return openai_error(400, "聚合模式（Pipeline）暂不支持工具调用: tools", param="tools")
+        if tool_history:
+            # 工具协议历史回放（T53）仅透传路径放行；聚合语义从未接受过此类消息
+            return openai_error(
+                400,
+                "聚合模式（Pipeline）暂不支持工具协议消息回放: messages",
+                param="messages",
+            )
         stream_process_raw = body.get("stream_process")
         stream_process = (
             bool(stream_process_raw)
@@ -246,8 +260,13 @@ async def route_chat(ident: str, request: Request, background: BackgroundTasks) 
         return openai_error(400, "请求体不是合法 JSON")
     client_ip = request.client.host if request.client else ""
 
-    error, _messages, model_field, params, stream, _has_tools = validate_chat_body(body)
+    error, _messages, model_field, params, stream, _has_tools, _tool_history = validate_chat_body(
+        body
+    )
     if error is not None:
+        await record_rejected_request(
+            request.app, body, client_ip, request.state.caller, _error_reason(error)
+        )
         return error
 
     app = request.app

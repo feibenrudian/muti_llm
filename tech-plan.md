@@ -575,6 +575,20 @@ make seed          # 起服务+灌入演示数据(指向快照回放服务器), 
 | UE-52-6 | UE | 登录入口互链 | 管理台登录页常驻门户入口；普通用户在管理台登录 → 403 引导按钮 → 门户登录页预填用户名；门户页常驻管理台入口 |
 | UE-52-7 | UE | 默认入口 | 未登录进站（根路径）→ 门户登录页；门户登录后再进站 → 直达门户首页 |
 
+#### T53 透传路径工具协议多轮回放（增量需求）
+背景：ZCode 等 agent 客户端的第二轮请求携带 `role=tool` 工具结果与 `assistant.content=null + tool_calls` 历史，旧校验（role 白名单 + content 必须字符串）直接 400 且不落 trace，agent 循环第二轮必挂。改动：`validate_chat_body` 放宽为 OpenAI 工具协议超集并返回 `tool_history` 标志（tool 消息须带非空 `tool_call_id`；assistant `content=null` 须携带合法 `tool_calls` 数组）；聚合路径（Pipeline 分支）见 `tool_history` 仍 400（聚合把消息渲染进裁判 prompt，从未接受过此类消息，语义不变）；透传路径放行且 `_llm_request`/`NormalizedMessage`/openai 适配器按字段白名单透传 `tool_calls`/`tool_call_id`/`name`（普通请求 payload 逐字节不变，快照 hash 不受影响）。透传字段白名单含 `reasoning_content`：DeepSeek 思考模式硬性要求工具调用轮把 `reasoning_content` 原样回传，客户端规传的字段经网关不再被裁剪（实测录制时上游 400「reasoning_content must be passed back」验证了此需求）。校验拒绝（T53-5）落一条 `status=failed` 的 request_logs（新列 `error_message`，幂等补列）保留原始 messages 便于排查。多轮回放快照 `passthrough_tool_replay` 已真实录制入库（messages 携带快照内 reasoning_content 后上游接受）；AE-53-1 另以线程起真实 HTTP 上游桩断言网关实际发出的 payload（强于回放断言），AE-53-4 走快照回放回归。
+
+| 编号 | 类型 | 用例 | 断言要点 |
+| --- | --- | --- | --- |
+| UT-53-1 | UT | 基础消息校验 | system/user/assistant 字符串通过且 tool_history=False |
+| UT-53-2 | UT | 工具协议放行 | assistant(null)+tool_calls、role=tool 通过并置位；assistant 字符串+tool_calls 同样置位 |
+| UT-53-3 | UT | 非法形态拒绝 | 非法 role/缺 content/content=null 无 tool_calls/tool 缺 tool_call_id/tool_calls 结构不完整 → 400 |
+| UT-53-4 | UT | 透传字段白名单 | tool 字段仅携带时出现在 payload；普通消息与既往逐字节一致 |
+| AE-53-1 | AE | 多轮回放 | 老入口与 route 命名空间均 200；上游收到的 messages 完整携带 tool 字段；调用行落库一致 |
+| AE-53-2 | AE | 聚合拒绝 | /v1/pipeline 与老入口 pipeline 分支对工具历史 400（文案"工具协议消息回放"） |
+| AE-53-3 | AE | 拒绝落库 | 400 后 trace 列表出现 failed 行：error_message 带原因、原始 messages 保留、归属正确 |
+| AE-53-4 | AE | 真实快照回放 | 多轮工具消息（含 reasoning_content）经 SRS 回放成功，回答 = 快照全文 |
+
 ---
 
 ## 4. 里程碑映射（对应需求文档 M1–M4）

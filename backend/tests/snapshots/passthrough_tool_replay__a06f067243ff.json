@@ -1,0 +1,846 @@
+{
+  "scenario": "passthrough_tool_replay",
+  "request_hash": "sha256:a06f067243ff8dcafccc453b66820b0ff437d07dd79a6b9da26948ef326893f1",
+  "request": {
+    "model": "deepseek-v4-flash",
+    "messages": [
+      {
+        "role": "user",
+        "content": "广州现在多少度？请用工具查询实时天气"
+      },
+      {
+        "role": "assistant",
+        "content": null,
+        "tool_calls": [
+          {
+            "id": "call_00_6i01fXok44Ry8br0m19t3464",
+            "type": "function",
+            "function": {
+              "name": "get_weather",
+              "arguments": "{\"city\": \"广州\", \"unit\": \"celsius\"}"
+            }
+          }
+        ],
+        "reasoning_content": "The user asks about Guangzhou's current temperature. I should call the weather tool."
+      },
+      {
+        "role": "tool",
+        "content": "广州 晴，气温 28°C",
+        "tool_call_id": "call_00_6i01fXok44Ry8br0m19t3464"
+      }
+    ],
+    "stream": true,
+    "stream_options": {
+      "include_usage": true
+    },
+    "temperature": 0.0
+  },
+  "non_stream_response": null,
+  "stream_chunks": [
+    {
+      "chunk": {
+        "id": "a679e4d2-9454-4a56-8719-112d750c623f",
+        "object": "chat.completion.chunk",
+        "created": 1792390170,
+        "model": "deepseek-flash",
+        "system_fingerprint": "e72d3c7f663d3e1383b00b3884cb4501",
+        "choices": [
+          {
+            "index": 0,
+            "delta": {
+              "role": "assistant",
+              "content": null,
+              "reasoning_content": ""
+            },
+            "logprobs": null,
+            "finish_reason": null
+          }
+        ],
+        "usage": null
+      },
+      "delay_ms": 0
+    },
+    {
+      "chunk": {
+        "id": "a679e4d2-9454-4a56-8719-112d750c623f",
+        "object": "chat.completion.chunk",
+        "created": 1792390170,
+        "model": "deepseek-flash",
+        "system_fingerprint": "e72d3c7f663d3e1383b00b3884cb4501",
+        "choices": [
+          {
+            "index": 0,
+            "delta": {
+              "content": null,
+              "reasoning_content": "现在"
+            },
+            "logprobs": null,
+            "finish_reason": null
+          }
+        ],
+        "usage": null
+      },
+      "delay_ms": 495
+    },
+    {
+      "chunk": {
+        "id": "a679e4d2-9454-4a56-8719-112d750c623f",
+        "object": "chat.completion.chunk",
+        "created": 1792390170,
+        "model": "deepseek-flash",
+        "system_fingerprint": "e72d3c7f663d3e1383b00b3884cb4501",
+        "choices": [
+          {
+            "index": 0,
+            "delta": {
+              "content": null,
+              "reasoning_content": "需要"
+            },
+            "logprobs": null,
+            "finish_reason": null
+          }
+        ],
+        "usage": null
+      },
+      "delay_ms": 41
+    },
+    {
+      "chunk": {
+        "id": "a679e4d2-9454-4a56-8719-112d750c623f",
+        "object": "chat.completion.chunk",
+        "created": 1792390170,
+        "model": "deepseek-flash",
+        "system_fingerprint": "e72d3c7f663d3e1383b00b3884cb4501",
+        "choices": [
+          {
+            "index": 0,
+            "delta": {
+              "content": null,
+              "reasoning_content": "回答"
+            },
+            "logprobs": null,
+            "finish_reason": null
+          }
+        ],
+        "usage": null
+      },
+      "delay_ms": 1
+    },
+    {
+      "chunk": {
+        "id": "a679e4d2-9454-4a56-8719-112d750c623f",
+        "object": "chat.completion.chunk",
+        "created": 1792390170,
+        "model": "deepseek-flash",
+        "system_fingerprint": "e72d3c7f663d3e1383b00b3884cb4501",
+        "choices": [
+          {
+            "index": 0,
+            "delta": {
+              "content": null,
+              "reasoning_content": "用户"
+            },
+            "logprobs": null,
+            "finish_reason": null
+          }
+        ],
+        "usage": null
+      },
+      "delay_ms": 0
+    },
+    {
+      "chunk": {
+        "id": "a679e4d2-9454-4a56-8719-112d750c623f",
+        "object": "chat.completion.chunk",
+        "created": 1792390170,
+        "model": "deepseek-flash",
+        "system_fingerprint": "e72d3c7f663d3e1383b00b3884cb4501",
+        "choices": [
+          {
+            "index": 0,
+            "delta": {
+              "content": null,
+              "reasoning_content": "广州"
+            },
+            "logprobs": null,
+            "finish_reason": null
+          }
+        ],
+        "usage": null
+      },
+      "delay_ms": 0
+    },
+    {
+      "chunk": {
+        "id": "a679e4d2-9454-4a56-8719-112d750c623f",
+        "object": "chat.completion.chunk",
+        "created": 1792390170,
+        "model": "deepseek-flash",
+        "system_fingerprint": "e72d3c7f663d3e1383b00b3884cb4501",
+        "choices": [
+          {
+            "index": 0,
+            "delta": {
+              "content": null,
+              "reasoning_content": "实时"
+            },
+            "logprobs": null,
+            "finish_reason": null
+          }
+        ],
+        "usage": null
+      },
+      "delay_ms": 0
+    },
+    {
+      "chunk": {
+        "id": "a679e4d2-9454-4a56-8719-112d750c623f",
+        "object": "chat.completion.chunk",
+        "created": 1792390170,
+        "model": "deepseek-flash",
+        "system_fingerprint": "e72d3c7f663d3e1383b00b3884cb4501",
+        "choices": [
+          {
+            "index": 0,
+            "delta": {
+              "content": null,
+              "reasoning_content": "温度"
+            },
+            "logprobs": null,
+            "finish_reason": null
+          }
+        ],
+        "usage": null
+      },
+      "delay_ms": 0
+    },
+    {
+      "chunk": {
+        "id": "a679e4d2-9454-4a56-8719-112d750c623f",
+        "object": "chat.completion.chunk",
+        "created": 1792390170,
+        "model": "deepseek-flash",
+        "system_fingerprint": "e72d3c7f663d3e1383b00b3884cb4501",
+        "choices": [
+          {
+            "index": 0,
+            "delta": {
+              "content": null,
+              "reasoning_content": "。"
+            },
+            "logprobs": null,
+            "finish_reason": null
+          }
+        ],
+        "usage": null
+      },
+      "delay_ms": 14
+    },
+    {
+      "chunk": {
+        "id": "a679e4d2-9454-4a56-8719-112d750c623f",
+        "object": "chat.completion.chunk",
+        "created": 1792390170,
+        "model": "deepseek-flash",
+        "system_fingerprint": "e72d3c7f663d3e1383b00b3884cb4501",
+        "choices": [
+          {
+            "index": 0,
+            "delta": {
+              "content": null,
+              "reasoning_content": "工具"
+            },
+            "logprobs": null,
+            "finish_reason": null
+          }
+        ],
+        "usage": null
+      },
+      "delay_ms": 0
+    },
+    {
+      "chunk": {
+        "id": "a679e4d2-9454-4a56-8719-112d750c623f",
+        "object": "chat.completion.chunk",
+        "created": 1792390170,
+        "model": "deepseek-flash",
+        "system_fingerprint": "e72d3c7f663d3e1383b00b3884cb4501",
+        "choices": [
+          {
+            "index": 0,
+            "delta": {
+              "content": null,
+              "reasoning_content": "返回"
+            },
+            "logprobs": null,
+            "finish_reason": null
+          }
+        ],
+        "usage": null
+      },
+      "delay_ms": 6
+    },
+    {
+      "chunk": {
+        "id": "a679e4d2-9454-4a56-8719-112d750c623f",
+        "object": "chat.completion.chunk",
+        "created": 1792390170,
+        "model": "deepseek-flash",
+        "system_fingerprint": "e72d3c7f663d3e1383b00b3884cb4501",
+        "choices": [
+          {
+            "index": 0,
+            "delta": {
+              "content": null,
+              "reasoning_content": "："
+            },
+            "logprobs": null,
+            "finish_reason": null
+          }
+        ],
+        "usage": null
+      },
+      "delay_ms": 0
+    },
+    {
+      "chunk": {
+        "id": "a679e4d2-9454-4a56-8719-112d750c623f",
+        "object": "chat.completion.chunk",
+        "created": 1792390170,
+        "model": "deepseek-flash",
+        "system_fingerprint": "e72d3c7f663d3e1383b00b3884cb4501",
+        "choices": [
+          {
+            "index": 0,
+            "delta": {
+              "content": null,
+              "reasoning_content": "广州"
+            },
+            "logprobs": null,
+            "finish_reason": null
+          }
+        ],
+        "usage": null
+      },
+      "delay_ms": 0
+    },
+    {
+      "chunk": {
+        "id": "a679e4d2-9454-4a56-8719-112d750c623f",
+        "object": "chat.completion.chunk",
+        "created": 1792390170,
+        "model": "deepseek-flash",
+        "system_fingerprint": "e72d3c7f663d3e1383b00b3884cb4501",
+        "choices": [
+          {
+            "index": 0,
+            "delta": {
+              "content": null,
+              "reasoning_content": " "
+            },
+            "logprobs": null,
+            "finish_reason": null
+          }
+        ],
+        "usage": null
+      },
+      "delay_ms": 12
+    },
+    {
+      "chunk": {
+        "id": "a679e4d2-9454-4a56-8719-112d750c623f",
+        "object": "chat.completion.chunk",
+        "created": 1792390170,
+        "model": "deepseek-flash",
+        "system_fingerprint": "e72d3c7f663d3e1383b00b3884cb4501",
+        "choices": [
+          {
+            "index": 0,
+            "delta": {
+              "content": null,
+              "reasoning_content": "晴"
+            },
+            "logprobs": null,
+            "finish_reason": null
+          }
+        ],
+        "usage": null
+      },
+      "delay_ms": 0
+    },
+    {
+      "chunk": {
+        "id": "a679e4d2-9454-4a56-8719-112d750c623f",
+        "object": "chat.completion.chunk",
+        "created": 1792390170,
+        "model": "deepseek-flash",
+        "system_fingerprint": "e72d3c7f663d3e1383b00b3884cb4501",
+        "choices": [
+          {
+            "index": 0,
+            "delta": {
+              "content": null,
+              "reasoning_content": "，"
+            },
+            "logprobs": null,
+            "finish_reason": null
+          }
+        ],
+        "usage": null
+      },
+      "delay_ms": 0
+    },
+    {
+      "chunk": {
+        "id": "a679e4d2-9454-4a56-8719-112d750c623f",
+        "object": "chat.completion.chunk",
+        "created": 1792390170,
+        "model": "deepseek-flash",
+        "system_fingerprint": "e72d3c7f663d3e1383b00b3884cb4501",
+        "choices": [
+          {
+            "index": 0,
+            "delta": {
+              "content": null,
+              "reasoning_content": "气温"
+            },
+            "logprobs": null,
+            "finish_reason": null
+          }
+        ],
+        "usage": null
+      },
+      "delay_ms": 0
+    },
+    {
+      "chunk": {
+        "id": "a679e4d2-9454-4a56-8719-112d750c623f",
+        "object": "chat.completion.chunk",
+        "created": 1792390170,
+        "model": "deepseek-flash",
+        "system_fingerprint": "e72d3c7f663d3e1383b00b3884cb4501",
+        "choices": [
+          {
+            "index": 0,
+            "delta": {
+              "content": null,
+              "reasoning_content": "28"
+            },
+            "logprobs": null,
+            "finish_reason": null
+          }
+        ],
+        "usage": null
+      },
+      "delay_ms": 12
+    },
+    {
+      "chunk": {
+        "id": "a679e4d2-9454-4a56-8719-112d750c623f",
+        "object": "chat.completion.chunk",
+        "created": 1792390170,
+        "model": "deepseek-flash",
+        "system_fingerprint": "e72d3c7f663d3e1383b00b3884cb4501",
+        "choices": [
+          {
+            "index": 0,
+            "delta": {
+              "content": null,
+              "reasoning_content": "°"
+            },
+            "logprobs": null,
+            "finish_reason": null
+          }
+        ],
+        "usage": null
+      },
+      "delay_ms": 0
+    },
+    {
+      "chunk": {
+        "id": "a679e4d2-9454-4a56-8719-112d750c623f",
+        "object": "chat.completion.chunk",
+        "created": 1792390170,
+        "model": "deepseek-flash",
+        "system_fingerprint": "e72d3c7f663d3e1383b00b3884cb4501",
+        "choices": [
+          {
+            "index": 0,
+            "delta": {
+              "content": null,
+              "reasoning_content": "C"
+            },
+            "logprobs": null,
+            "finish_reason": null
+          }
+        ],
+        "usage": null
+      },
+      "delay_ms": 0
+    },
+    {
+      "chunk": {
+        "id": "a679e4d2-9454-4a56-8719-112d750c623f",
+        "object": "chat.completion.chunk",
+        "created": 1792390170,
+        "model": "deepseek-flash",
+        "system_fingerprint": "e72d3c7f663d3e1383b00b3884cb4501",
+        "choices": [
+          {
+            "index": 0,
+            "delta": {
+              "content": null,
+              "reasoning_content": "。"
+            },
+            "logprobs": null,
+            "finish_reason": null
+          }
+        ],
+        "usage": null
+      },
+      "delay_ms": 0
+    },
+    {
+      "chunk": {
+        "id": "a679e4d2-9454-4a56-8719-112d750c623f",
+        "object": "chat.completion.chunk",
+        "created": 1792390170,
+        "model": "deepseek-flash",
+        "system_fingerprint": "e72d3c7f663d3e1383b00b3884cb4501",
+        "choices": [
+          {
+            "index": 0,
+            "delta": {
+              "content": null,
+              "reasoning_content": "直接"
+            },
+            "logprobs": null,
+            "finish_reason": null
+          }
+        ],
+        "usage": null
+      },
+      "delay_ms": 0
+    },
+    {
+      "chunk": {
+        "id": "a679e4d2-9454-4a56-8719-112d750c623f",
+        "object": "chat.completion.chunk",
+        "created": 1792390170,
+        "model": "deepseek-flash",
+        "system_fingerprint": "e72d3c7f663d3e1383b00b3884cb4501",
+        "choices": [
+          {
+            "index": 0,
+            "delta": {
+              "content": null,
+              "reasoning_content": "简洁"
+            },
+            "logprobs": null,
+            "finish_reason": null
+          }
+        ],
+        "usage": null
+      },
+      "delay_ms": 23
+    },
+    {
+      "chunk": {
+        "id": "a679e4d2-9454-4a56-8719-112d750c623f",
+        "object": "chat.completion.chunk",
+        "created": 1792390170,
+        "model": "deepseek-flash",
+        "system_fingerprint": "e72d3c7f663d3e1383b00b3884cb4501",
+        "choices": [
+          {
+            "index": 0,
+            "delta": {
+              "content": null,
+              "reasoning_content": "。"
+            },
+            "logprobs": null,
+            "finish_reason": null
+          }
+        ],
+        "usage": null
+      },
+      "delay_ms": 11
+    },
+    {
+      "chunk": {
+        "id": "a679e4d2-9454-4a56-8719-112d750c623f",
+        "object": "chat.completion.chunk",
+        "created": 1792390170,
+        "model": "deepseek-flash",
+        "system_fingerprint": "e72d3c7f663d3e1383b00b3884cb4501",
+        "choices": [
+          {
+            "index": 0,
+            "delta": {
+              "content": "广州",
+              "reasoning_content": null
+            },
+            "logprobs": null,
+            "finish_reason": null
+          }
+        ],
+        "usage": null
+      },
+      "delay_ms": 0
+    },
+    {
+      "chunk": {
+        "id": "a679e4d2-9454-4a56-8719-112d750c623f",
+        "object": "chat.completion.chunk",
+        "created": 1792390170,
+        "model": "deepseek-flash",
+        "system_fingerprint": "e72d3c7f663d3e1383b00b3884cb4501",
+        "choices": [
+          {
+            "index": 0,
+            "delta": {
+              "content": "现在",
+              "reasoning_content": null
+            },
+            "logprobs": null,
+            "finish_reason": null
+          }
+        ],
+        "usage": null
+      },
+      "delay_ms": 0
+    },
+    {
+      "chunk": {
+        "id": "a679e4d2-9454-4a56-8719-112d750c623f",
+        "object": "chat.completion.chunk",
+        "created": 1792390170,
+        "model": "deepseek-flash",
+        "system_fingerprint": "e72d3c7f663d3e1383b00b3884cb4501",
+        "choices": [
+          {
+            "index": 0,
+            "delta": {
+              "content": " **",
+              "reasoning_content": null
+            },
+            "logprobs": null,
+            "finish_reason": null
+          }
+        ],
+        "usage": null
+      },
+      "delay_ms": 15
+    },
+    {
+      "chunk": {
+        "id": "a679e4d2-9454-4a56-8719-112d750c623f",
+        "object": "chat.completion.chunk",
+        "created": 1792390170,
+        "model": "deepseek-flash",
+        "system_fingerprint": "e72d3c7f663d3e1383b00b3884cb4501",
+        "choices": [
+          {
+            "index": 0,
+            "delta": {
+              "content": "28",
+              "reasoning_content": null
+            },
+            "logprobs": null,
+            "finish_reason": null
+          }
+        ],
+        "usage": null
+      },
+      "delay_ms": 4
+    },
+    {
+      "chunk": {
+        "id": "a679e4d2-9454-4a56-8719-112d750c623f",
+        "object": "chat.completion.chunk",
+        "created": 1792390170,
+        "model": "deepseek-flash",
+        "system_fingerprint": "e72d3c7f663d3e1383b00b3884cb4501",
+        "choices": [
+          {
+            "index": 0,
+            "delta": {
+              "content": "°",
+              "reasoning_content": null
+            },
+            "logprobs": null,
+            "finish_reason": null
+          }
+        ],
+        "usage": null
+      },
+      "delay_ms": 0
+    },
+    {
+      "chunk": {
+        "id": "a679e4d2-9454-4a56-8719-112d750c623f",
+        "object": "chat.completion.chunk",
+        "created": 1792390170,
+        "model": "deepseek-flash",
+        "system_fingerprint": "e72d3c7f663d3e1383b00b3884cb4501",
+        "choices": [
+          {
+            "index": 0,
+            "delta": {
+              "content": "C",
+              "reasoning_content": null
+            },
+            "logprobs": null,
+            "finish_reason": null
+          }
+        ],
+        "usage": null
+      },
+      "delay_ms": 0
+    },
+    {
+      "chunk": {
+        "id": "a679e4d2-9454-4a56-8719-112d750c623f",
+        "object": "chat.completion.chunk",
+        "created": 1792390170,
+        "model": "deepseek-flash",
+        "system_fingerprint": "e72d3c7f663d3e1383b00b3884cb4501",
+        "choices": [
+          {
+            "index": 0,
+            "delta": {
+              "content": "**",
+              "reasoning_content": null
+            },
+            "logprobs": null,
+            "finish_reason": null
+          }
+        ],
+        "usage": null
+      },
+      "delay_ms": 0
+    },
+    {
+      "chunk": {
+        "id": "a679e4d2-9454-4a56-8719-112d750c623f",
+        "object": "chat.completion.chunk",
+        "created": 1792390170,
+        "model": "deepseek-flash",
+        "system_fingerprint": "e72d3c7f663d3e1383b00b3884cb4501",
+        "choices": [
+          {
+            "index": 0,
+            "delta": {
+              "content": "，",
+              "reasoning_content": null
+            },
+            "logprobs": null,
+            "finish_reason": null
+          }
+        ],
+        "usage": null
+      },
+      "delay_ms": 0
+    },
+    {
+      "chunk": {
+        "id": "a679e4d2-9454-4a56-8719-112d750c623f",
+        "object": "chat.completion.chunk",
+        "created": 1792390170,
+        "model": "deepseek-flash",
+        "system_fingerprint": "e72d3c7f663d3e1383b00b3884cb4501",
+        "choices": [
+          {
+            "index": 0,
+            "delta": {
+              "content": "天气",
+              "reasoning_content": null
+            },
+            "logprobs": null,
+            "finish_reason": null
+          }
+        ],
+        "usage": null
+      },
+      "delay_ms": 25
+    },
+    {
+      "chunk": {
+        "id": "a679e4d2-9454-4a56-8719-112d750c623f",
+        "object": "chat.completion.chunk",
+        "created": 1792390170,
+        "model": "deepseek-flash",
+        "system_fingerprint": "e72d3c7f663d3e1383b00b3884cb4501",
+        "choices": [
+          {
+            "index": 0,
+            "delta": {
+              "content": "晴朗",
+              "reasoning_content": null
+            },
+            "logprobs": null,
+            "finish_reason": null
+          }
+        ],
+        "usage": null
+      },
+      "delay_ms": 0
+    },
+    {
+      "chunk": {
+        "id": "a679e4d2-9454-4a56-8719-112d750c623f",
+        "object": "chat.completion.chunk",
+        "created": 1792390170,
+        "model": "deepseek-flash",
+        "system_fingerprint": "e72d3c7f663d3e1383b00b3884cb4501",
+        "choices": [
+          {
+            "index": 0,
+            "delta": {
+              "content": "。",
+              "reasoning_content": null
+            },
+            "logprobs": null,
+            "finish_reason": null
+          }
+        ],
+        "usage": null
+      },
+      "delay_ms": 7
+    },
+    {
+      "chunk": {
+        "id": "a679e4d2-9454-4a56-8719-112d750c623f",
+        "object": "chat.completion.chunk",
+        "created": 1792390170,
+        "model": "deepseek-flash",
+        "system_fingerprint": "e72d3c7f663d3e1383b00b3884cb4501",
+        "choices": [
+          {
+            "index": 0,
+            "delta": {
+              "content": "",
+              "reasoning_content": null
+            },
+            "logprobs": null,
+            "finish_reason": "stop"
+          }
+        ],
+        "usage": {
+          "prompt_tokens": 117,
+          "completion_tokens": 35,
+          "total_tokens": 152,
+          "prompt_tokens_details": {
+            "cached_tokens": 0
+          },
+          "completion_tokens_details": {
+            "reasoning_tokens": 23
+          },
+          "prompt_cache_hit_tokens": 0,
+          "prompt_cache_miss_tokens": 117
+        }
+      },
+      "delay_ms": 0
+    }
+  ]
+}

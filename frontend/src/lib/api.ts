@@ -201,6 +201,8 @@ export interface TraceDetail {
     total_prompt_tokens: number;
     total_completion_tokens: number;
     created_at: string;
+    /** 网关校验拒绝原因（T53，status=failed 时非空）；正常链路为空。 */
+    error_message: string;
     /** 归属（多用户 T48）：0/"" 为历史数据。 */
     user_id: number;
     user_username: string;

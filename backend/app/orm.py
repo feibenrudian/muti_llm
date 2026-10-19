@@ -124,6 +124,8 @@ class RequestLog(Base):
     request_params: Mapped[dict] = mapped_column(JSON, default=dict)
     response_content: Mapped[str] = mapped_column(Text, default="")
     response_finish_reason: Mapped[str] = mapped_column(String(30), default="")
+    # 网关校验拒绝原因（T53，status=failed 时非空）；正常链路为空
+    error_message: Mapped[str] = mapped_column(Text, default="")
     # success | degraded | failed | client_cancelled
     status: Mapped[str] = mapped_column(String(30), default="success")
     total_duration_ms: Mapped[int] = mapped_column(Integer, default=0)

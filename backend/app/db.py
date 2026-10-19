@@ -69,6 +69,7 @@ _SCHEMA_PATCHES: dict[str, dict[str, str]] = {
         "first_token_ms": "INTEGER NOT NULL DEFAULT 0",
         "user_id": "INTEGER NOT NULL DEFAULT 0",
         "user_username": "TEXT NOT NULL DEFAULT ''",
+        "error_message": "TEXT NOT NULL DEFAULT ''",
     },
     # 旧库加不了 UNIQUE 约束，唯一性由生成逻辑保证（derive_slug 查重）
     "providers": {"slug": "TEXT NOT NULL DEFAULT ''"},

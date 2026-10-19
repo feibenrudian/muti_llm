@@ -32,6 +32,7 @@ const detail: TraceDetail = {
     client_model_field: "council-v1",
     request_messages: [{ role: "user", content: "hi" }],
     request_params: {},
+    error_message: "",
     response_content: "final",
     status: "success",
     total_duration_ms: 1200,

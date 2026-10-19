@@ -157,6 +157,41 @@ async def issue_key(client: httpx.AsyncClient, user_id: int, *, name: str = "") 
     return resp.json()
 
 
+def snapshot_reasoning(scenario: str) -> str:
+    """快照流内 reasoning_content 增量拼接（T53 思考模型回传场景的确定性来源）。"""
+    data = load_snapshot(scenario)
+    parts = [
+        (c["chunk"].get("choices") or [{}])[0].get("delta", {}).get("reasoning_content") or ""
+        for c in data.get("stream_chunks", [])
+    ]
+    return "".join(parts)
+
+
+def tool_replay_messages() -> list[dict[str, Any]]:
+    """T53 工具协议多轮回放消息（录制与 AE 共用，保证逐字节一致）。
+
+    assistant.tool_calls 与 reasoning_content 均取自 passthrough_tool_calls 快照（确定性）：
+    DeepSeek 思考模式要求工具调用轮把 reasoning_content 原样回传；tool 结果为固定文本，
+    无需真实数据——被测对象是网关对消息形态的放行与字段透传，不是上游答案质量。
+    """
+    from tests.record_scenarios import TOOL_QUESTION
+
+    calls = [
+        {"id": c["id"], "type": "function", "function": c["function"]}
+        for c in snapshot_tool_calls("passthrough_tool_calls")
+    ]
+    return [
+        {"role": "user", "content": TOOL_QUESTION},
+        {
+            "role": "assistant",
+            "content": None,
+            "tool_calls": calls,
+            "reasoning_content": snapshot_reasoning("passthrough_tool_calls"),
+        },
+        {"role": "tool", "content": "广州 晴，气温 28°C", "tool_call_id": calls[0]["id"]},
+    ]
+
+
 async def login_user(client: httpx.AsyncClient, username: str, password: str) -> dict[str, Any]:
     resp = await client.post(
         "/api/admin/auth/login", json={"username": username, "password": password}

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import logging
 import re
 import time
 import uuid
@@ -36,6 +37,8 @@ from app.repos import (
 from app.settings import settings
 
 router = APIRouter(tags=["gateway"])
+
+logger = logging.getLogger("muti_llm")
 
 VALID_ROLES = ("system", "user", "assistant")
 
@@ -88,14 +91,71 @@ def _is_off_state(value: Any) -> bool:
     return False
 
 
+def _error_reason(error: JSONResponse) -> str:
+    """从 openai_error 响应体提取 message（校验拒绝落库用）。"""
+    try:
+        return str(json.loads(error.body)["error"]["message"])  # type: ignore[arg-type]
+    except Exception:
+        return "invalid_request"
+
+
+async def record_rejected_request(
+    app: Any, body: Any, client_ip: str, caller: Any, reason: str
+) -> None:
+    """400 校验拒绝落一条 failed trace（T53）：保留原始 messages 便于排查；
+    落库失败静默（不掩盖 400 响应）。"""
+    messages = body.get("messages") if isinstance(body, dict) else None
+    if not isinstance(messages, list):
+        messages = []
+    try:
+        async with app.state.session_factory() as session:
+            trace = await start_request(
+                session,
+                client_model_field=str(body.get("model", "")) if isinstance(body, dict) else "",
+                pipeline_name="",
+                messages=messages,
+                params={},
+                client_ip=client_ip,
+                user_id=getattr(caller, "user_id", 0),
+                user_username=getattr(caller, "username", ""),
+                error_message=reason,
+            )
+            await finish_request(session, trace.id, status="failed")
+            await session.commit()
+    except Exception:
+        logger.warning("rejected request 落库失败: %s", reason, exc_info=True)
+
+
+def _valid_tool_calls(tool_calls: Any) -> bool:
+    """assistant.tool_calls 合法性（T53）：非空数组，每项含非空 id 与
+    function.name/arguments 字符串。"""
+    if not isinstance(tool_calls, list) or not tool_calls:
+        return False
+    for call in tool_calls:
+        if not isinstance(call, dict) or not isinstance(call.get("id"), str) or not call["id"]:
+            return False
+        fn = call.get("function")
+        if (
+            not isinstance(fn, dict)
+            or not isinstance(fn.get("name"), str)
+            or not fn["name"]
+            or not isinstance(fn.get("arguments"), str)
+        ):
+            return False
+    return True
+
+
 def validate_chat_body(
     body: dict[str, Any],
-) -> tuple[JSONResponse | None, list[Any], str, dict[str, Any], bool, bool]:
-    """OpenAI 兼容请求体校验与提参（老入口与命名空间网关共用，错误契约一致）。
+) -> tuple[JSONResponse | None, list[Any], str, dict[str, Any], bool, bool, bool]:
+    """OpenAI 兼容请求体校验与提参（三入口共用，错误契约一致）。
 
-    返回 (error, messages, model, params, stream, has_tools)；error 非 None 时其余为占位值。
+    基础校验为 OpenAI 工具协议超集（T53）：role=tool（须带非空 tool_call_id）与
+    assistant.tool_calls（content 可空）放行——透传路径原样转发上游；聚合路径是否拒绝
+    由调用方按 tool_history 分支处理（council 渲染消息进裁判 prompt，不支持回放）。
     tools 空值/关闭态字段静默忽略（Unsloth Studio 等客户端默认携带空 tools，T43）；
     非空 tools 不在此拒绝——由调用方按路径分流：透传放行、聚合（pipeline）400。
+    返回 (error, messages, model, params, stream, has_tools, tool_history)。
     """
     messages = body.get("messages")
     if not isinstance(messages, list) or not messages:
@@ -106,25 +166,36 @@ def validate_chat_body(
             {},
             False,
             False,
+            False,
         )
+
+    def _reject(
+        message: str,
+    ) -> tuple[JSONResponse | None, list[Any], str, dict[str, Any], bool, bool, bool]:
+        return (openai_error(400, message, param="messages"), [], "", {}, False, False, False)
+
+    tool_history = False
     for m in messages:
-        if (
-            not isinstance(m, dict)
-            or m.get("role") not in VALID_ROLES
-            or not isinstance(m.get("content"), str)
-        ):
-            return (
-                openai_error(
-                    400,
-                    "每条 message 需含 role(system|user|assistant) 与字符串 content",
-                    param="messages",
-                ),
-                [],
-                "",
-                {},
-                False,
-                False,
-            )
+        if not isinstance(m, dict):
+            return _reject("每条 message 需含 role(system|user|assistant) 与字符串 content")
+        role = m.get("role")
+        content = m.get("content")
+        if role == "tool":
+            # 工具结果回放（T53）：content 字符串 + 非空 tool_call_id
+            if not isinstance(content, str) or not m.get("tool_call_id"):
+                return _reject("tool 消息需含字符串 content 与非空 tool_call_id")
+            tool_history = True
+            continue
+        if role == "assistant" and content is None:
+            # assistant 声明工具调用：content 可空，但 tool_calls 必须合法
+            if not _valid_tool_calls(m.get("tool_calls")):
+                return _reject("assistant 消息 content=null 时需携带合法 tool_calls 数组")
+            tool_history = True
+            continue
+        if role not in VALID_ROLES or not isinstance(content, str):
+            return _reject("每条 message 需含 role(system|user|assistant) 与字符串 content")
+        if role == "assistant" and _valid_tool_calls(m.get("tool_calls")):
+            tool_history = True
 
     tools = body.get("tools")
     has_tools = isinstance(tools, list) and len(tools) > 0
@@ -140,18 +211,19 @@ def validate_chat_body(
                 {},
                 False,
                 False,
+                False,
             )
 
     model_field = body.get("model")
     if not isinstance(model_field, str) or not model_field:
-        return openai_error(400, "model 必填", param="model"), [], "", {}, False, False
+        return openai_error(400, "model 必填", param="model"), [], "", {}, False, False, False
 
     params: dict[str, Any] = {}
     for key in ("temperature", "max_tokens", "top_p"):
         value = body.get(key)
         if value is not None:
             params[key] = value
-    return None, messages, model_field, params, bool(body.get("stream")), has_tools
+    return None, messages, model_field, params, bool(body.get("stream")), has_tools, tool_history
 
 
 @router.get("/v1/models")
@@ -218,8 +290,9 @@ async def execute_chat(
 
     request = _AppRequest(app, client_ip)  # noqa: F841 - 供下方函数签名兼容
 
-    error, messages, model_field, params, stream, has_tools = validate_chat_body(body)
+    error, messages, model_field, params, stream, has_tools, tool_history = validate_chat_body(body)
     if error is not None:
+        await record_rejected_request(app, body, client_ip, caller, _error_reason(error))
         return error, None
     # 过程流式（T38/T39）：仅 pipeline 流式生效；None=请求体未显式给 → 用 pipeline 默认
     stream_process_raw = body.get("stream_process")
@@ -245,6 +318,17 @@ async def execute_chat(
                 # 工具聚合仅 council 实现：开关关闭或其余策略（ICE）→ 明确拒绝（不静默忽略 tools）
                 return (
                     openai_error(400, "聚合模式（Pipeline）暂不支持工具调用: tools", param="tools"),
+                    None,
+                )
+            if tool_history:
+                # 工具协议历史回放（T53）仅透传路径放行；聚合（含工具聚合）把消息渲染进
+                # 裁判 prompt，从未接受过此类消息（旧校验直接拒绝），语义不变
+                return (
+                    openai_error(
+                        400,
+                        "聚合模式（Pipeline）暂不支持工具协议消息回放: messages",
+                        param="messages",
+                    ),
                     None,
                 )
             # 请求体显式给了（含 false）就用请求体的值，否则用 pipeline 级默认
@@ -1080,8 +1164,29 @@ def _merged_params(model_row: LlmModel, params: dict[str, Any]) -> dict[str, Any
 def _llm_request(
     model_row: LlmModel, body: dict[str, Any], merged: dict[str, Any], stream: bool
 ) -> tuple[LlmRequest, dict[str, Any]]:
-    """构造归一化请求与实际发出的 payload（入日志/与快照 hash 一致）。"""
-    openai_messages = [{"role": m["role"], "content": m["content"]} for m in body["messages"]]
+    """构造归一化请求与实际发出的 payload（入日志/与快照 hash 一致）。
+
+    消息按字段白名单透传（T53）：role/content 恒在；tool_calls/tool_call_id/name
+    仅在携带时出现——普通请求 payload 与既往逐字节一致（快照 hash 不受影响）。
+    """
+    openai_messages: list[dict[str, Any]] = []
+    normalized: list[NormalizedMessage] = []
+    for m in body["messages"]:
+        entry: dict[str, Any] = {"role": m["role"], "content": m.get("content")}
+        for key in ("tool_calls", "tool_call_id", "name", "reasoning_content"):
+            if m.get(key) is not None:
+                entry[key] = m[key]
+        openai_messages.append(entry)
+        normalized.append(
+            NormalizedMessage(
+                role=m["role"],
+                content=m.get("content"),
+                tool_calls=m.get("tool_calls"),
+                tool_call_id=m.get("tool_call_id") or "",
+                name=m.get("name") or "",
+                reasoning_content=m.get("reasoning_content") or "",
+            )
+        )
     payload: dict[str, Any] = {
         "model": model_row.upstream_model_id,
         "messages": openai_messages,
@@ -1089,10 +1194,7 @@ def _llm_request(
     }
     if stream:
         payload["stream_options"] = {"include_usage": True}
-    llm_request = LlmRequest(
-        model=model_row.upstream_model_id,
-        messages=[NormalizedMessage(role=m["role"], content=m["content"]) for m in openai_messages],
-    )
+    llm_request = LlmRequest(model=model_row.upstream_model_id, messages=normalized)
     for key in ("temperature", "max_tokens", "top_p"):
         if merged.get(key) is not None:
             payload[key] = merged[key]

@@ -23,8 +23,21 @@ from app.adapters.base import (
 )
 
 
-def _to_openai_messages(messages: list[NormalizedMessage]) -> list[dict[str, str]]:
-    return [{"role": m.role, "content": m.content} for m in messages]
+def _to_openai_messages(messages: list[NormalizedMessage]) -> list[dict[str, Any]]:
+    """role/content 恒在；工具协议字段（T53）仅在携带时出现——普通请求 payload 逐字节不变。"""
+    result: list[dict[str, Any]] = []
+    for m in messages:
+        entry: dict[str, Any] = {"role": m.role, "content": m.content}
+        if m.tool_calls:
+            entry["tool_calls"] = m.tool_calls
+        if m.tool_call_id:
+            entry["tool_call_id"] = m.tool_call_id
+        if m.name:
+            entry["name"] = m.name
+        if m.reasoning_content:
+            entry["reasoning_content"] = m.reasoning_content
+        result.append(entry)
+    return result
 
 
 def _optional_params(request: LlmRequest) -> dict[str, Any]:

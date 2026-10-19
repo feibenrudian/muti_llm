@@ -20,8 +20,14 @@ from typing import Any
 
 @dataclass
 class NormalizedMessage:
-    role: str  # system | user | assistant（校验在网关层完成）
-    content: str
+    role: str  # system | user | assistant | tool（校验在网关层完成）
+    content: str | None
+    # 工具协议回放（T53）：仅透传路径携带，聚合/评测路径恒为默认值
+    tool_calls: list[dict[str, Any]] | None = None
+    tool_call_id: str = ""
+    name: str = ""
+    # 思考模型的思考内容回传（T53）：DeepSeek 思考模式要求工具调用轮原样带回
+    reasoning_content: str = ""
 
 
 @dataclass

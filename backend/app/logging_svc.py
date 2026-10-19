@@ -54,6 +54,7 @@ async def start_request(
     client_ip: str = "",
     user_id: int = 0,
     user_username: str = "",
+    error_message: str = "",
 ) -> RequestLog:
     log = RequestLog(
         pipeline_name=pipeline_name,
@@ -63,6 +64,7 @@ async def start_request(
         client_ip=client_ip,
         user_id=user_id,
         user_username=user_username,
+        error_message=error_message,
         status="pending",
     )
     session.add(log)
