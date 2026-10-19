@@ -588,6 +588,10 @@ make seed          # 起服务+灌入演示数据(指向快照回放服务器), 
 | AE-53-2 | AE | 聚合拒绝 | /v1/pipeline 与老入口 pipeline 分支对工具历史 400（文案"工具协议消息回放"） |
 | AE-53-3 | AE | 拒绝落库 | 400 后 trace 列表出现 failed 行：error_message 带原因、原始 messages 保留、归属正确 |
 | AE-53-4 | AE | 真实快照回放 | 多轮工具消息（含 reasoning_content）经 SRS 回放成功，回答 = 快照全文 |
+| AE-53b-1 | AE | 流式失败可见 | 上游 429 时 SSE 中出现 OpenAI 兼容错误事件（message 含上游原文、code=rate_limit）+ [DONE] 收尾；trace failed 带原因 |
+| AE-53b-2 | AE | 失败状态映射 | 非流式限流 → HTTP 429（code=rate_limit），不再统一 502；trace failed |
+
+T53b（上游失败可见性）：流式透传的 HTTP 200 已随首块发出，失败时补发 OpenAI 兼容 SSE 错误事件（`data: {"error": {...}}`，code=AdapterError.kind）并正常 [DONE] 收尾，客户端（ZCode 等）直接显示真实原因而非误判为空响应；非流式按 `AdapterError.kind` 映射状态码（timeout 504 / connection·auth 502 / rate_limit 429 / bad_request 400 / 其余 502）；两条失败路径均把原因写入 `request_logs.error_message`。聚合流式路径的失败语义（容错降级）保持不变。
 
 ---
 

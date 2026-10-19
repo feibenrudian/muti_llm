@@ -43,6 +43,23 @@ logger = logging.getLogger("muti_llm")
 VALID_ROLES = ("system", "user", "assistant")
 
 
+# 上游 AdapterError.kind → 对客户端的 HTTP 状态（T53b：限流不再伪装成 502）
+_ADAPTER_ERROR_STATUS: dict[str, int] = {
+    "timeout": 504,
+    "connection": 502,
+    "rate_limit": 429,
+    "auth": 502,  # 上游鉴权失败：客户端凭据没错，不宜回 401 误导
+    "bad_request": 400,
+    "upstream_error": 502,
+}
+
+
+def adapter_error_response(exc: AdapterError) -> JSONResponse:
+    """上游 AdapterError → OpenAI 风格错误响应（非流式；流式的错误事件与此同构）。"""
+    status = _ADAPTER_ERROR_STATUS.get(exc.kind, 502)
+    return openai_error(status, f"上游调用失败: {exc}", err_type="upstream_error", code=exc.kind)
+
+
 def openai_error(
     status: int,
     message: str,
@@ -1338,9 +1355,15 @@ async def _passthrough(
             error_message=str(exc),
             duration_ms=duration,
         )
-        await finish_request(session, trace.id, status="failed", total_duration_ms=_elapsed_ms(t0))
+        await finish_request(
+            session,
+            trace.id,
+            status="failed",
+            total_duration_ms=_elapsed_ms(t0),
+            error_message=str(exc),
+        )
         await session.commit()
-        return openai_error(502, f"上游调用失败: {exc}", err_type="upstream_error"), trace.id
+        return adapter_error_response(exc), trace.id
 
     await record_call(
         session,
@@ -1450,6 +1473,21 @@ async def _passthrough_stream(
         except AdapterError as exc:
             outcome.status = "failed"
             outcome.error = str(exc)
+            # 上游失败可见性（T53b）：HTTP 200 已随首块发出，补发 OpenAI 兼容 SSE 错误事件
+            # 再正常收尾——客户端据此刻画真实原因（如上游 429 余额不足），而非误判为空响应
+            queue.put_nowait(
+                _sse(
+                    {
+                        "error": {
+                            "message": f"上游调用失败: {exc}",
+                            "type": "upstream_error",
+                            "param": "",
+                            "code": exc.kind,
+                        }
+                    }
+                )
+            )
+            queue.put_nowait("data: [DONE]\n\n")
         finally:
             outcome.duration_ms = int((time.perf_counter() - start) * 1000)
             queue.put_nowait(_END)
@@ -1502,6 +1540,7 @@ async def _passthrough_stream(
                 status=outcome.status,
                 response_content=content,
                 response_finish_reason=outcome.finish_reason,
+                error_message=outcome.error,
                 total_duration_ms=_elapsed_ms(t0),
                 first_token_ms=outcome.first_token_ms,
                 total_prompt_tokens=usage.prompt_tokens,

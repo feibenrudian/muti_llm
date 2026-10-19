@@ -199,5 +199,7 @@ async def test_anthropic_provider_rejects_tools(
         },
         headers=auth_headers(service_key),
     )
-    assert resp.status_code == 502
+    # T53b：适配器层拒绝属客户端可修正错误（bad_request）→ 400，不再伪装成 502 上游错误
+    assert resp.status_code == 400
+    assert resp.json()["error"]["code"] == "bad_request"
     assert "anthropic 协议暂不支持工具透传" in resp.json()["error"]["message"]

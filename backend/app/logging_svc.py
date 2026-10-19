@@ -131,6 +131,7 @@ async def finish_request(
     first_token_ms: int = 0,
     total_prompt_tokens: int = 0,
     total_completion_tokens: int = 0,
+    error_message: str = "",
 ) -> None:
     row = await session.get(RequestLog, request_id)
     if row is None:
@@ -142,4 +143,6 @@ async def finish_request(
     row.first_token_ms = first_token_ms
     row.total_prompt_tokens = total_prompt_tokens
     row.total_completion_tokens = total_completion_tokens
+    if error_message:
+        row.error_message = error_message
     await session.flush()
