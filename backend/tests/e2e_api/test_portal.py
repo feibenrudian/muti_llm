@@ -5,6 +5,7 @@
 
 import httpx
 
+from app.auth_svc import PORTAL_SESSION_COOKIE
 from tests.conftest import auth_headers, mint_admin_session
 from tests.e2e_api.test_council import COUNCIL_BODY, seed_council
 from tests.helpers import create_user, issue_key, snapshot_usage
@@ -96,10 +97,14 @@ async def test_plane_isolation(asgi_client: httpx.AsyncClient) -> None:
     resp = await asgi_client.get("/api/portal/auth/me", headers=auth_headers(admin_tok))
     assert resp.status_code == 200 and resp.json()["role"] == "admin"
 
-    # 数据面不认会话令牌（D26）；门户无令牌 → 401
+    # 数据面不认会话令牌（D26）；门户无任何凭证（显式清 Bearer 与会话 Cookie，T54）→ 401
     resp = await asgi_client.get("/v1/models", headers=auth_headers(token))
     assert resp.status_code == 401
-    resp = await asgi_client.get("/api/portal/keys", headers={"Authorization": ""})
+    resp = await asgi_client.get(
+        "/api/portal/keys",
+        headers={"Authorization": ""},
+        cookies={PORTAL_SESSION_COOKIE: ""},
+    )
     assert resp.status_code == 401
 
 

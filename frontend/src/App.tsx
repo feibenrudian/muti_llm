@@ -4,7 +4,6 @@ import { useState } from "react";
 import { Navigate, NavLink, Outlet, useLocation, useNavigate } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "./lib/api";
-import { getToken } from "./lib/auth";
 import ChangePasswordModal from "./components/ChangePasswordModal";
 import { Button } from "./components/ui";
 
@@ -21,9 +20,22 @@ const NAV = [
 
 export default function App() {
   const location = useLocation();
-  // 已登录但令牌失效时由 api.ts 统一清会话并跳登录页；此处只挡"无令牌"的首次进入。
-  // 未登录进站（根路径）默认到用户门户登录页（T52）；直接访问管理页仍到管理台登录。
-  if (!getToken()) {
+  // 登录态以 /me 为准：sessionStorage 令牌缺失时由 HttpOnly 会话 Cookie 兜底（T54），
+  // 同一浏览器重启后免重复登录；401 → 对应登录页（数据请求的 401 仍由 api.ts 统一跳转）。
+  const { data: me, isPending } = useQuery({
+    queryKey: ["auth-me"],
+    queryFn: api.auth.me,
+    retry: false,
+  });
+  if (isPending) {
+    return (
+      <div className="flex h-screen items-center justify-center text-sm text-slate-400">
+        正在检查登录状态…
+      </div>
+    );
+  }
+  if (!me) {
+    // 未登录进站（根路径）默认到用户门户登录页（T52）；直接访问管理页仍到管理台登录。
     if (location.pathname === "/") {
       return <Navigate to="/portal/login" replace />;
     }

@@ -15,6 +15,7 @@ from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
+from fastapi import Request, Response
 from sqlalchemy import delete
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -37,6 +38,9 @@ from app.security import (
 from app.settings import settings
 
 SESSION_TTL_HOURS = 24.0
+SESSION_COOKIE_MAX_AGE = int(SESSION_TTL_HOURS * 3600)
+ADMIN_SESSION_COOKIE = "muti.admin_session"
+PORTAL_SESSION_COOKIE = "muti.portal_session"
 KEY_USAGE_THROTTLE_SECONDS = 60.0
 
 # last_used_at 节流记账（D31）：进程内 {key_id: monotonic}；重启清零只导致多写一次
@@ -130,6 +134,40 @@ async def _touch_key_usage(session: AsyncSession, key_row: UserApiKey) -> None:
 
 
 # ---- 管理面会话 --------------------------------------------------------------------
+
+
+def _cookie_name(plane: str) -> str:
+    return ADMIN_SESSION_COOKIE if plane == "admin" else PORTAL_SESSION_COOKIE
+
+
+def set_session_cookie(response: Response, token: str, *, plane: str) -> None:
+    """会话 Cookie 下发/续期（T54 持久登录）：HttpOnly 防 XSS 窃取、SameSite=Lax 防 CSRF，
+    路径限定对应平面 API（管理/门户 Cookie 互不可见）。max_age 与会话滑动窗口一致。"""
+    response.set_cookie(
+        key=_cookie_name(plane),
+        value=token,
+        max_age=SESSION_COOKIE_MAX_AGE,
+        path=f"/api/{plane}",
+        httponly=True,
+        samesite="lax",
+    )
+
+
+def clear_session_cookie(response: Response, *, plane: str) -> None:
+    response.delete_cookie(
+        key=_cookie_name(plane),
+        path=f"/api/{plane}",
+        httponly=True,
+        samesite="lax",
+    )
+
+
+def request_session_token(request: Request, *, plane: str) -> str:
+    """会话令牌解析：Bearer 头优先（API 客户端/既有前端），缺失回退 Cookie（浏览器持久登录）。"""
+    auth = request.headers.get("authorization", "")
+    if auth.startswith("Bearer "):
+        return auth[7:]
+    return request.cookies.get(_cookie_name(plane), "")
 
 
 def user_payload(user: User, expires_at: datetime | None = None) -> dict[str, Any]:

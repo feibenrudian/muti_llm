@@ -91,18 +91,23 @@ async def authenticate(request: Request, call_next):  # type: ignore[no-untyped-
     - /v1/*：用户 Key 或兼容 Key（旧服务 Key → 内置 admin）；错误返回 OpenAI error 结构。
     - /api/admin/*：管理台会话令牌（login/logout 白名单），要求 admin 角色；错误返回 {"detail"}。
     - /api/portal/*（T52）：同一会话体系，任何有登录凭据的启用用户；错误返回 {"detail"} 结构。
-    身份写入 request.state.caller，供网关执行路径显式穿参（D25）。
+    管理/门户两平面的令牌解析 Bearer 头优先、缺失回退 HttpOnly 会话 Cookie（T54 持久登录）；
+    已认证响应顺带续期 Cookie（与会话滑动续期同窗）。身份写入 request.state.caller，
+    供网关执行路径显式穿参（D25）。
     """
     from app import auth_svc
 
     path = request.url.path
-    token = _bearer_token(request)
+    cookie_plane = ""
+    token = ""
     if path.startswith("/v1/"):
+        token = _bearer_token(request)
         result = await auth_svc.resolve_data_plane_identity(request.app, token)
         if isinstance(result, auth_svc.AuthError):
             return openai_error(result.status, result.message, code=result.code)
         request.state.caller = result
     elif path.startswith("/api/admin/") and path not in ADMIN_AUTH_WHITELIST:
+        token = auth_svc.request_session_token(request, plane="admin")
         async with request.app.state.session_factory() as session:
             result = await auth_svc.verify_session(session, token)
             if isinstance(result, auth_svc.AuthError):
@@ -110,7 +115,9 @@ async def authenticate(request: Request, call_next):  # type: ignore[no-untyped-
                 return JSONResponse({"detail": result.message}, status_code=result.status)
             await session.commit()  # 滑动续期落库
         request.state.caller = result
+        cookie_plane = "admin"
     elif path.startswith("/api/portal/") and path not in PORTAL_AUTH_WHITELIST:
+        token = auth_svc.request_session_token(request, plane="portal")
         async with request.app.state.session_factory() as session:
             result = await auth_svc.verify_session(session, token, require_role=None)
             if isinstance(result, auth_svc.AuthError):
@@ -118,7 +125,11 @@ async def authenticate(request: Request, call_next):  # type: ignore[no-untyped-
                 return JSONResponse({"detail": result.message}, status_code=result.status)
             await session.commit()  # 滑动续期落库
         request.state.caller = result
-    return await call_next(request)
+        cookie_plane = "portal"
+    response = await call_next(request)
+    if cookie_plane:
+        auth_svc.set_session_cookie(response, token, plane=cookie_plane)
+    return response
 
 
 @app.get("/health")

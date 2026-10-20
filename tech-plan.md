@@ -593,6 +593,19 @@ make seed          # 起服务+灌入演示数据(指向快照回放服务器), 
 
 T53b（上游失败可见性）：流式透传的 HTTP 200 已随首块发出，失败时补发 OpenAI 兼容 SSE 错误事件（`data: {"error": {...}}`，code=AdapterError.kind）并正常 [DONE] 收尾，客户端（ZCode 等）直接显示真实原因而非误判为空响应；非流式按 `AdapterError.kind` 映射状态码（timeout 504 / connection·auth 502 / rate_limit 429 / bad_request 400 / 其余 502）；两条失败路径均把原因写入 `request_logs.error_message`。聚合流式路径的失败语义（容错降级）保持不变。
 
+#### T54 会话 Cookie 持久登录（增量需求）
+背景：前端会话令牌存 sessionStorage（标签页生命周期），浏览器一关即失，每次打开网页都要重新输密码。改动：登录成功（管理面/门户面）额外下发 HttpOnly 会话 Cookie（`muti.admin_session`/`muti.portal_session`，SameSite=Lax、路径限定 `/api/admin`/`/api/portal`、Max-Age 与会话 24h 滑动窗口一致）；中间件令牌解析改为 Bearer 头优先、缺失回退 Cookie（`auth_svc.request_session_token`，两平面各读各的 Cookie 名，平面隔离不变）；已认证响应顺带同值续期 Cookie（与会话滑动续期同窗，常用则常驻）；登出/改密端点同样从 Cookie 解析令牌（Cookie 登录的浏览器无 Bearer，keep_token/吊销才不失效）。前端 App/PortalApp 登录守卫从「sessionStorage 有无令牌」改为调 `/auth/me` 判定（Cookie 兜底恢复登录态），Bearer 附加逻辑与 sessionStorage 存储原样保留（Playwright fixture 注入路径零改动）。数据面 /v1/* 不参与（API Key 认证与浏览器 Cookie 无关）。
+
+| 编号 | 类型 | 用例 | 断言要点 |
+| --- | --- | --- | --- |
+| AE-54-1 | AE | 登录下发 Cookie | 管理/门户登录 Set-Cookie：HttpOnly、SameSite=lax、Path 限定平面、Max-Age=会话 TTL 秒 |
+| AE-54-2 | AE | Cookie 免 Bearer 认证 | 显式清 Authorization 仅持 Cookie → /me 200；坏 Cookie → 401 |
+| AE-54-3 | AE | Cookie 改密 | keep_token 从 Cookie 解析：当前（Cookie）会话保留、其他会话吊销 |
+| AE-54-4 | AE | Cookie 登出 | 响应下发 Max-Age=0 清除指令；旧 Cookie 对应会话已吊销 → 401 |
+| AE-54-5 | AE | Cookie 平面隔离 | 门户 Cookie 打管理面 401；管理 Cookie 打门户面 401 |
+| AE-54-6 | AE | Cookie 滑动续期 | 已认证响应（含 Bearer 请求）重发同值 Cookie 且 max_age 重置 |
+| UE-54-1 | UE | 重启浏览器保持登录 | UI 登录后清空 sessionStorage 并刷新 → 不跳登录页；Cookie 登录下登出仍生效 |
+
 ---
 
 ## 4. 里程碑映射（对应需求文档 M1–M4）

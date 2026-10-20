@@ -9,16 +9,19 @@ from __future__ import annotations
 from datetime import UTC
 from typing import Any
 
-from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi import APIRouter, Depends, HTTPException, Request, Response
 from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.auth_svc import (
     AuthError,
     change_password,
+    clear_session_cookie,
     login,
+    request_session_token,
     revoke_other_sessions,
     revoke_session,
+    set_session_cookie,
     user_payload,
     write_audit,
 )
@@ -44,7 +47,7 @@ def _auth_error(exc: AuthError) -> HTTPException:
 
 @router.post("/login")
 async def portal_login(
-    body: LoginBody, session: AsyncSession = Depends(get_session)
+    body: LoginBody, response: Response, session: AsyncSession = Depends(get_session)
 ) -> dict[str, Any]:
     result = await login(session, body.username, body.password)
     if isinstance(result, AuthError):
@@ -66,6 +69,7 @@ async def portal_login(
         target_id=str(user.id),
         detail={"username": user.username},
     )
+    set_session_cookie(response, token, plane="portal")
     await session.commit()
     return {
         "token": token,
@@ -76,12 +80,12 @@ async def portal_login(
 
 @router.post("/logout")
 async def portal_logout(
-    request: Request, session: AsyncSession = Depends(get_session)
+    request: Request, response: Response, session: AsyncSession = Depends(get_session)
 ) -> dict[str, bool]:
-    """白名单端点：无效令牌也幂等 200。"""
-    auth = request.headers.get("authorization", "")
-    token = auth[7:] if auth.startswith("Bearer ") else ""
+    """白名单端点：无效令牌也幂等 200；Cookie 登录的浏览器无 Bearer，从 Cookie 解析令牌。"""
+    token = request_session_token(request, plane="portal")
     await revoke_session(session, token)
+    clear_session_cookie(response, plane="portal")
     await session.commit()
     return {"ok": True}
 
@@ -101,8 +105,7 @@ async def portal_change_password(
     body: PasswordBody, request: Request, session: AsyncSession = Depends(get_session)
 ) -> dict[str, bool]:
     caller = request.state.caller
-    auth = request.headers.get("authorization", "")
-    token = auth[7:] if auth.startswith("Bearer ") else ""
+    token = request_session_token(request, plane="portal")
     try:
         await change_password(
             session,

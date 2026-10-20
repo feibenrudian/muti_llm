@@ -1,4 +1,4 @@
-/** UE-46-1/2：登录页流程（守卫、错误提示、登出、会话失效跳转）。
+/** UE-46-1/2 + UE-54-1：登录页流程（守卫、错误提示、登出、会话失效跳转）与会话 Cookie 持久登录。
  *
  * 用 base test（不走 fixtures 的自动登录），才能从"未登录"状态驱动页面。
  */
@@ -48,5 +48,28 @@ test("UE-46-2 登出与会话失效：登出回登录页；清空会话后访问
 
   // 无令牌访问其他管理页 → 同样跳登录
   await page.goto("/traces");
+  await expect(page).toHaveURL(/\/login/);
+});
+
+test("UE-54-1 持久登录：重启浏览器（sessionStorage 清空）后 Cookie 自动恢复会话", async ({
+  page,
+}) => {
+  await page.goto("/login");
+  await page.getByTestId("input-username").fill(ADMIN.username);
+  await page.getByTestId("input-password").fill(ADMIN.password);
+  await page.getByTestId("btn-login").click();
+  await expect(page).toHaveURL(/\/providers/);
+  await expect(page.getByTestId("current-user")).toHaveText("管理员");
+
+  // 模拟重启浏览器：sessionStorage 清空（HttpOnly 会话 Cookie 属浏览器上下文，仍保留）
+  await page.evaluate(() => sessionStorage.clear());
+  await page.reload();
+
+  // 守卫经 /me + Cookie 恢复登录态：不跳登录页，顶栏照常显示当前用户
+  await expect(page).toHaveURL(/\/providers/);
+  await expect(page.getByTestId("current-user")).toHaveText("管理员");
+
+  // Cookie 登录下登出仍可用：服务端从 Cookie 解析并吊销会话，同时清除 Cookie
+  await page.getByTestId("btn-logout").click();
   await expect(page).toHaveURL(/\/login/);
 });

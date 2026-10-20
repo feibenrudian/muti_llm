@@ -7,7 +7,6 @@ import { useState } from "react";
 import { Navigate, NavLink, Outlet, useLocation, useNavigate } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "../lib/api";
-import { getToken } from "../lib/portalAuth";
 import ChangePasswordModal from "../components/ChangePasswordModal";
 import { Button } from "../components/ui";
 
@@ -19,7 +18,21 @@ const NAV = [
 
 export default function PortalApp() {
   const location = useLocation();
-  if (!getToken()) {
+  // 登录态以 /me 为准：sessionStorage 令牌缺失时由 HttpOnly 会话 Cookie 兜底（T54），
+  // 同一浏览器重启后免重复登录；401 → 门户登录页。
+  const { data: me, isPending } = useQuery({
+    queryKey: ["portal-me"],
+    queryFn: api.portal.auth.me,
+    retry: false,
+  });
+  if (isPending) {
+    return (
+      <div className="flex h-screen items-center justify-center text-sm text-slate-400">
+        正在检查登录状态…
+      </div>
+    );
+  }
+  if (!me) {
     return <Navigate to="/portal/login" replace state={{ from: location.pathname }} />;
   }
   return (
